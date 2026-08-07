@@ -50,9 +50,10 @@ from ui.blocks.table_cell_dialogs import (
 class TableBlockWidget(QWidget):
     """Représentation graphique éditable d'un TableBlock."""
 
-    def __init__(self, block: TableBlock, parent=None) -> None:
+    def __init__(self, block: TableBlock, document, parent=None) -> None:
         super().__init__(parent)
         self._block = block
+        self._document = document
         self._syncing = False
 
         layout = QVBoxLayout(self)
@@ -219,7 +220,10 @@ class TableBlockWidget(QWidget):
         return combo
 
     def _build_person_cell(self, row: dict, column: dict, value) -> QWidget:
-        names = value or []
+        person_ids = value or []
+        names = [
+            (self._document.find_person(pid) or {}).get("name", "?") for pid in person_ids
+        ]
         container = QWidget(self._table)
         cell_layout = QHBoxLayout(container)
         cell_layout.setContentsMargins(0, 0, 0, 0)
@@ -229,7 +233,8 @@ class TableBlockWidget(QWidget):
         edit_btn.setFixedWidth(28)
 
         def _on_click() -> None:
-            result = edit_person_list(self, list((self._block.get_cell(row["id"], column["id"]) or [])))
+            current = list(self._block.get_cell(row["id"], column["id"]) or [])
+            result = edit_person_list(self, self._document, current)
             if result is not None:
                 self._block.set_cell(row["id"], column["id"], result)
                 self._refresh_cell(row["id"], column["id"])

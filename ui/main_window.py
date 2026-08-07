@@ -33,6 +33,7 @@ from ui.blocks.table_block_widget import TableBlockWidget
 from ui.blocks.text_block_widget import TextBlockWidget
 from ui.blocks_area import BlocksArea
 from ui.info_dialog import InfoDialog
+from ui.people_manager_dialog import PeopleManagerDialog
 from ui.toolbar import MainToolBar
 
 # Racine du projet (deux niveaux au-dessus de ce fichier : ui/main_window.py).
@@ -131,6 +132,11 @@ class MainWindow(QMainWindow):
         save_as_action.triggered.connect(self._save_document_as)
         file_menu.addAction(save_as_action)
 
+        edit_menu = self.menuBar().addMenu("&Édition")
+        people_action = QAction("Gestionnaire de personnes...", self)
+        people_action.triggered.connect(self._show_people_manager)
+        edit_menu.addAction(people_action)
+
     # -- Mise en forme (PATCH 5 / 6) -------------------------------------
 
     def _with_active(self, method):
@@ -161,6 +167,11 @@ class MainWindow(QMainWindow):
         """Ouvre la popup listant les explications et choix de design."""
         InfoDialog(self).exec()
 
+    def _show_people_manager(self) -> None:
+        """PATCH 16 — Ouvre le gestionnaire du registre partagé de personnes."""
+        PeopleManagerDialog(self._document, self).exec()
+        self._render_document()
+
     # -- Rendu générique des blocs / drag & drop (PATCH 8, 13) ------------
 
     def _create_content_widget_for_block(self, block) -> QWidget:
@@ -172,7 +183,7 @@ class MainWindow(QMainWindow):
         if isinstance(block, ChecklistBlock):
             return ChecklistBlockWidget(block)
         if isinstance(block, TableBlock):
-            return TableBlockWidget(block)
+            return TableBlockWidget(block, self._document)
         if isinstance(block, ImageBlock):
             return ImageBlockWidget(
                 block,
@@ -336,7 +347,7 @@ class MainWindow(QMainWindow):
         block.add_row()
         self._document.add_block(block)
 
-        widget = TableBlockWidget(block)
+        widget = TableBlockWidget(block, self._document)
         self._blocks_layout.addWidget(self._wrap(widget, block.id))
 
     def _add_image_block(self) -> None:

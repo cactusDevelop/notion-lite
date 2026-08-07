@@ -7,6 +7,8 @@ Isolées ici pour garder `table_block_widget.py` centré sur la grille.
 """
 from __future__ import annotations
 
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -72,36 +74,52 @@ def ask_column_definition(
     return name_edit.text(), type_combo.currentData(), parsed_options
 
 
-def edit_person_list(parent, current: list[str]) -> list[str] | None:
-    """Dialogue d'édition de la colonne "Personne" : liste de noms libres."""
+def edit_person_list(parent, document, selected_ids: list[str]) -> list[str] | None:
+    """Dialogue d'édition d'une cellule "Personne" (PATCH 16).
+
+    Coche les personnes du registre partagé de `document` à assigner à
+    cette cellule. Permet aussi de créer une nouvelle personne à la
+    volée (elle rejoint alors le registre partagé, réutilisable dans
+    toutes les autres cellules "Personne" du document).
+    """
     dialog = QDialog(parent)
-    dialog.setWindowTitle("Personnes")
+    dialog.setWindowTitle("Personnes assignées")
     layout = QVBoxLayout(dialog)
 
     list_widget = QListWidget(dialog)
-    list_widget.addItems(current)
+
+    def _populate() -> None:
+        list_widget.clear()
+        for person in document.people:
+            item = QListWidgetItem(person["name"])
+            item.setData(Qt.UserRole, person["id"])
+            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+            item.setCheckState(Qt.Checked if person["id"] in selected_ids else Qt.Unchecked)
+            item.setForeground(QColor(person.get("color", "#000000")))
+            list_widget.addItem(item)
+
+    _populate()
     layout.addWidget(list_widget)
 
     add_row = QHBoxLayout()
     name_edit = QLineEdit(dialog)
-    name_edit.setPlaceholderText("Nom...")
+    name_edit.setPlaceholderText("Nouvelle personne...")
     add_row.addWidget(name_edit)
 
-    def _add_name() -> None:
+    def _add_person() -> None:
         text = name_edit.text().strip()
-        if text:
-            list_widget.addItem(QListWidgetItem(text))
-            name_edit.clear()
+        if not text:
+            return
+        person = document.add_person(text)
+        selected_ids.append(person["id"])
+        name_edit.clear()
+        _populate()
 
     add_button = QPushButton("Ajouter", dialog)
-    add_button.clicked.connect(_add_name)
-    name_edit.returnPressed.connect(_add_name)
+    add_button.clicked.connect(_add_person)
+    name_edit.returnPressed.connect(_add_person)
     add_row.addWidget(add_button)
     layout.addLayout(add_row)
-
-    remove_button = QPushButton("Supprimer la sélection", dialog)
-    remove_button.clicked.connect(lambda: [list_widget.takeItem(list_widget.row(i)) for i in list_widget.selectedItems()])
-    layout.addWidget(remove_button)
 
     buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel, dialog)
     buttons.accepted.connect(dialog.accept)
@@ -110,7 +128,11 @@ def edit_person_list(parent, current: list[str]) -> list[str] | None:
 
     if dialog.exec() != QDialog.Accepted:
         return None
-    return [list_widget.item(i).text() for i in range(list_widget.count())]
+    return [
+        list_widget.item(i).data(Qt.UserRole)
+        for i in range(list_widget.count())
+        if list_widget.item(i).checkState() == Qt.Checked
+    ]
 
 
 def edit_multi_select(parent, options: list[str], selected: list[str]) -> list[str] | None:
