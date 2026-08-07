@@ -3,6 +3,8 @@ Fenêtre principale de Notion Lite.
 """
 from __future__ import annotations
 
+from pathlib import Path
+
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QTextCursor
 from PySide6.QtWidgets import (
@@ -19,7 +21,12 @@ from blocks.text_block import TextBlock
 from core.document import Document
 from ui.blocks.heading_block_widget import HeadingBlockWidget
 from ui.blocks.text_block_widget import TextBlockWidget
+from ui.info_dialog import InfoDialog
 from ui.toolbar import MainToolBar
+
+# Racine du projet (deux niveaux au-dessus de ce fichier : ui/main_window.py).
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+_INFO_ICON_PATH = str(_PROJECT_ROOT / "icon-info.svg")
 
 
 class MainWindow(QMainWindow):
@@ -61,6 +68,8 @@ class MainWindow(QMainWindow):
                 "color": self._apply_color,
             },
             on_size_changed=self._apply_size,
+            on_info=self._show_info_dialog,
+            info_icon_path=_INFO_ICON_PATH,
         )
         self.addToolBar(toolbar)
 
@@ -104,6 +113,10 @@ class MainWindow(QMainWindow):
     def _apply_size(self, size: int) -> None:
         if self._active_text_widget is not None:
             self._active_text_widget.set_font_size(size)
+
+    def _show_info_dialog(self) -> None:
+        """Ouvre la popup listant les explications et choix de design."""
+        InfoDialog(self).exec()
 
     # -- Gestion des blocs texte -----------------------------------------
 
