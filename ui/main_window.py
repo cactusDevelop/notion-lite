@@ -3,14 +3,17 @@ Fenêtre principale de Notion Lite.
 """
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor, QTextCursor
+from PySide6.QtGui import QAction, QColor, QKeySequence, QTextCursor
 from PySide6.QtWidgets import (
     QColorDialog,
+    QFileDialog,
     QLineEdit,
     QMainWindow,
+    QMessageBox,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -45,6 +48,7 @@ class MainWindow(QMainWindow):
 
         self._document = Document()
         self._active_text_widget: TextBlockWidget | None = None
+        self._current_file: Path | None = None
 
         self._setup_ui()
 
@@ -72,21 +76,44 @@ class MainWindow(QMainWindow):
             info_icon_path=_INFO_ICON_PATH,
         )
         self.addToolBar(toolbar)
+        self._setup_file_menu()
 
         central = QWidget()
         self._blocks_layout = QVBoxLayout(central)
         self.setCentralWidget(central)
 
-        # Blocs de démonstration pour valider les PATCH 3 et 4.
-        h1 = HeadingBlock(level=1, content="Titre principal")
-        h2 = HeadingBlock(level=2, content="Sous-titre")
-        h3 = HeadingBlock(level=3, content="Petit titre")
+        # Document de démonstration pour valider les PATCH 3 et 4.
+        self._document.add_block(HeadingBlock(level=1, content="Titre principal"))
+        self._document.add_block(HeadingBlock(level=2, content="Sous-titre"))
+        self._document.add_block(HeadingBlock(level=3, content="Petit titre"))
+        self._document.add_block(
+            TextBlock(content="Ceci est un bloc de texte modifiable.")
+        )
+        self._render_document(focus_last=True)
 
-        for block in (h1, h2, h3):
-            self._document.add_block(block)
-            self._blocks_layout.addWidget(HeadingBlockWidget(block))
+    def _setup_file_menu(self) -> None:
+        """Menu Fichier : Nouveau / Ouvrir / Sauvegarder / Sauvegarder sous (PATCH 8)."""
+        file_menu = self.menuBar().addMenu("&Fichier")
 
-        self._add_text_block(content="Ceci est un bloc de texte modifiable.")
+        new_action = QAction("Nouveau", self)
+        new_action.setShortcut(QKeySequence.New)
+        new_action.triggered.connect(self._new_document)
+        file_menu.addAction(new_action)
+
+        open_action = QAction("Ouvrir...", self)
+        open_action.setShortcut(QKeySequence.Open)
+        open_action.triggered.connect(self._open_document)
+        file_menu.addAction(open_action)
+
+        save_action = QAction("Sauvegarder", self)
+        save_action.setShortcut(QKeySequence.Save)
+        save_action.triggered.connect(self._save_document)
+        file_menu.addAction(save_action)
+
+        save_as_action = QAction("Sauvegarder sous...", self)
+        save_as_action.setShortcut(QKeySequence.SaveAs)
+        save_as_action.triggered.connect(self._save_document_as)
+        file_menu.addAction(save_as_action)
 
     # -- Mise en forme (PATCH 5 / 6) -------------------------------------
 
@@ -117,6 +144,96 @@ class MainWindow(QMainWindow):
     def _show_info_dialog(self) -> None:
         """Ouvre la popup listant les explications et choix de design."""
         InfoDialog(self).exec()
+
+    # -- Sauvegarde / chargement (PATCH 8) --------------------------------
+
+    def _create_widget_for_block(self, block) -> QWidget:
+        """Crée le widget adapté au type d'un bloc quelconque du document."""
+        if isinstance(block, TextBlock):
+            return self._create_text_widget(block)
+        if isinstance(block, HeadingBlock):
+            return HeadingBlockWidget(block)
+        raise ValueError(f"Type de bloc non pris en charge à l'affichage : {block.type}")
+
+    def _render_document(self, focus_last: bool = False) -> None:
+        """(Re)construit entièrement l'affichage à partir de self._document."""
+        self._active_text_widget = None
+        while self._blocks_layout.count():
+            item = self._blocks_layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+
+        last_widget: QWidget | None = None
+        for block in self._document.blocks:
+            last_widget = self._create_widget_for_block(block)
+            self._blocks_layout.addWidget(last_widget)
+
+        if focus_last and last_widget is not None:
+            last_widget.setFocus()
+
+    def _set_current_file(self, path: Path | None) -> None:
+        self._current_file = path
+        self.setWindowTitle("Notion Lite" + (f" — {path.name}" if path else ""))
+
+    def _new_document(self) -> None:
+        """PATCH 8 — Nouveau : repart d'un document vide."""
+        self._document = Document()
+        self._set_current_file(None)
+        self._render_document()
+
+    def _open_document(self) -> None:
+        """PATCH 8 — Ouvrir : charge un document depuis un fichier JSON."""
+        path_str, _ = QFileDialog.getOpenFileName(
+            self, "Ouvrir un document", "", "Notion Lite (*.json)"
+        )
+        if not path_str:
+            return
+
+        try:
+            raw = json.loads(Path(path_str).read_text(encoding="utf-8"))
+            document = Document.from_dict(raw)
+        except (OSError, ValueError, KeyError) as exc:
+            QMessageBox.critical(
+                self, "Erreur d'ouverture", f"Impossible d'ouvrir le fichier :\n{exc}"
+            )
+            return
+
+        self._document = document
+        self._set_current_file(Path(path_str))
+        self._render_document()
+
+    def _write_document(self, path: Path) -> None:
+        try:
+            path.write_text(
+                json.dumps(self._document.to_dict(), ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+        except OSError as exc:
+            QMessageBox.critical(
+                self, "Erreur de sauvegarde", f"Impossible d'enregistrer le fichier :\n{exc}"
+            )
+            return
+        self._set_current_file(path)
+
+    def _save_document(self) -> None:
+        """PATCH 8 — Sauvegarder : réutilise le fichier courant, sinon demande où."""
+        if self._current_file is None:
+            self._save_document_as()
+            return
+        self._write_document(self._current_file)
+
+    def _save_document_as(self) -> None:
+        """PATCH 8 — Sauvegarder sous : demande toujours un nouveau fichier."""
+        path_str, _ = QFileDialog.getSaveFileName(
+            self, "Sauvegarder sous", "", "Notion Lite (*.json)"
+        )
+        if not path_str:
+            return
+        path = Path(path_str)
+        if path.suffix != ".json":
+            path = path.with_suffix(".json")
+        self._write_document(path)
 
     # -- Gestion des blocs texte -----------------------------------------
 

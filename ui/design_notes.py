@@ -46,4 +46,12 @@ DESIGN_NOTES: list[tuple[str, str]] = [
         "sinon il fusionne avec le bloc texte précédent (la fusion "
         "avec un titre n'est pas encore supportée).",
     ),
+    (
+        "PATCH 8 — Sauvegarde",
+        "Format JSON versionné (<i>version</i> + <i>blocks</i>). Un "
+        "registre (<i>blocks/registry.py</i>) reconstruit la bonne "
+        "classe de bloc à partir du type stocké, pour que Nouveau, "
+        "Ouvrir, Sauvegarder et Sauvegarder sous partagent le même "
+        "rendu générique du document.",
+    ),
 ]

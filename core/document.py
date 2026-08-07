@@ -7,9 +7,11 @@ suppression, déplacement, recherche par ID).
 """
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Optional
 
 from core.block import Block
+
+DOCUMENT_FORMAT_VERSION = 1
 
 
 class Document:
@@ -74,3 +76,23 @@ class Document:
 
     def __len__(self) -> int:
         return len(self._blocks)
+
+    # -- Sauvegarde / chargement JSON (PATCH 8) ---------------------------
+
+    def to_dict(self) -> dict[str, Any]:
+        """Sérialise le document entier (format de sauvegarde JSON)."""
+        return {
+            "version": DOCUMENT_FORMAT_VERSION,
+            "blocks": [block.to_dict() for block in self._blocks],
+        }
+
+    @classmethod
+    def from_dict(cls, raw: dict[str, Any]) -> "Document":
+        """Reconstruit un document complet à partir d'un dictionnaire JSON."""
+        # Import local pour éviter un import circulaire (blocks -> core.block).
+        from blocks.registry import block_from_dict
+
+        document = cls()
+        for raw_block in raw.get("blocks", []):
+            document.add_block(block_from_dict(raw_block))
+        return document
