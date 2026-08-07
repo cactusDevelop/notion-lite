@@ -29,6 +29,15 @@ class TextBlockWidget(QTextEdit):
     """Représentation graphique éditable d'un TextBlock."""
 
     focused = Signal(object)
+    # Entrée pressée : (self, texte_avant_curseur, texte_apres_curseur).
+    # MainWindow doit couper le bloc en deux (PATCH 7 - séparation).
+    split_requested = Signal(object, str, str)
+    # Retour arrière en début de bloc non vide : fusionner avec le
+    # bloc précédent (PATCH 7 - fusion).
+    merge_requested = Signal(object)
+    # Retour arrière sur un bloc vide : simplement le supprimer
+    # (PATCH 7 - suppression).
+    delete_requested = Signal(object)
 
     def __init__(self, block: TextBlock, parent=None) -> None:
         super().__init__(parent)
@@ -51,6 +60,40 @@ class TextBlockWidget(QTextEdit):
     def focusInEvent(self, event) -> None:
         super().focusInEvent(event)
         self.focused.emit(self)
+
+    def keyPressEvent(self, event) -> None:
+        """Intercepte Entrée et Retour arrière pour l'expérience multi-blocs.
+
+        - Entrée seule : sépare le bloc en deux (Maj+Entrée garde le
+          comportement natif de retour à la ligne dans le même bloc).
+        - Retour arrière en tout début de bloc : fusionne avec le
+          bloc précédent (ou le supprime s'il est vide).
+        """
+        is_plain_enter = event.key() in (Qt.Key_Return, Qt.Key_Enter) and not (
+            event.modifiers() & Qt.ShiftModifier
+        )
+        if is_plain_enter:
+            cursor = self.textCursor()
+            full_text = self.toPlainText()
+            pos = cursor.position()
+            self.split_requested.emit(self, full_text[:pos], full_text[pos:])
+            event.accept()
+            return
+
+        is_backspace_at_start = (
+            event.key() == Qt.Key_Backspace
+            and not self.textCursor().hasSelection()
+            and self.textCursor().position() == 0
+        )
+        if is_backspace_at_start:
+            if self.toPlainText() == "":
+                self.delete_requested.emit(self)
+            else:
+                self.merge_requested.emit(self)
+            event.accept()
+            return
+
+        super().keyPressEvent(event)
 
     def _on_text_changed(self) -> None:
         """Synchronise le texte brut et le HTML vers le bloc de données."""
