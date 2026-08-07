@@ -79,4 +79,15 @@ DESIGN_NOTES: list[tuple[str, str]] = [
         "nouvel ordre : l'utilisateur ne déplace jamais rien "
         "manuellement.",
     ),
+    (
+        "PATCH 12 — Bloc Image",
+        "Image encodée en base64 directement dans <i>data</i> : "
+        "aucun fichier annexe, donc compatible tel quel avec la "
+        "sauvegarde JSON (PATCH 8/9) et les tests de round-trip. "
+        "Redimensionnement via une largeur (hauteur recalculée au "
+        "ratio d'origine par Qt). Déplacement/suppression réutilisent "
+        "<i>Document.move_block</i> et <i>remove_block</i> (PATCH 2), "
+        "exposés ici par deux boutons ↑/↓ ; le drag & drop générique "
+        "arrive au PATCH 13.",
+    ),
 ]

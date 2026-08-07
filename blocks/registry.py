@@ -11,6 +11,7 @@ from typing import Any
 
 from blocks.checklist_block import CHECKLIST_BLOCK_TYPE, ChecklistBlock
 from blocks.heading_block import HEADING_TYPES, HeadingBlock
+from blocks.image_block import IMAGE_BLOCK_TYPE, ImageBlock
 from blocks.text_block import TEXT_BLOCK_TYPE, TextBlock
 from core.block import Block
 
@@ -36,6 +37,14 @@ def block_from_dict(raw: dict[str, Any]) -> Block:
 
     if block_type == CHECKLIST_BLOCK_TYPE:
         return ChecklistBlock(items=data.get("items", []), id=block_id)
+
+    if block_type == IMAGE_BLOCK_TYPE:
+        return ImageBlock(
+            image_base64=data.get("image_base64", ""),
+            image_format=data.get("format", "png"),
+            width=data.get("width"),
+            id=block_id,
+        )
 
     if block_type in _LEVEL_BY_TYPE:
         return HeadingBlock(

@@ -3,6 +3,7 @@ Fenêtre principale de Notion Lite.
 """
 from __future__ import annotations
 
+import base64
 import json
 from pathlib import Path
 
@@ -21,10 +22,12 @@ from PySide6.QtWidgets import (
 
 from blocks.checklist_block import ChecklistBlock
 from blocks.heading_block import HeadingBlock
+from blocks.image_block import ImageBlock
 from blocks.text_block import TextBlock
 from core.document import Document
 from ui.blocks.checklist_block_widget import ChecklistBlockWidget
 from ui.blocks.heading_block_widget import HeadingBlockWidget
+from ui.blocks.image_block_widget import ImageBlockWidget
 from ui.blocks.text_block_widget import TextBlockWidget
 from ui.info_dialog import InfoDialog
 from ui.toolbar import MainToolBar
@@ -60,6 +63,7 @@ class MainWindow(QMainWindow):
             actions={
                 "new_block": lambda: self._add_text_block(),
                 "new_checklist": self._add_checklist_block,
+                "new_image": self._add_image_block,
                 "bold": self._with_active(TextBlockWidget.toggle_bold),
                 "italic": self._with_active(TextBlockWidget.toggle_italic),
                 "underline": self._with_active(TextBlockWidget.toggle_underline),
@@ -162,6 +166,13 @@ class MainWindow(QMainWindow):
             return HeadingBlockWidget(block)
         if isinstance(block, ChecklistBlock):
             return ChecklistBlockWidget(block)
+        if isinstance(block, ImageBlock):
+            return ImageBlockWidget(
+                block,
+                on_move_up=lambda block_id=block.id: self._move_block(block_id, -1),
+                on_move_down=lambda block_id=block.id: self._move_block(block_id, 1),
+                on_delete=lambda block_id=block.id: self._delete_block(block_id),
+            )
         raise ValueError(f"Type de bloc non pris en charge à l'affichage : {block.type}")
 
     def _render_document(self, focus_last: bool = False) -> None:
@@ -272,6 +283,48 @@ class MainWindow(QMainWindow):
 
         widget = ChecklistBlockWidget(block)
         self._blocks_layout.addWidget(widget)
+
+    def _add_image_block(self) -> None:
+        """PATCH 12 — Insère une image choisie sur le disque, en fin de document."""
+        path_str, _ = QFileDialog.getOpenFileName(
+            self,
+            "Insérer une image",
+            "",
+            "Images (*.png *.jpg *.jpeg *.gif *.bmp *.webp)",
+        )
+        if not path_str:
+            return
+
+        path = Path(path_str)
+        try:
+            raw_bytes = path.read_bytes()
+        except OSError as exc:
+            QMessageBox.critical(
+                self, "Erreur d'insertion", f"Impossible de lire l'image :\n{exc}"
+            )
+            return
+
+        block = ImageBlock(
+            image_base64=base64.b64encode(raw_bytes).decode("ascii"),
+            image_format=path.suffix.lstrip(".").lower() or "png",
+        )
+        self._document.add_block(block)
+        self._blocks_layout.addWidget(self._create_widget_for_block(block))
+
+    def _move_block(self, block_id: str, delta: int) -> None:
+        """PATCH 12 — Déplace un bloc (image, checklist, ...) d'une position."""
+        index = next(
+            (i for i, b in enumerate(self._document.blocks) if b.id == block_id), None
+        )
+        if index is None:
+            return
+        self._document.move_block(block_id, index + delta)
+        self._render_document()
+
+    def _delete_block(self, block_id: str) -> None:
+        """PATCH 12 — Supprime un bloc (image, ...) du document."""
+        self._document.remove_block(block_id)
+        self._render_document()
 
     @staticmethod
     def _focus_widget_at_end(widget: QWidget) -> None:

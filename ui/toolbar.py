@@ -20,6 +20,7 @@ from PySide6.QtWidgets import QSizePolicy, QSpinBox, QToolBar, QWidget
 _ACTIONS: list[tuple[str, Optional[str]]] = [
     ("new_block", "Nouveau bloc"),
     ("new_checklist", "Nouvelle checklist"),
+    ("new_image", "Insérer une image"),
     ("sep1", None),
     ("bold", "Gras"),
     ("italic", "Italique"),
