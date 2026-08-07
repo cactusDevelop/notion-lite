@@ -48,3 +48,13 @@ class ChecklistBlock(Block):
 
     def set_item_checked(self, index: int, checked: bool) -> None:
         self.items[index]["checked"] = checked
+
+    def sort_by_status(self) -> None:
+        """Trie la liste : tâches non cochées d'abord, cochées ensuite (PATCH 11).
+
+        Tri stable : l'ordre relatif à l'intérieur de chaque groupe
+        (non coché / coché) est conservé.
+        """
+        self.data["items"] = sorted(
+            self.items, key=lambda item: bool(item.get("checked", False))
+        )

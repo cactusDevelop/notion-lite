@@ -70,4 +70,13 @@ DESIGN_NOTES: list[tuple[str, str]] = [
         "compatible sauvegarde/chargement sans modification du "
         "PATCH 8/9.",
     ),
+    (
+        "PATCH 11 — Checklist « À faire / Déjà fait »",
+        "<i>ChecklistBlock.sort_by_status</i> trie (tri stable) les "
+        "tâches non cochées avant les cochées. Le widget appelle ce "
+        "tri à la construction (donc aussi après un chargement) et "
+        "après chaque coche, puis reconstruit ses lignes dans le "
+        "nouvel ordre : l'utilisateur ne déplace jamais rien "
+        "manuellement.",
+    ),
 ]

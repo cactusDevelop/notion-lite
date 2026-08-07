@@ -65,6 +65,9 @@ class ChecklistBlockWidget(QWidget):
         self._layout = QVBoxLayout(self)
         self._layout.setContentsMargins(0, 0, 0, 0)
 
+        # PATCH 11 : la checklist s'affiche toujours triée (non cochées
+        # d'abord), y compris juste après un chargement de fichier.
+        self._block.sort_by_status()
         for item in block.items:
             self._append_row(item.get("text", ""), item.get("checked", False))
 
@@ -83,6 +86,25 @@ class ChecklistBlockWidget(QWidget):
         self._rows.append(row)
         return row
 
+    def _rebuild_rows(self, focus_text: str | None = None) -> None:
+        """Reconstruit toutes les lignes dans l'ordre courant du bloc (PATCH 11).
+
+        L'utilisateur ne déplace jamais une ligne manuellement : c'est
+        toujours le tri du bloc qui pilote l'ordre affiché.
+        """
+        for row in self._rows:
+            self._layout.removeWidget(row)
+            row.deleteLater()
+        self._rows = []
+
+        focus_row: _ChecklistItemRow | None = None
+        for item in self._block.items:
+            row = self._append_row(item.get("text", ""), item.get("checked", False))
+            if focus_text is not None and row.line_edit.text() == focus_text:
+                focus_row = row
+        if focus_row is not None:
+            focus_row.line_edit.setFocus()
+
     def _on_add_clicked(self) -> None:
         self._block.add_item()
         row = self._append_row("", False)
@@ -99,4 +121,8 @@ class ChecklistBlockWidget(QWidget):
         self._block.set_item_text(self._rows.index(row), text)
 
     def on_item_checked_changed(self, row: "_ChecklistItemRow", checked: bool) -> None:
+        """Coche/décoche puis re-trie automatiquement (PATCH 11)."""
+        text = row.line_edit.text()
         self._block.set_item_checked(self._rows.index(row), checked)
+        self._block.sort_by_status()
+        self._rebuild_rows(focus_text=text)
