@@ -104,7 +104,9 @@ class TableBlockWidget(QWidget):
         self._table.setRowCount(len(rows))
         self._table.setHorizontalHeaderLabels(
             [
-                f"{column.get('name') or f'Colonne {i + 1}'} ({COLUMN_TYPE_LABELS[column['type']]})"
+                f"{column.get('name') or f'Colonne {i + 1}'} "
+                f"({COLUMN_TYPE_LABELS[column['type']]}"
+                f"{' — début/fin' if column.get('range') else ''})"
                 for i, column in enumerate(columns)
             ]
         )
@@ -173,6 +175,9 @@ class TableBlockWidget(QWidget):
         return container
 
     def _build_date_cell(self, row: dict, column: dict, value) -> QWidget:
+        if column.get("range"):
+            return self._build_date_range_cell(row, column, value)
+
         date_edit = QDateEdit(self._table)
         date_edit.setCalendarPopup(True)
         date_edit.setDisplayFormat("yyyy-MM-dd")
@@ -186,6 +191,43 @@ class TableBlockWidget(QWidget):
 
         date_edit.dateChanged.connect(_on_changed)
         return date_edit
+
+    def _build_date_range_cell(self, row: dict, column: dict, value) -> QWidget:
+        """PATCH 18 — Cellule "Date" en mode plage : deux sélecteurs (début / fin)."""
+        value = value or {"start": "", "end": ""}
+        container = QWidget(self._table)
+        cell_layout = QHBoxLayout(container)
+        cell_layout.setContentsMargins(0, 0, 0, 0)
+
+        def _make_edit(field: str) -> QDateEdit:
+            edit = QDateEdit(container)
+            edit.setCalendarPopup(True)
+            edit.setDisplayFormat("yyyy-MM-dd")
+            edit.setMinimumDate(QDate(1900, 1, 1))
+            qdate = QDate.fromString(value.get(field, ""), "yyyy-MM-dd")
+            edit.setDate(qdate if qdate.isValid() else edit.minimumDate())
+            return edit
+
+        start_edit = _make_edit("start")
+        end_edit = _make_edit("end")
+        cell_layout.addWidget(QLabel("Du", container))
+        cell_layout.addWidget(start_edit)
+        cell_layout.addWidget(QLabel("au", container))
+        cell_layout.addWidget(end_edit)
+
+        def _push() -> None:
+            self._block.set_cell(
+                row["id"],
+                column["id"],
+                {
+                    "start": start_edit.date().toString("yyyy-MM-dd"),
+                    "end": end_edit.date().toString("yyyy-MM-dd"),
+                },
+            )
+
+        start_edit.dateChanged.connect(_push)
+        end_edit.dateChanged.connect(_push)
+        return container
 
     def _build_duration_cell(self, row: dict, column: dict, value) -> QWidget:
         value = value or {"amount": 0, "unit": DURATION_UNITS[1]}
@@ -297,8 +339,8 @@ class TableBlockWidget(QWidget):
         result = ask_column_definition(self, name=f"Colonne {len(self._block.columns) + 1}")
         if result is None:
             return
-        name, col_type, options = result
-        self._block.add_column(name=name, col_type=col_type, options=options)
+        name, col_type, options, date_range = result
+        self._block.add_column(name=name, col_type=col_type, options=options, date_range=date_range)
         self._rebuild()
 
     def _on_delete_column(self) -> None:
@@ -314,14 +356,20 @@ class TableBlockWidget(QWidget):
             return
         column = self._block.columns[section]
         result = ask_column_definition(
-            self, name=column.get("name", ""), col_type=column["type"], options=column.get("options", [])
+            self,
+            name=column.get("name", ""),
+            col_type=column["type"],
+            options=column.get("options", []),
+            date_range=column.get("range", False),
         )
         if result is None:
             return
-        name, col_type, options = result
+        name, col_type, options, date_range = result
         self._block.rename_column(column["id"], name)
         if col_type == column["type"]:
             self._block.set_column_options(column["id"], options)
+            if col_type == "date":
+                self._block.set_column_date_range(column["id"], date_range)
         self._rebuild()
 
     # -- Lignes --------------------------------------------------------

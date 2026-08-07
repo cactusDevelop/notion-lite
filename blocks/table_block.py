@@ -9,7 +9,8 @@ colonne sans avoir à réindexer toutes les lignes.
 Chaque colonne possède un type fixe (PATCH 15) qui détermine la
 forme de la valeur stockée dans les cellules correspondantes :
     - text / number : chaîne de caractères.
-    - date : chaîne ISO "AAAA-MM-JJ" (ou "").
+    - date : chaîne ISO "AAAA-MM-JJ" (ou ""), ou {"start": ..., "end": ...}
+      si la colonne est configurée en plage (PATCH 18, voir "range").
     - duration : {"amount": int, "unit": "heures"|"jours"|"semaines"}.
     - boolean : bool.
     - person : liste de noms (str).
@@ -18,8 +19,8 @@ forme de la valeur stockée dans les cellules correspondantes :
     - checklist : liste de {"id": str, "text": str, "checked": bool}.
 
 Les vues dérivées (Gantt, PATCH 19) et les gestionnaires dédiés
-(Personne PATCH 16, Durée PATCH 17) s'appuieront sur ce typage sans
-changer la structure de base posée ici.
+(Personne PATCH 16, Durée PATCH 17, plages de dates PATCH 18)
+s'appuieront sur ce typage sans changer la structure de base posée ici.
 """
 from __future__ import annotations
 
@@ -67,22 +68,38 @@ COLUMN_TYPE_LABELS: dict[str, str] = {
 DURATION_UNITS: list[str] = ["heures", "jours", "semaines"]
 
 
-def default_value_for_type(col_type: str) -> Any:
-    """Valeur par défaut d'une cellule neuve, selon le type de sa colonne."""
+def default_value_for_column(column: dict) -> Any:
+    """Valeur par défaut d'une cellule neuve, selon le type (et les
+    options, ex. plage de dates) de sa colonne."""
+    col_type = column.get("type") if isinstance(column, dict) else column
     if col_type == COLUMN_TYPE_BOOLEAN:
         return False
     if col_type == COLUMN_TYPE_DURATION:
         return {"amount": 0, "unit": DURATION_UNITS[1]}
+    if col_type == COLUMN_TYPE_DATE and isinstance(column, dict) and column.get("range"):
+        return {"start": "", "end": ""}
     if col_type in (COLUMN_TYPE_PERSON, COLUMN_TYPE_MULTI_SELECT, COLUMN_TYPE_CHECKLIST):
         return []
     return ""
 
 
-def _normalize_value_for_type(col_type: str, value: Any) -> Any:
+# Alias rétrocompatible : appelable avec un simple type (sans plage).
+def default_value_for_type(col_type: str) -> Any:
+    return default_value_for_column({"type": col_type})
+
+
+def _normalize_value_for_column(column: dict, value: Any) -> Any:
     """Ramène une valeur potentiellement invalide/absente à une forme
-    cohérente avec le type de la colonne (utilisé au chargement)."""
+    cohérente avec le type (et les options) de la colonne."""
+    col_type = column["type"]
     if col_type == COLUMN_TYPE_BOOLEAN:
         return bool(value)
+    if col_type == COLUMN_TYPE_DATE:
+        if column.get("range"):
+            if isinstance(value, dict):
+                return {"start": value.get("start") or "", "end": value.get("end") or ""}
+            return {"start": "", "end": ""}
+        return value if isinstance(value, str) else ""
     if col_type == COLUMN_TYPE_DURATION:
         if isinstance(value, dict):
             unit = value.get("unit") if value.get("unit") in DURATION_UNITS else DURATION_UNITS[1]
@@ -91,7 +108,7 @@ def _normalize_value_for_type(col_type: str, value: Any) -> Any:
             except (TypeError, ValueError):
                 amount = 0
             return {"amount": amount, "unit": unit}
-        return default_value_for_type(col_type)
+        return default_value_for_column(column)
     if col_type in (COLUMN_TYPE_PERSON, COLUMN_TYPE_MULTI_SELECT):
         return list(value) if isinstance(value, list) else []
     if col_type == COLUMN_TYPE_CHECKLIST:
@@ -131,6 +148,7 @@ class TableBlock(Block):
                     "name": column.get("name", ""),
                     "type": col_type,
                     "options": list(column.get("options", [])),
+                    "range": bool(column.get("range", False)) if col_type == COLUMN_TYPE_DATE else False,
                 }
             )
         columns_by_id = {column["id"]: column for column in normalized_columns}
@@ -139,7 +157,7 @@ class TableBlock(Block):
         for row in rows or []:
             raw_cells = row.get("cells", {})
             cells = {
-                column_id: _normalize_value_for_type(column["type"], raw_cells.get(column_id))
+                column_id: _normalize_value_for_column(column, raw_cells.get(column_id))
                 for column_id, column in columns_by_id.items()
             }
             normalized_rows.append(
@@ -179,9 +197,14 @@ class TableBlock(Block):
         name: str = "",
         col_type: str = COLUMN_TYPE_TEXT,
         options: list[str] | None = None,
+        date_range: bool = False,
         index: int | None = None,
     ) -> dict[str, Any]:
-        """Ajoute une colonne typée et une cellule par défaut à chaque ligne."""
+        """Ajoute une colonne typée et une cellule par défaut à chaque ligne.
+
+        `date_range` n'a d'effet que pour col_type == "date" (PATCH 18) :
+        la cellule stocke alors {"start", "end"} au lieu d'une date seule.
+        """
         if col_type not in COLUMN_TYPES:
             col_type = COLUMN_TYPE_TEXT
         column = {
@@ -189,13 +212,14 @@ class TableBlock(Block):
             "name": name,
             "type": col_type,
             "options": list(options or []),
+            "range": bool(date_range) if col_type == COLUMN_TYPE_DATE else False,
         }
         if index is None:
             self.columns.append(column)
         else:
             self.columns.insert(index, column)
         for row in self.rows:
-            row["cells"][column["id"]] = default_value_for_type(col_type)
+            row["cells"][column["id"]] = default_value_for_column(column)
         return column
 
     def remove_column(self, column_id: str) -> bool:
@@ -235,6 +259,18 @@ class TableBlock(Block):
                 row["cells"][column_id] = [v for v in current if v in column["options"]]
         return True
 
+    def set_column_date_range(self, column_id: str, date_range: bool) -> bool:
+        """Bascule une colonne "Date" entre date unique et plage début/fin
+        (PATCH 18). Réinitialise les cellules à la valeur par défaut du
+        nouveau mode (les deux formats ne sont pas interchangeables)."""
+        column = self._find_column(column_id)
+        if column is None or column["type"] != COLUMN_TYPE_DATE:
+            return False
+        column["range"] = bool(date_range)
+        for row in self.rows:
+            row["cells"][column_id] = default_value_for_column(column)
+        return True
+
     def move_column(self, column_id: str, new_index: int) -> bool:
         column = self._find_column(column_id)
         if column is None:
@@ -248,7 +284,7 @@ class TableBlock(Block):
 
     def add_row(self, values: dict[str, Any] | None = None, index: int | None = None) -> dict[str, Any]:
         """Ajoute une ligne. `values` est indexé par id de colonne."""
-        cells = {column["id"]: default_value_for_type(column["type"]) for column in self.columns}
+        cells = {column["id"]: default_value_for_column(column) for column in self.columns}
         cells.update({k: v for k, v in (values or {}).items() if k in cells})
         row = {"id": str(uuid.uuid4()), "cells": cells}
         if index is None:
@@ -284,5 +320,5 @@ class TableBlock(Block):
         column = self._find_column(column_id)
         if row is None or column is None:
             return False
-        row["cells"][column_id] = _normalize_value_for_type(column["type"], value)
+        row["cells"][column_id] = _normalize_value_for_column(column, value)
         return True

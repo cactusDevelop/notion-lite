@@ -24,15 +24,25 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from blocks.table_block import COLUMN_TYPE_LABELS, COLUMN_TYPE_SELECT, COLUMN_TYPE_MULTI_SELECT, COLUMN_TYPES
+from blocks.table_block import (
+    COLUMN_TYPE_DATE,
+    COLUMN_TYPE_LABELS,
+    COLUMN_TYPE_SELECT,
+    COLUMN_TYPE_MULTI_SELECT,
+    COLUMN_TYPES,
+)
 
 
 def ask_column_definition(
-    parent, name: str = "", col_type: str = "text", options: list[str] | None = None
-) -> tuple[str, str, list[str]] | None:
-    """Dialogue de création/édition de colonne : nom, type, options.
+    parent,
+    name: str = "",
+    col_type: str = "text",
+    options: list[str] | None = None,
+    date_range: bool = False,
+) -> tuple[str, str, list[str], bool] | None:
+    """Dialogue de création/édition de colonne : nom, type, options, plage.
 
-    Retourne (name, col_type, options) ou None si annulé.
+    Retourne (name, col_type, options, date_range) ou None si annulé.
     """
     dialog = QDialog(parent)
     dialog.setWindowTitle("Colonne")
@@ -54,13 +64,19 @@ def ask_column_definition(
     layout.addWidget(options_label)
     layout.addWidget(options_edit)
 
-    def _sync_options_visibility() -> None:
-        is_choice_type = type_combo.currentData() in (COLUMN_TYPE_SELECT, COLUMN_TYPE_MULTI_SELECT)
+    range_checkbox = QCheckBox("Plage de dates (début / fin)", dialog)
+    range_checkbox.setChecked(date_range)
+    layout.addWidget(range_checkbox)
+
+    def _sync_visibility() -> None:
+        current_type = type_combo.currentData()
+        is_choice_type = current_type in (COLUMN_TYPE_SELECT, COLUMN_TYPE_MULTI_SELECT)
         options_label.setVisible(is_choice_type)
         options_edit.setVisible(is_choice_type)
+        range_checkbox.setVisible(current_type == COLUMN_TYPE_DATE)
 
-    type_combo.currentIndexChanged.connect(_sync_options_visibility)
-    _sync_options_visibility()
+    type_combo.currentIndexChanged.connect(_sync_visibility)
+    _sync_visibility()
 
     buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel, dialog)
     buttons.accepted.connect(dialog.accept)
@@ -71,7 +87,7 @@ def ask_column_definition(
         return None
 
     parsed_options = [part.strip() for part in options_edit.text().split(",") if part.strip()]
-    return name_edit.text(), type_combo.currentData(), parsed_options
+    return name_edit.text(), type_combo.currentData(), parsed_options, range_checkbox.isChecked()
 
 
 def edit_person_list(parent, document, selected_ids: list[str]) -> list[str] | None:
