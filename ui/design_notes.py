@@ -54,4 +54,13 @@ DESIGN_NOTES: list[tuple[str, str]] = [
         "Ouvrir, Sauvegarder et Sauvegarder sous partagent le même "
         "rendu générique du document.",
     ),
+    (
+        "PATCH 9 — Chargement",
+        "La reconstruction (id, type, données complètes) était déjà "
+        "assurée par <i>Document.from_dict</i> (PATCH 8) ; ce patch "
+        "ajoute la validation stricte (clé <i>blocks</i> manquante, "
+        "version de fichier trop récente, type de bloc inconnu) et "
+        "un test de non-régression qui prouve que chaque champ "
+        "survit à l'aller-retour sauvegarde/chargement.",
+    ),
 ]

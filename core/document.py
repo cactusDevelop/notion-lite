@@ -88,11 +88,29 @@ class Document:
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> "Document":
-        """Reconstruit un document complet à partir d'un dictionnaire JSON."""
+        """Reconstruit un document complet à partir d'un dictionnaire JSON.
+
+        Toutes les données de chaque bloc (id, type, contenu complet)
+        sont restaurées à l'identique (PATCH 9).
+
+        Raises:
+            ValueError: si le fichier a été sauvegardé par une version
+                plus récente du format que celle supportée ici.
+        """
+        file_version = raw.get("version", DOCUMENT_FORMAT_VERSION)
+        if file_version > DOCUMENT_FORMAT_VERSION:
+            raise ValueError(
+                f"Ce fichier a été créé avec une version plus récente du "
+                f"format ({file_version}) que celle supportée ({DOCUMENT_FORMAT_VERSION})."
+            )
+
         # Import local pour éviter un import circulaire (blocks -> core.block).
         from blocks.registry import block_from_dict
 
+        if "blocks" not in raw:
+            raise ValueError("Fichier invalide : clé 'blocks' manquante.")
+
         document = cls()
-        for raw_block in raw.get("blocks", []):
+        for raw_block in raw["blocks"]:
             document.add_block(block_from_dict(raw_block))
         return document
