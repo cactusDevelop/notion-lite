@@ -102,4 +102,15 @@ DESIGN_NOTES: list[tuple[str, str]] = [
         "checklists, images, et tableaux au PATCH 14). Les boutons "
         "↑/↓ de l'image (PATCH 12) restent en complément accessible.",
     ),
+    (
+        "Correctif — API ChecklistBlock",
+        "Les tests du PATCH 10 attendaient une API par id d'élément "
+        "(<i>add_item</i> retourne l'item, <i>remove_item</i>/"
+        "<i>set_item_text</i>/<i>set_item_checked</i> prennent un id) "
+        "alors que l'implémentation était basée sur l'index. Corrigé "
+        "en généralisant les id, avec rétrocompatibilité : un id est "
+        "généré à la volée pour les checklists sauvegardées avant ce "
+        "correctif. Le widget (PATCH 10/11) suit désormais le même id "
+        "par ligne plutôt que sa position.",
+    ),
 ]

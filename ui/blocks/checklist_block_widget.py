@@ -3,7 +3,8 @@ Widget graphique du bloc Checklist.
 
 Chaque élément est affiché comme une ligne : case à cocher + champ
 de texte éditable + bouton de suppression. Toute modification est
-immédiatement répercutée dans le ChecklistBlock associé.
+immédiatement répercutée dans le ChecklistBlock associé, en utilisant
+l'id de l'élément (et non sa position) comme référence stable.
 """
 from __future__ import annotations
 
@@ -23,9 +24,12 @@ from blocks.checklist_block import ChecklistBlock
 class _ChecklistItemRow(QWidget):
     """Une ligne de la checklist : case à cocher + texte + suppression."""
 
-    def __init__(self, text: str, checked: bool, owner: "ChecklistBlockWidget") -> None:
+    def __init__(
+        self, item_id: str, text: str, checked: bool, owner: "ChecklistBlockWidget"
+    ) -> None:
         super().__init__(owner)
         self._owner = owner
+        self.item_id = item_id
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -69,7 +73,7 @@ class ChecklistBlockWidget(QWidget):
         # d'abord), y compris juste après un chargement de fichier.
         self._block.sort_by_status()
         for item in block.items:
-            self._append_row(item.get("text", ""), item.get("checked", False))
+            self._append_row(item)
 
         self._add_button = QPushButton("+ Ajouter un élément", self)
         self._add_button.clicked.connect(self._on_add_clicked)
@@ -79,14 +83,16 @@ class ChecklistBlockWidget(QWidget):
     def block(self) -> ChecklistBlock:
         return self._block
 
-    def _append_row(self, text: str, checked: bool) -> _ChecklistItemRow:
-        row = _ChecklistItemRow(text, checked, self)
+    def _append_row(self, item: dict) -> _ChecklistItemRow:
+        row = _ChecklistItemRow(
+            item["id"], item.get("text", ""), item.get("checked", False), self
+        )
         # Toujours insérée juste avant le bouton "+ Ajouter" (en dernier).
         self._layout.insertWidget(len(self._rows), row)
         self._rows.append(row)
         return row
 
-    def _rebuild_rows(self, focus_text: str | None = None) -> None:
+    def _rebuild_rows(self, focus_item_id: str | None = None) -> None:
         """Reconstruit toutes les lignes dans l'ordre courant du bloc (PATCH 11).
 
         L'utilisateur ne déplace jamais une ligne manuellement : c'est
@@ -99,30 +105,28 @@ class ChecklistBlockWidget(QWidget):
 
         focus_row: _ChecklistItemRow | None = None
         for item in self._block.items:
-            row = self._append_row(item.get("text", ""), item.get("checked", False))
-            if focus_text is not None and row.line_edit.text() == focus_text:
+            row = self._append_row(item)
+            if focus_item_id is not None and item["id"] == focus_item_id:
                 focus_row = row
         if focus_row is not None:
             focus_row.line_edit.setFocus()
 
     def _on_add_clicked(self) -> None:
-        self._block.add_item()
-        row = self._append_row("", False)
+        item = self._block.add_item()
+        row = self._append_row(item)
         row.line_edit.setFocus()
 
     def remove_row(self, row: "_ChecklistItemRow") -> None:
-        index = self._rows.index(row)
-        self._block.remove_item(index)
-        self._rows.pop(index)
+        self._block.remove_item(row.item_id)
+        self._rows.remove(row)
         self._layout.removeWidget(row)
         row.deleteLater()
 
     def on_item_text_changed(self, row: "_ChecklistItemRow", text: str) -> None:
-        self._block.set_item_text(self._rows.index(row), text)
+        self._block.set_item_text(row.item_id, text)
 
     def on_item_checked_changed(self, row: "_ChecklistItemRow", checked: bool) -> None:
         """Coche/décoche puis re-trie automatiquement (PATCH 11)."""
-        text = row.line_edit.text()
-        self._block.set_item_checked(self._rows.index(row), checked)
+        self._block.set_item_checked(row.item_id, checked)
         self._block.sort_by_status()
-        self._rebuild_rows(focus_text=text)
+        self._rebuild_rows(focus_item_id=row.item_id)

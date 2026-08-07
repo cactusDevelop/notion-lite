@@ -39,14 +39,23 @@ class ChecklistSortTests(unittest.TestCase):
 
     def test_toggling_an_item_moves_it_to_the_checked_group(self) -> None:
         block = ChecklistBlock()
-        block.add_item("A", checked=False)
+        item_a = block.add_item("A", checked=False)
         block.add_item("B", checked=False)
         block.add_item("C", checked=False)
 
-        block.set_item_checked(0, True)  # "A" cochée
+        block.set_item_checked(item_a["id"], True)  # "A" cochée
         block.sort_by_status()
 
         self.assertEqual([item["text"] for item in block.items], ["B", "C", "A"])
+
+    def test_legacy_items_without_id_are_backfilled(self) -> None:
+        """Les checklists sauvegardées avant le correctif d'API (id) se
+        rechargent sans erreur : un id est généré à la volée."""
+        block = ChecklistBlock(items=[{"text": "Ancien format", "checked": False}])
+
+        self.assertTrue(block.items[0]["id"])
+        self.assertTrue(block.set_item_checked(block.items[0]["id"], True))
+        self.assertTrue(block.items[0]["checked"])
 
 
 if __name__ == "__main__":

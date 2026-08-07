@@ -26,9 +26,15 @@ class ChecklistBlock(Block):
         items: list[dict[str, Any]] | None = None,
         id: str | None = None,
     ) -> None:
+        # Rétrocompatibilité : les checklists sauvegardées avant ce
+        # correctif n'ont pas d'"id" par élément ; on leur en génère un.
+        normalized_items: list[dict[str, Any]] = []
+        for item in items or []:
+            normalized_items.append({**item, "id": item.get("id") or str(uuid.uuid4())})
+
         super().__init__(
             type=CHECKLIST_BLOCK_TYPE,
-            data={"items": items if items is not None else []},
+            data={"items": normalized_items},
             id=id or str(uuid.uuid4()),
         )
 
@@ -36,18 +42,38 @@ class ChecklistBlock(Block):
     def items(self) -> list[dict[str, Any]]:
         return self.data.setdefault("items", [])
 
-    def add_item(self, text: str = "", checked: bool = False) -> None:
-        self.items.append({"text": text, "checked": checked})
+    def _find_item(self, item_id: str) -> dict[str, Any] | None:
+        for item in self.items:
+            if item.get("id") == item_id:
+                return item
+        return None
 
-    def remove_item(self, index: int) -> None:
-        if 0 <= index < len(self.items):
-            del self.items[index]
+    def add_item(self, text: str = "", checked: bool = False) -> dict[str, Any]:
+        """Ajoute un élément et le retourne (avec son id généré)."""
+        item = {"id": str(uuid.uuid4()), "text": text, "checked": checked}
+        self.items.append(item)
+        return item
 
-    def set_item_text(self, index: int, text: str) -> None:
-        self.items[index]["text"] = text
+    def remove_item(self, item_id: str) -> bool:
+        item = self._find_item(item_id)
+        if item is None:
+            return False
+        self.items.remove(item)
+        return True
 
-    def set_item_checked(self, index: int, checked: bool) -> None:
-        self.items[index]["checked"] = checked
+    def set_item_text(self, item_id: str, text: str) -> bool:
+        item = self._find_item(item_id)
+        if item is None:
+            return False
+        item["text"] = text
+        return True
+
+    def set_item_checked(self, item_id: str, checked: bool) -> bool:
+        item = self._find_item(item_id)
+        if item is None:
+            return False
+        item["checked"] = checked
+        return True
 
     def sort_by_status(self) -> None:
         """Trie la liste : tâches non cochées d'abord, cochées ensuite (PATCH 11).
