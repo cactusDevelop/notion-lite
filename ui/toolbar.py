@@ -2,60 +2,64 @@
 Barre d'outils principale.
 
 PATCH 5 : actions de base (nouveau bloc, mise en forme simple).
-La mise en forme complète (barré, alignement, listes, citations,
-code) sera ajoutée au PATCH 6.
+PATCH 6 : mise en forme complète (barré, alignement, listes,
+citation, code).
 """
 from __future__ import annotations
 
-from typing import Callable
+from typing import Callable, Optional
 
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import QSpinBox, QToolBar
 
+# (clé d'action, libellé affiché). label=None -> séparateur.
+_ACTIONS: list[tuple[str, Optional[str]]] = [
+    ("new_block", "Nouveau bloc"),
+    ("sep1", None),
+    ("bold", "Gras"),
+    ("italic", "Italique"),
+    ("underline", "Souligné"),
+    ("strikethrough", "Barré"),
+    ("sep2", None),
+    ("align_left", "Aligner à gauche"),
+    ("align_center", "Centrer"),
+    ("align_right", "Aligner à droite"),
+    ("align_justify", "Justifier"),
+    ("sep3", None),
+    ("bullet_list", "Liste à puces"),
+    ("numbered_list", "Liste numérotée"),
+    ("quote", "Citation"),
+    ("code", "Code"),
+    ("sep4", None),
+    ("color", "Couleur"),
+]
+
 
 class MainToolBar(QToolBar):
-    """Barre d'outils exposant les actions de base de l'éditeur.
+    """Barre d'outils exposant les actions de mise en forme de l'éditeur.
 
-    Les callbacks sont fournis par MainWindow, qui reste responsable
-    de savoir sur quel bloc appliquer chaque action.
+    Args:
+        actions: dictionnaire {clé_action: callback sans argument},
+            une entrée par clé listée dans _ACTIONS (hors séparateurs).
+        on_size_changed: callback appelé avec la nouvelle taille en pt.
     """
 
     def __init__(
         self,
-        on_new_block: Callable[[], None],
-        on_bold: Callable[[], None],
-        on_italic: Callable[[], None],
-        on_underline: Callable[[], None],
-        on_color: Callable[[], None],
+        actions: dict[str, Callable[[], None]],
         on_size_changed: Callable[[int], None],
         parent=None,
     ) -> None:
         super().__init__("Barre d'outils", parent)
         self.setMovable(False)
 
-        new_block_action = QAction("Nouveau bloc", self)
-        new_block_action.triggered.connect(on_new_block)
-        self.addAction(new_block_action)
-
-        self.addSeparator()
-
-        bold_action = QAction("Gras", self)
-        bold_action.triggered.connect(on_bold)
-        self.addAction(bold_action)
-
-        italic_action = QAction("Italique", self)
-        italic_action.triggered.connect(on_italic)
-        self.addAction(italic_action)
-
-        underline_action = QAction("Souligné", self)
-        underline_action.triggered.connect(on_underline)
-        self.addAction(underline_action)
-
-        color_action = QAction("Couleur", self)
-        color_action.triggered.connect(on_color)
-        self.addAction(color_action)
-
-        self.addSeparator()
+        for key, label in _ACTIONS:
+            if label is None:
+                self.addSeparator()
+                continue
+            action = QAction(label, self)
+            action.triggered.connect(actions[key])
+            self.addAction(action)
 
         self._size_spin = QSpinBox(self)
         self._size_spin.setRange(8, 72)

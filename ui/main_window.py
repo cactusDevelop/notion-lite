@@ -3,6 +3,7 @@ Fenêtre principale de Notion Lite.
 """
 from __future__ import annotations
 
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QColorDialog, QMainWindow, QVBoxLayout, QWidget
 
@@ -18,7 +19,7 @@ class MainWindow(QMainWindow):
     """Fenêtre principale de l'application.
 
     Affiche le document sous forme d'une colonne de blocs et
-    expose une toolbar (PATCH 5) pour la mise en forme de base.
+    expose une toolbar pour la mise en forme (PATCH 5 et 6).
     """
 
     def __init__(self) -> None:
@@ -35,11 +36,22 @@ class MainWindow(QMainWindow):
     def _setup_ui(self) -> None:
         """Prépare la toolbar, la zone de contenu et affiche le document."""
         toolbar = MainToolBar(
-            on_new_block=self._add_text_block,
-            on_bold=self._apply_bold,
-            on_italic=self._apply_italic,
-            on_underline=self._apply_underline,
-            on_color=self._apply_color,
+            actions={
+                "new_block": lambda: self._add_text_block(),
+                "bold": self._with_active(TextBlockWidget.toggle_bold),
+                "italic": self._with_active(TextBlockWidget.toggle_italic),
+                "underline": self._with_active(TextBlockWidget.toggle_underline),
+                "strikethrough": self._with_active(TextBlockWidget.toggle_strikethrough),
+                "align_left": self._with_active(lambda w: w.set_alignment(Qt.AlignLeft)),
+                "align_center": self._with_active(lambda w: w.set_alignment(Qt.AlignCenter)),
+                "align_right": self._with_active(lambda w: w.set_alignment(Qt.AlignRight)),
+                "align_justify": self._with_active(lambda w: w.set_alignment(Qt.AlignJustify)),
+                "bullet_list": self._with_active(TextBlockWidget.toggle_bullet_list),
+                "numbered_list": self._with_active(TextBlockWidget.toggle_numbered_list),
+                "quote": self._with_active(TextBlockWidget.toggle_quote),
+                "code": self._with_active(TextBlockWidget.toggle_code),
+                "color": self._apply_color,
+            },
             on_size_changed=self._apply_size,
         )
         self.addToolBar(toolbar)
@@ -59,6 +71,16 @@ class MainWindow(QMainWindow):
 
         self._add_text_block(content="Ceci est un bloc de texte modifiable.")
 
+    def _with_active(self, method):
+        """Enveloppe une méthode de TextBlockWidget pour l'appliquer
+        au bloc texte actuellement focus, s'il y en a un."""
+
+        def handler() -> None:
+            if self._active_text_widget is not None:
+                method(self._active_text_widget)
+
+        return handler
+
     def _add_text_block(self, content: str = "") -> None:
         """Ajoute un nouveau bloc texte au document et à l'affichage."""
         block = TextBlock(content=content)
@@ -72,18 +94,6 @@ class MainWindow(QMainWindow):
 
     def _on_text_widget_focused(self, widget: TextBlockWidget) -> None:
         self._active_text_widget = widget
-
-    def _apply_bold(self) -> None:
-        if self._active_text_widget is not None:
-            self._active_text_widget.toggle_bold()
-
-    def _apply_italic(self) -> None:
-        if self._active_text_widget is not None:
-            self._active_text_widget.toggle_italic()
-
-    def _apply_underline(self) -> None:
-        if self._active_text_widget is not None:
-            self._active_text_widget.toggle_underline()
 
     def _apply_color(self) -> None:
         if self._active_text_widget is None:
