@@ -19,6 +19,7 @@ from PySide6.QtWidgets import QSizePolicy, QSpinBox, QToolBar, QWidget
 # (clé d'action, libellé affiché). label=None -> séparateur.
 _ACTIONS: list[tuple[str, Optional[str]]] = [
     ("new_block", "Nouveau bloc"),
+    ("new_checklist", "Nouvelle checklist"),
     ("sep1", None),
     ("bold", "Gras"),
     ("italic", "Italique"),

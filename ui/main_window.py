@@ -19,9 +19,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from blocks.checklist_block import ChecklistBlock
 from blocks.heading_block import HeadingBlock
 from blocks.text_block import TextBlock
 from core.document import Document
+from ui.blocks.checklist_block_widget import ChecklistBlockWidget
 from ui.blocks.heading_block_widget import HeadingBlockWidget
 from ui.blocks.text_block_widget import TextBlockWidget
 from ui.info_dialog import InfoDialog
@@ -57,6 +59,7 @@ class MainWindow(QMainWindow):
         toolbar = MainToolBar(
             actions={
                 "new_block": lambda: self._add_text_block(),
+                "new_checklist": self._add_checklist_block,
                 "bold": self._with_active(TextBlockWidget.toggle_bold),
                 "italic": self._with_active(TextBlockWidget.toggle_italic),
                 "underline": self._with_active(TextBlockWidget.toggle_underline),
@@ -89,6 +92,10 @@ class MainWindow(QMainWindow):
         self._document.add_block(
             TextBlock(content="Ceci est un bloc de texte modifiable.")
         )
+        checklist_demo = ChecklistBlock()
+        checklist_demo.add_item("Première tâche", checked=False)
+        checklist_demo.add_item("Deuxième tâche", checked=True)
+        self._document.add_block(checklist_demo)
         self._render_document(focus_last=True)
 
     def _setup_file_menu(self) -> None:
@@ -153,6 +160,8 @@ class MainWindow(QMainWindow):
             return self._create_text_widget(block)
         if isinstance(block, HeadingBlock):
             return HeadingBlockWidget(block)
+        if isinstance(block, ChecklistBlock):
+            return ChecklistBlockWidget(block)
         raise ValueError(f"Type de bloc non pris en charge à l'affichage : {block.type}")
 
     def _render_document(self, focus_last: bool = False) -> None:
@@ -254,6 +263,15 @@ class MainWindow(QMainWindow):
         widget = self._create_text_widget(block)
         self._blocks_layout.addWidget(widget)
         widget.setFocus()
+
+    def _add_checklist_block(self) -> None:
+        """Ajoute un nouveau bloc checklist (PATCH 10), avec un premier élément vide."""
+        block = ChecklistBlock()
+        block.add_item()
+        self._document.add_block(block)
+
+        widget = ChecklistBlockWidget(block)
+        self._blocks_layout.addWidget(widget)
 
     @staticmethod
     def _focus_widget_at_end(widget: QWidget) -> None:

@@ -63,4 +63,11 @@ DESIGN_NOTES: list[tuple[str, str]] = [
         "un test de non-régression qui prouve que chaque champ "
         "survit à l'aller-retour sauvegarde/chargement.",
     ),
+    (
+        "PATCH 10 — Bloc Checklist",
+        "Chaque élément est {texte, coché} dans <i>data['items']</i>. "
+        "Enregistré dans <i>blocks/registry.py</i> comme prévu, donc "
+        "compatible sauvegarde/chargement sans modification du "
+        "PATCH 8/9.",
+    ),
 ]
