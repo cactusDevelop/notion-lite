@@ -39,6 +39,7 @@ from blocks.table_block import (
     DURATION_UNITS,
     TableBlock,
 )
+from core.duration import format_duration
 from ui.blocks.table_cell_dialogs import (
     ask_column_definition,
     edit_checklist_cell,
@@ -202,10 +203,14 @@ class TableBlockWidget(QWidget):
         unit_combo.setCurrentText(value.get("unit", DURATION_UNITS[1]))
         cell_layout.addWidget(unit_combo)
 
+        preview_label = QLabel(format_duration(value), container)
+        preview_label.setStyleSheet("color: gray;")
+        cell_layout.addWidget(preview_label, 1)
+
         def _push() -> None:
-            self._block.set_cell(
-                row["id"], column["id"], {"amount": amount_spin.value(), "unit": unit_combo.currentText()}
-            )
+            new_value = {"amount": amount_spin.value(), "unit": unit_combo.currentText()}
+            self._block.set_cell(row["id"], column["id"], new_value)
+            preview_label.setText(format_duration(new_value))
 
         amount_spin.valueChanged.connect(_push)
         unit_combo.currentTextChanged.connect(_push)
