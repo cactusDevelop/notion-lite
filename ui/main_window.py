@@ -16,7 +16,6 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QTextEdit,
-    QVBoxLayout,
     QWidget,
 )
 
@@ -25,10 +24,12 @@ from blocks.heading_block import HeadingBlock
 from blocks.image_block import ImageBlock
 from blocks.text_block import TextBlock
 from core.document import Document
+from ui.blocks.block_container import BlockContainer
 from ui.blocks.checklist_block_widget import ChecklistBlockWidget
 from ui.blocks.heading_block_widget import HeadingBlockWidget
 from ui.blocks.image_block_widget import ImageBlockWidget
 from ui.blocks.text_block_widget import TextBlockWidget
+from ui.blocks_area import BlocksArea
 from ui.info_dialog import InfoDialog
 from ui.toolbar import MainToolBar
 
@@ -41,8 +42,9 @@ class MainWindow(QMainWindow):
     """Fenêtre principale de l'application.
 
     Affiche le document sous forme d'une colonne de blocs, expose une
-    toolbar de mise en forme (PATCH 5 et 6) et gère une expérience de
-    curseur multi-blocs façon Notion (PATCH 7).
+    toolbar de mise en forme (PATCH 5 et 6), gère une expérience de
+    curseur multi-blocs façon Notion (PATCH 7) et permet de réordonner
+    n'importe quel bloc par glisser-déposer (PATCH 13).
     """
 
     def __init__(self) -> None:
@@ -85,8 +87,8 @@ class MainWindow(QMainWindow):
         self.addToolBar(toolbar)
         self._setup_file_menu()
 
-        central = QWidget()
-        self._blocks_layout = QVBoxLayout(central)
+        central = BlocksArea(on_block_dropped=self._on_block_dropped)
+        self._blocks_layout = central.blocks_layout
         self.setCentralWidget(central)
 
         # Document de démonstration pour valider les PATCH 3 et 4.
@@ -156,10 +158,10 @@ class MainWindow(QMainWindow):
         """Ouvre la popup listant les explications et choix de design."""
         InfoDialog(self).exec()
 
-    # -- Sauvegarde / chargement (PATCH 8) --------------------------------
+    # -- Rendu générique des blocs / drag & drop (PATCH 8, 13) ------------
 
-    def _create_widget_for_block(self, block) -> QWidget:
-        """Crée le widget adapté au type d'un bloc quelconque du document."""
+    def _create_content_widget_for_block(self, block) -> QWidget:
+        """Crée le widget métier adapté au type d'un bloc (sans poignée)."""
         if isinstance(block, TextBlock):
             return self._create_text_widget(block)
         if isinstance(block, HeadingBlock):
@@ -175,6 +177,27 @@ class MainWindow(QMainWindow):
             )
         raise ValueError(f"Type de bloc non pris en charge à l'affichage : {block.type}")
 
+    def _wrap(self, content: QWidget, block_id: str) -> BlockContainer:
+        """PATCH 13 — Ajoute la poignée de glisser-déposer à un widget de bloc."""
+        return BlockContainer(content, block_id)
+
+    def _find_container(self, content_widget: QWidget) -> tuple[int, BlockContainer | None]:
+        """Retrouve (index dans le layout, BlockContainer) d'un widget de contenu."""
+        for i in range(self._blocks_layout.count()):
+            item = self._blocks_layout.itemAt(i)
+            widget = item.widget() if item else None
+            if isinstance(widget, BlockContainer) and widget.content is content_widget:
+                return i, widget
+        return -1, None
+
+    def _layout_index_of_content(self, content_widget: QWidget) -> int:
+        return self._find_container(content_widget)[0]
+
+    def _content_widget_at(self, layout_index: int) -> QWidget | None:
+        item = self._blocks_layout.itemAt(layout_index)
+        widget = item.widget() if item else None
+        return widget.content if isinstance(widget, BlockContainer) else None
+
     def _render_document(self, focus_last: bool = False) -> None:
         """(Re)construit entièrement l'affichage à partir de self._document."""
         self._active_text_widget = None
@@ -184,13 +207,29 @@ class MainWindow(QMainWindow):
             if widget is not None:
                 widget.deleteLater()
 
-        last_widget: QWidget | None = None
+        last_content: QWidget | None = None
         for block in self._document.blocks:
-            last_widget = self._create_widget_for_block(block)
-            self._blocks_layout.addWidget(last_widget)
+            last_content = self._create_content_widget_for_block(block)
+            self._blocks_layout.addWidget(self._wrap(last_content, block.id))
 
-        if focus_last and last_widget is not None:
-            last_widget.setFocus()
+        if focus_last and last_content is not None:
+            last_content.setFocus()
+
+    def _on_block_dropped(self, block_id: str, target_index: int) -> None:
+        """PATCH 13 — Réordonne le document après un glisser-déposer."""
+        current_index = next(
+            (i for i, b in enumerate(self._document.blocks) if b.id == block_id), None
+        )
+        if current_index is None:
+            return
+        if target_index > current_index:
+            target_index -= 1  # le bloc quitte sa position avant d'être réinséré
+        if target_index == current_index:
+            return
+        self._document.move_block(block_id, target_index)
+        self._render_document()
+
+    # -- Sauvegarde / chargement (PATCH 8) --------------------------------
 
     def _set_current_file(self, path: Path | None) -> None:
         self._current_file = path
@@ -272,7 +311,7 @@ class MainWindow(QMainWindow):
         self._document.add_block(block)
 
         widget = self._create_text_widget(block)
-        self._blocks_layout.addWidget(widget)
+        self._blocks_layout.addWidget(self._wrap(widget, block.id))
         widget.setFocus()
 
     def _add_checklist_block(self) -> None:
@@ -282,7 +321,7 @@ class MainWindow(QMainWindow):
         self._document.add_block(block)
 
         widget = ChecklistBlockWidget(block)
-        self._blocks_layout.addWidget(widget)
+        self._blocks_layout.addWidget(self._wrap(widget, block.id))
 
     def _add_image_block(self) -> None:
         """PATCH 12 — Insère une image choisie sur le disque, en fin de document."""
@@ -309,7 +348,8 @@ class MainWindow(QMainWindow):
             image_format=path.suffix.lstrip(".").lower() or "png",
         )
         self._document.add_block(block)
-        self._blocks_layout.addWidget(self._create_widget_for_block(block))
+        content = self._create_content_widget_for_block(block)
+        self._blocks_layout.addWidget(self._wrap(content, block.id))
 
     def _move_block(self, block_id: str, delta: int) -> None:
         """PATCH 12 — Déplace un bloc (image, checklist, ...) d'une position."""
@@ -347,9 +387,9 @@ class MainWindow(QMainWindow):
         doc_index = self._document.blocks.index(widget.block)
         self._document.add_block(new_block, index=doc_index + 1)
 
-        layout_index = self._blocks_layout.indexOf(widget)
+        layout_index = self._layout_index_of_content(widget)
         new_widget = self._create_text_widget(new_block)
-        self._blocks_layout.insertWidget(layout_index + 1, new_widget)
+        self._blocks_layout.insertWidget(layout_index + 1, self._wrap(new_widget, new_block.id))
 
         new_widget.setFocus()
         cursor = new_widget.textCursor()
@@ -358,12 +398,11 @@ class MainWindow(QMainWindow):
 
     def _on_merge_requested(self, widget: TextBlockWidget) -> None:
         """Fusionne un bloc texte non vide avec le bloc texte précédent."""
-        layout_index = self._blocks_layout.indexOf(widget)
+        layout_index = self._layout_index_of_content(widget)
         if layout_index <= 0:
             return
 
-        previous_item = self._blocks_layout.itemAt(layout_index - 1)
-        previous_widget = previous_item.widget() if previous_item else None
+        previous_widget = self._content_widget_at(layout_index - 1)
         if not isinstance(previous_widget, TextBlockWidget):
             return  # fusion uniquement entre deux blocs texte pour l'instant
 
@@ -379,12 +418,11 @@ class MainWindow(QMainWindow):
 
     def _on_delete_requested(self, widget: TextBlockWidget) -> None:
         """Supprime un bloc texte vide et redonne le focus au précédent."""
-        layout_index = self._blocks_layout.indexOf(widget)
+        layout_index = self._layout_index_of_content(widget)
         if layout_index <= 0:
             return
 
-        previous_item = self._blocks_layout.itemAt(layout_index - 1)
-        previous_widget = previous_item.widget() if previous_item else None
+        previous_widget = self._content_widget_at(layout_index - 1)
 
         self._remove_text_block(widget)
 
@@ -394,7 +432,9 @@ class MainWindow(QMainWindow):
     def _remove_text_block(self, widget: TextBlockWidget) -> None:
         """Retire un bloc texte du document et de l'affichage."""
         self._document.remove_block(widget.block.id)
-        self._blocks_layout.removeWidget(widget)
+        _, container = self._find_container(widget)
+        if container is not None:
+            self._blocks_layout.removeWidget(container)
+            container.deleteLater()
         if self._active_text_widget is widget:
             self._active_text_widget = None
-        widget.deleteLater()

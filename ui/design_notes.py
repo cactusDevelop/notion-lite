@@ -90,4 +90,16 @@ DESIGN_NOTES: list[tuple[str, str]] = [
         "exposés ici par deux boutons ↑/↓ ; le drag & drop générique "
         "arrive au PATCH 13.",
     ),
+    (
+        "PATCH 13 — Drag & Drop",
+        "<i>BlockContainer</i> ajoute une poignée « ⠿ » à chaque bloc "
+        "et démarre un <i>QDrag</i> (mime-type privé transportant "
+        "l'ID du bloc). <i>BlocksArea</i>, désormais le widget "
+        "central, accepte le dépôt et calcule l'index d'insertion "
+        "depuis la position Y. Le tout passe par "
+        "<i>Document.move_block</i> (PATCH 2) : générique, donc "
+        "valable pour tous les types de blocs (texte, titres, "
+        "checklists, images, et tableaux au PATCH 14). Les boutons "
+        "↑/↓ de l'image (PATCH 12) restent en complément accessible.",
+    ),
 ]
