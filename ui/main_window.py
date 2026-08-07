@@ -22,12 +22,14 @@ from PySide6.QtWidgets import (
 from blocks.checklist_block import ChecklistBlock
 from blocks.heading_block import HeadingBlock
 from blocks.image_block import ImageBlock
+from blocks.table_block import TableBlock
 from blocks.text_block import TextBlock
 from core.document import Document
 from ui.blocks.block_container import BlockContainer
 from ui.blocks.checklist_block_widget import ChecklistBlockWidget
 from ui.blocks.heading_block_widget import HeadingBlockWidget
 from ui.blocks.image_block_widget import ImageBlockWidget
+from ui.blocks.table_block_widget import TableBlockWidget
 from ui.blocks.text_block_widget import TextBlockWidget
 from ui.blocks_area import BlocksArea
 from ui.info_dialog import InfoDialog
@@ -66,6 +68,7 @@ class MainWindow(QMainWindow):
                 "new_block": lambda: self._add_text_block(),
                 "new_checklist": self._add_checklist_block,
                 "new_image": self._add_image_block,
+                "new_table": self._add_table_block,
                 "bold": self._with_active(TextBlockWidget.toggle_bold),
                 "italic": self._with_active(TextBlockWidget.toggle_italic),
                 "underline": self._with_active(TextBlockWidget.toggle_underline),
@@ -168,6 +171,8 @@ class MainWindow(QMainWindow):
             return HeadingBlockWidget(block)
         if isinstance(block, ChecklistBlock):
             return ChecklistBlockWidget(block)
+        if isinstance(block, TableBlock):
+            return TableBlockWidget(block)
         if isinstance(block, ImageBlock):
             return ImageBlockWidget(
                 block,
@@ -321,6 +326,17 @@ class MainWindow(QMainWindow):
         self._document.add_block(block)
 
         widget = ChecklistBlockWidget(block)
+        self._blocks_layout.addWidget(self._wrap(widget, block.id))
+
+    def _add_table_block(self) -> None:
+        """PATCH 14 — Ajoute un nouveau bloc tableau (2 colonnes, 1 ligne)."""
+        block = TableBlock()
+        block.add_column(name="Colonne 1")
+        block.add_column(name="Colonne 2")
+        block.add_row()
+        self._document.add_block(block)
+
+        widget = TableBlockWidget(block)
         self._blocks_layout.addWidget(self._wrap(widget, block.id))
 
     def _add_image_block(self) -> None:
