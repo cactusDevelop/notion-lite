@@ -7,7 +7,7 @@ d'un TextBlock ordinaire.
 """
 from __future__ import annotations
 
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QFont, QPalette
 from PySide6.QtWidgets import QTextEdit
 
 from blocks.quote_block import QuoteBlock
@@ -28,9 +28,11 @@ class QuoteBlockWidget(QTextEdit):
         font = QFont()
         font.setItalic(True)
         self.setFont(font)
-        self.setStyleSheet(
-            "QTextEdit { border-left: 3px solid #999999; padding-left: 10px; color: #555555; }"
-        )
+        # Barre verticale dérivée de la palette courante (claire ou sombre,
+        # PATCH 32) plutôt qu'une couleur fixe, pour rester lisible dans
+        # les deux thèmes.
+        border_color = self.palette().color(QPalette.Mid).name()
+        self.setStyleSheet(f"QTextEdit {{ border-left: 3px solid {border_color}; padding-left: 10px; }}")
 
         self.textChanged.connect(self._on_text_changed)
 

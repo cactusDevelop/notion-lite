@@ -57,6 +57,7 @@ from ui.command_registry import COMMANDS
 from ui.info_dialog import InfoDialog
 from ui.people_manager_dialog import PeopleManagerDialog
 from ui.search_dialog import SearchDialog
+from ui.themes.theme import THEME_DARK, apply_theme, current_theme, toggle_theme
 from ui.toolbar import MainToolBar
 
 # Racine du projet (deux niveaux au-dessus de ce fichier : ui/main_window.py).
@@ -226,6 +227,14 @@ class MainWindow(QMainWindow):
 
         self._favorites_menu = self.menuBar().addMenu("&Favoris")
         self._favorites_menu.aboutToShow.connect(self._populate_favorites_menu)
+
+        view_menu = self.menuBar().addMenu("&Affichage")
+        self._dark_mode_action = QAction("Mode sombre", self)
+        self._dark_mode_action.setCheckable(True)
+        self._dark_mode_action.setChecked(current_theme(QApplication.instance()) == THEME_DARK)
+        self._dark_mode_action.setShortcut(QKeySequence("Ctrl+Shift+D"))
+        self._dark_mode_action.triggered.connect(self._toggle_dark_mode)
+        view_menu.addAction(self._dark_mode_action)
     # -- Mise en forme (PATCH 5 / 6) -------------------------------------
 
     def _with_active(self, method):
@@ -316,6 +325,12 @@ class MainWindow(QMainWindow):
             label = preview_for_block(block)
             action = self._favorites_menu.addAction(label)
             action.triggered.connect(lambda _, bid=block.id: self._scroll_to_block(bid))
+
+    # -- Mode sombre (PATCH 32) ---------------------------------------------
+
+    def _toggle_dark_mode(self) -> None:
+        new_theme = toggle_theme(QApplication.instance())
+        self._dark_mode_action.setChecked(new_theme == THEME_DARK)
 
     # -- Undo / Redo (PATCH 27) --------------------------------------------
 

@@ -8,7 +8,7 @@ future prévue par le plan du projet).
 """
 from __future__ import annotations
 
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QFont, QPalette
 from PySide6.QtWidgets import QTextEdit
 
 from blocks.code_block import CodeBlock
@@ -31,8 +31,12 @@ class CodeBlockWidget(QTextEdit):
         font = QFont(_MONOSPACE_FAMILY)
         font.setStyleHint(QFont.Monospace)
         self.setFont(font)
+        # Fond/bordure dérivés de la palette courante (claire ou sombre,
+        # PATCH 32) plutôt que des couleurs fixes.
+        alt_bg = self.palette().color(QPalette.AlternateBase).name()
+        border_color = self.palette().color(QPalette.Mid).name()
         self.setStyleSheet(
-            "QTextEdit { background-color: #f5f5f5; border: 1px solid #dddddd; padding: 8px; }"
+            f"QTextEdit {{ background-color: {alt_bg}; border: 1px solid {border_color}; padding: 8px; }}"
         )
 
         self.textChanged.connect(self._on_text_changed)
