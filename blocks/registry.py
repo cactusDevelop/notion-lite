@@ -17,6 +17,7 @@ from blocks.image_block import IMAGE_BLOCK_TYPE, ImageBlock
 from blocks.list_block import LIST_BLOCK_TYPE, ListBlock
 from blocks.quote_block import QUOTE_BLOCK_TYPE, QuoteBlock
 from blocks.separator_block import SEPARATOR_BLOCK_TYPE, SeparatorBlock
+from blocks.simple_table_block import SIMPLE_TABLE_BLOCK_TYPE, SimpleTableBlock
 from blocks.table_block import TABLE_BLOCK_TYPE, TableBlock
 from blocks.text_block import TEXT_BLOCK_TYPE, TextBlock
 from core.block import Block
@@ -66,6 +67,9 @@ def block_from_dict(raw: dict[str, Any]) -> Block:
             date_column_id=data.get("date_column_id"),
             id=block_id,
         )
+
+    if block_type == SIMPLE_TABLE_BLOCK_TYPE:
+        return SimpleTableBlock(rows=data.get("rows", []), id=block_id)
 
     if block_type == SEPARATOR_BLOCK_TYPE:
         return SeparatorBlock(id=block_id)

@@ -22,6 +22,7 @@ _ACTIONS: list[tuple[str, Optional[str]]] = [
     ("new_checklist", "Nouvelle checklist"),
     ("new_image", "Insérer une image"),
     ("new_table", "Nouveau tableau"),
+    ("new_simple_table", "Nouveau tableau simple"),
     ("new_gantt", "Nouveau Gantt"),
     ("new_separator", "Insérer un séparateur"),
     ("new_quote", "Insérer une citation"),

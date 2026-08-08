@@ -27,6 +27,7 @@ from blocks.gantt_block import GanttBlock
 from blocks.list_block import ListBlock
 from blocks.quote_block import QuoteBlock
 from blocks.separator_block import SeparatorBlock
+from blocks.simple_table_block import SimpleTableBlock
 from blocks.table_block import TableBlock
 from blocks.text_block import TextBlock
 from core.document import Document
@@ -39,6 +40,7 @@ from ui.blocks.image_block_widget import ImageBlockWidget
 from ui.blocks.list_block_widget import ListBlockWidget
 from ui.blocks.quote_block_widget import QuoteBlockWidget
 from ui.blocks.separator_block_widget import SeparatorBlockWidget
+from ui.blocks.simple_table_block_widget import SimpleTableBlockWidget
 from ui.blocks.table_block_widget import TableBlockWidget
 from ui.blocks.text_block_widget import TextBlockWidget
 from ui.blocks_area import BlocksArea
@@ -80,6 +82,7 @@ class MainWindow(QMainWindow):
                 "new_checklist": self._add_checklist_block,
                 "new_image": self._add_image_block,
                 "new_table": self._add_table_block,
+                "new_simple_table": self._add_simple_table_block,
                 "new_gantt": self._add_gantt_block,
                 "new_separator": self._add_separator_block,
                 "new_quote": self._add_quote_block,
@@ -199,6 +202,8 @@ class MainWindow(QMainWindow):
             return ChecklistBlockWidget(block)
         if isinstance(block, TableBlock):
             return TableBlockWidget(block, self._document)
+        if isinstance(block, SimpleTableBlock):
+            return SimpleTableBlockWidget(block)
         if isinstance(block, GanttBlock):
             return GanttBlockWidget(block, self._document)
         if isinstance(block, SeparatorBlock):
@@ -362,6 +367,14 @@ class MainWindow(QMainWindow):
         self._document.add_block(block)
 
         widget = ChecklistBlockWidget(block)
+        self._blocks_layout.addWidget(self._wrap(widget, block.id))
+
+    def _add_simple_table_block(self) -> None:
+        """PATCH 24 — Ajoute un tableau simple (grille de texte 2×2)."""
+        block = SimpleTableBlock()
+        self._document.add_block(block)
+
+        widget = SimpleTableBlockWidget(block)
         self._blocks_layout.addWidget(self._wrap(widget, block.id))
 
     def _add_table_block(self) -> None:
