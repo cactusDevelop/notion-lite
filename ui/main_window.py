@@ -9,7 +9,7 @@ import uuid
 from pathlib import Path
 
 from PySide6.QtCore import QEvent, QPoint, Qt, QTimer
-from PySide6.QtGui import QAction, QColor, QKeySequence, QTextCursor
+from PySide6.QtGui import QAction, QActionGroup, QColor, QKeySequence, QTextCursor
 from PySide6.QtWidgets import (
     QApplication,
     QColorDialog,
@@ -57,7 +57,14 @@ from ui.command_registry import COMMANDS
 from ui.info_dialog import InfoDialog
 from ui.people_manager_dialog import PeopleManagerDialog
 from ui.search_dialog import SearchDialog
-from ui.themes.theme import THEME_DARK, apply_theme, current_theme, toggle_theme
+from ui.themes.theme import (
+    THEME_DARK,
+    THEME_LABELS,
+    THEMES,
+    apply_theme,
+    current_theme,
+    toggle_theme,
+)
 from ui.toolbar import MainToolBar
 
 # Racine du projet (deux niveaux au-dessus de ce fichier : ui/main_window.py).
@@ -235,6 +242,19 @@ class MainWindow(QMainWindow):
         self._dark_mode_action.setShortcut(QKeySequence("Ctrl+Shift+D"))
         self._dark_mode_action.triggered.connect(self._toggle_dark_mode)
         view_menu.addAction(self._dark_mode_action)
+
+        theme_menu = view_menu.addMenu("Thème")
+        theme_group = QActionGroup(self)
+        theme_group.setExclusive(True)
+        self._theme_actions: dict[str, QAction] = {}
+        for theme_name in THEMES:
+            action = QAction(THEME_LABELS[theme_name], self)
+            action.setCheckable(True)
+            action.setChecked(current_theme(QApplication.instance()) == theme_name)
+            action.triggered.connect(lambda _, t=theme_name: self._set_theme(t))
+            theme_group.addAction(action)
+            theme_menu.addAction(action)
+            self._theme_actions[theme_name] = action
     # -- Mise en forme (PATCH 5 / 6) -------------------------------------
 
     def _with_active(self, method):
@@ -331,6 +351,18 @@ class MainWindow(QMainWindow):
     def _toggle_dark_mode(self) -> None:
         new_theme = toggle_theme(QApplication.instance())
         self._dark_mode_action.setChecked(new_theme == THEME_DARK)
+        self._sync_theme_menu(new_theme)
+
+    def _set_theme(self, theme_name: str) -> None:
+        """PATCH 33 — Applique un thème choisi dans le sous-menu "Thème"."""
+        apply_theme(QApplication.instance(), theme_name)
+        self._dark_mode_action.setChecked(theme_name == THEME_DARK)
+        self._sync_theme_menu(theme_name)
+
+    def _sync_theme_menu(self, theme_name: str) -> None:
+        action = self._theme_actions.get(theme_name)
+        if action is not None:
+            action.setChecked(True)
 
     # -- Undo / Redo (PATCH 27) --------------------------------------------
 
