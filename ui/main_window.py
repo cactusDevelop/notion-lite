@@ -216,6 +216,10 @@ class MainWindow(QMainWindow):
         search_action.triggered.connect(self._show_search_dialog)
         edit_menu.addAction(search_action)
 
+        replace_action = QAction("Remplacer...", self)
+        replace_action.setShortcut(QKeySequence("Ctrl+H"))
+        replace_action.triggered.connect(self._show_search_dialog)
+        edit_menu.addAction(replace_action)
     # -- Mise en forme (PATCH 5 / 6) -------------------------------------
 
     def _with_active(self, method):
@@ -254,8 +258,13 @@ class MainWindow(QMainWindow):
     # -- Recherche globale (PATCH 28) --------------------------------------
 
     def _show_search_dialog(self) -> None:
-        """CTRL+F — Ouvre la recherche globale (texte, checklists, tableaux)."""
-        SearchDialog(self._document, on_result_activated=self._scroll_to_block, parent=self).exec()
+        """CTRL+F/CTRL+H — Recherche (et remplacement, PATCH 29) globaux."""
+        SearchDialog(
+            self._document,
+            on_result_activated=self._scroll_to_block,
+            on_document_changed=self._render_document,
+            parent=self,
+        ).exec()
 
     def _scroll_to_block(self, block_id: str) -> None:
         """Fait défiler jusqu'au bloc et le met en surbrillance brièvement."""

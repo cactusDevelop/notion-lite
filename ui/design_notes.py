@@ -156,4 +156,21 @@ DESIGN_NOTES: list[tuple[str, str]] = [
         "sens), sans changer la logique de drag & drop (coordonnées "
         "toujours relatives à <i>BlocksArea</i>).",
     ),
+    (
+        "PATCH 29 — Remplacement",
+        "<i>core/replace.py</i> (<i>replace_all</i>) suit les mêmes "
+        "catégories de blocs que la recherche, avec une exception "
+        "volontaire : dans le tableau typé (PATCH 15), seules les "
+        "colonnes textuelles (texte, nombre, liste déroulante, liste "
+        "multiple, éléments d'une checklist imbriquée) sont "
+        "concernées — les colonnes Personne sont exclues (un "
+        "renommage doit passer par le PATCH 16 pour rester "
+        "synchronisé avec le registre), et Date/Durée/Booléen ne "
+        "sont pas du texte. Remplacer un texte riche (PATCH 6) efface "
+        "son HTML devenu incohérent avec le nouveau contenu. "
+        "« Tout remplacer », dans <i>SearchDialog</i>, est une "
+        "mutation du document comme une autre : elle est donc "
+        "annulable via l'historique générique du PATCH 27, sans code "
+        "supplémentaire.",
+    ),
 ]
