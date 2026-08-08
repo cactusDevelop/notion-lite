@@ -24,6 +24,7 @@ from blocks.code_block import CodeBlock
 from blocks.heading_block import HeadingBlock
 from blocks.image_block import ImageBlock
 from blocks.gantt_block import GanttBlock
+from blocks.list_block import ListBlock
 from blocks.quote_block import QuoteBlock
 from blocks.separator_block import SeparatorBlock
 from blocks.table_block import TableBlock
@@ -35,6 +36,7 @@ from ui.blocks.code_block_widget import CodeBlockWidget
 from ui.blocks.gantt_block_widget import GanttBlockWidget
 from ui.blocks.heading_block_widget import HeadingBlockWidget
 from ui.blocks.image_block_widget import ImageBlockWidget
+from ui.blocks.list_block_widget import ListBlockWidget
 from ui.blocks.quote_block_widget import QuoteBlockWidget
 from ui.blocks.separator_block_widget import SeparatorBlockWidget
 from ui.blocks.table_block_widget import TableBlockWidget
@@ -82,6 +84,7 @@ class MainWindow(QMainWindow):
                 "new_separator": self._add_separator_block,
                 "new_quote": self._add_quote_block,
                 "new_code": self._add_code_block,
+                "new_list": self._add_list_block,
                 "bold": self._with_active(TextBlockWidget.toggle_bold),
                 "italic": self._with_active(TextBlockWidget.toggle_italic),
                 "underline": self._with_active(TextBlockWidget.toggle_underline),
@@ -204,6 +207,8 @@ class MainWindow(QMainWindow):
             return QuoteBlockWidget(block)
         if isinstance(block, CodeBlock):
             return CodeBlockWidget(block)
+        if isinstance(block, ListBlock):
+            return ListBlockWidget(block)
         if isinstance(block, ImageBlock):
             return ImageBlockWidget(
                 block,
@@ -368,6 +373,15 @@ class MainWindow(QMainWindow):
         self._document.add_block(block)
 
         widget = TableBlockWidget(block, self._document)
+        self._blocks_layout.addWidget(self._wrap(widget, block.id))
+
+    def _add_list_block(self) -> None:
+        """PATCH 23 — Ajoute un bloc liste (une puce vide)."""
+        block = ListBlock()
+        block.add_item("")
+        self._document.add_block(block)
+
+        widget = ListBlockWidget(block)
         self._blocks_layout.addWidget(self._wrap(widget, block.id))
 
     def _add_code_block(self) -> None:

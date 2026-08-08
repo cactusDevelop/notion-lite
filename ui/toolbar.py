@@ -26,6 +26,7 @@ _ACTIONS: list[tuple[str, Optional[str]]] = [
     ("new_separator", "Insérer un séparateur"),
     ("new_quote", "Insérer une citation"),
     ("new_code", "Insérer un bloc de code"),
+    ("new_list", "Insérer une liste"),
     ("sep1", None),
     ("bold", "Gras"),
     ("italic", "Italique"),
