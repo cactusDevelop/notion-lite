@@ -1,12 +1,14 @@
 """
-Conteneur générique de bloc (PATCH 13, menu contextuel PATCH 26).
+Conteneur générique de bloc (PATCH 13, menu contextuel PATCH 26, icône
+de type PATCH 34).
 
-Ajoute une poignée de glisser-déposer (« ⠿ ») à gauche de n'importe
-quel widget de bloc, pour permettre de réordonner tous les types de
-blocs (texte, titres, checklists, images, tableaux...) de la même
-façon dans le document. Le clic droit ouvre un menu contextuel complet
-(dupliquer, supprimer, déplacer, convertir), délégué à la fenêtre
-principale via un callback.
+Ajoute une poignée de glisser-déposer (« ⠿ ») et une icône
+représentative du type de bloc à gauche de n'importe quel widget de
+bloc, pour permettre de réordonner et d'identifier au premier coup
+d'œil tous les types de blocs (texte, titres, checklists, images,
+tableaux...) de la même façon dans le document. Le clic droit ouvre
+un menu contextuel complet (dupliquer, supprimer, déplacer, convertir),
+délégué à la fenêtre principale via un callback.
 """
 from __future__ import annotations
 
@@ -64,6 +66,7 @@ class BlockContainer(QWidget):
         content: QWidget,
         block_id: str,
         on_context_menu_requested: Optional[Callable[[str, QPoint], None]] = None,
+        icon: str = "",
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -74,6 +77,11 @@ class BlockContainer(QWidget):
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(_DragHandle(block_id, self))
+        if icon:
+            icon_label = QLabel(icon, self)
+            icon_label.setFixedWidth(22)
+            icon_label.setAlignment(Qt.AlignCenter)
+            layout.addWidget(icon_label)
         layout.addWidget(content, stretch=1)
 
     def contextMenuEvent(self, event: QContextMenuEvent) -> None:

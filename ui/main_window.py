@@ -35,6 +35,7 @@ from blocks.simple_table_block import SimpleTableBlock
 from blocks.table_block import TableBlock
 from blocks.registry import block_from_dict
 from blocks.text_block import TextBlock
+from core.block_icons import icon_for_block
 from core.block_preview import preview_for_block
 from core.document import Document
 from core.history import UndoHistory
@@ -440,9 +441,14 @@ class MainWindow(QMainWindow):
         raise ValueError(f"Type de bloc non pris en charge à l'affichage : {block.type}")
 
     def _wrap(self, content: QWidget, block_id: str) -> BlockContainer:
-        """PATCH 13 — Ajoute la poignée de glisser-déposer à un widget de bloc."""
+        """PATCH 13 — Ajoute la poignée de glisser-déposer à un widget de
+        bloc, PATCH 34 — ainsi que son icône de type."""
+        block = self._document.find_block(block_id)
         return BlockContainer(
-            content, block_id, on_context_menu_requested=self._show_block_context_menu
+            content,
+            block_id,
+            on_context_menu_requested=self._show_block_context_menu,
+            icon=icon_for_block(block) if block is not None else "",
         )
 
     def _find_container(self, content_widget: QWidget) -> tuple[int, BlockContainer | None]:
