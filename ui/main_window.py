@@ -23,6 +23,7 @@ from blocks.checklist_block import ChecklistBlock
 from blocks.heading_block import HeadingBlock
 from blocks.image_block import ImageBlock
 from blocks.gantt_block import GanttBlock
+from blocks.quote_block import QuoteBlock
 from blocks.separator_block import SeparatorBlock
 from blocks.table_block import TableBlock
 from blocks.text_block import TextBlock
@@ -32,6 +33,7 @@ from ui.blocks.checklist_block_widget import ChecklistBlockWidget
 from ui.blocks.gantt_block_widget import GanttBlockWidget
 from ui.blocks.heading_block_widget import HeadingBlockWidget
 from ui.blocks.image_block_widget import ImageBlockWidget
+from ui.blocks.quote_block_widget import QuoteBlockWidget
 from ui.blocks.separator_block_widget import SeparatorBlockWidget
 from ui.blocks.table_block_widget import TableBlockWidget
 from ui.blocks.text_block_widget import TextBlockWidget
@@ -76,6 +78,7 @@ class MainWindow(QMainWindow):
                 "new_table": self._add_table_block,
                 "new_gantt": self._add_gantt_block,
                 "new_separator": self._add_separator_block,
+                "new_quote": self._add_quote_block,
                 "bold": self._with_active(TextBlockWidget.toggle_bold),
                 "italic": self._with_active(TextBlockWidget.toggle_italic),
                 "underline": self._with_active(TextBlockWidget.toggle_underline),
@@ -194,6 +197,8 @@ class MainWindow(QMainWindow):
             return GanttBlockWidget(block, self._document)
         if isinstance(block, SeparatorBlock):
             return SeparatorBlockWidget(block)
+        if isinstance(block, QuoteBlock):
+            return QuoteBlockWidget(block)
         if isinstance(block, ImageBlock):
             return ImageBlockWidget(
                 block,
@@ -358,6 +363,14 @@ class MainWindow(QMainWindow):
         self._document.add_block(block)
 
         widget = TableBlockWidget(block, self._document)
+        self._blocks_layout.addWidget(self._wrap(widget, block.id))
+
+    def _add_quote_block(self) -> None:
+        """PATCH 21 — Ajoute un bloc citation."""
+        block = QuoteBlock()
+        self._document.add_block(block)
+
+        widget = QuoteBlockWidget(block)
         self._blocks_layout.addWidget(self._wrap(widget, block.id))
 
     def _add_separator_block(self) -> None:

@@ -13,6 +13,7 @@ from blocks.checklist_block import CHECKLIST_BLOCK_TYPE, ChecklistBlock
 from blocks.gantt_block import GANTT_BLOCK_TYPE, GanttBlock
 from blocks.heading_block import HEADING_TYPES, HeadingBlock
 from blocks.image_block import IMAGE_BLOCK_TYPE, ImageBlock
+from blocks.quote_block import QUOTE_BLOCK_TYPE, QuoteBlock
 from blocks.separator_block import SEPARATOR_BLOCK_TYPE, SeparatorBlock
 from blocks.table_block import TABLE_BLOCK_TYPE, TableBlock
 from blocks.text_block import TEXT_BLOCK_TYPE, TextBlock
@@ -66,6 +67,9 @@ def block_from_dict(raw: dict[str, Any]) -> Block:
 
     if block_type == SEPARATOR_BLOCK_TYPE:
         return SeparatorBlock(id=block_id)
+
+    if block_type == QUOTE_BLOCK_TYPE:
+        return QuoteBlock(content=data.get("content", ""), id=block_id)
 
     if block_type in _LEVEL_BY_TYPE:
         return HeadingBlock(
