@@ -1,15 +1,19 @@
 """
-Conteneur générique de bloc (PATCH 13).
+Conteneur générique de bloc (PATCH 13, menu contextuel PATCH 26).
 
 Ajoute une poignée de glisser-déposer (« ⠿ ») à gauche de n'importe
 quel widget de bloc, pour permettre de réordonner tous les types de
-blocs (texte, titres, checklists, images, tableaux à venir...) de la
-même façon dans le document.
+blocs (texte, titres, checklists, images, tableaux...) de la même
+façon dans le document. Le clic droit ouvre un menu contextuel complet
+(dupliquer, supprimer, déplacer, convertir), délégué à la fenêtre
+principale via un callback.
 """
 from __future__ import annotations
 
+from typing import Callable, Optional
+
 from PySide6.QtCore import QMimeData, QPoint, Qt
-from PySide6.QtGui import QDrag, QMouseEvent
+from PySide6.QtGui import QContextMenuEvent, QDrag, QMouseEvent
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QWidget
 
 # Type MIME privé transportant l'ID du bloc glissé.
@@ -47,19 +51,34 @@ class _DragHandle(QLabel):
 
 
 class BlockContainer(QWidget):
-    """Enveloppe un widget de bloc avec sa poignée de déplacement.
+    """Enveloppe un widget de bloc avec sa poignée de déplacement et
+    son clic droit (PATCH 26).
 
     ``content`` reste accessible via l'attribut du même nom, pour que
     la fenêtre principale puisse continuer à interagir directement
     avec le widget métier du bloc (focus, texte, etc.).
     """
 
-    def __init__(self, content: QWidget, block_id: str, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        content: QWidget,
+        block_id: str,
+        on_context_menu_requested: Optional[Callable[[str, QPoint], None]] = None,
+        parent: QWidget | None = None,
+    ) -> None:
         super().__init__(parent)
         self.content = content
         self.block_id = block_id
+        self._on_context_menu_requested = on_context_menu_requested
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(_DragHandle(block_id, self))
         layout.addWidget(content, stretch=1)
+
+    def contextMenuEvent(self, event: QContextMenuEvent) -> None:
+        """PATCH 26 — Clic droit complet : délégué à la fenêtre principale."""
+        if self._on_context_menu_requested is None:
+            return
+        self._on_context_menu_requested(self.block_id, event.globalPos())
+        event.accept()

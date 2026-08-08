@@ -113,4 +113,19 @@ DESIGN_NOTES: list[tuple[str, str]] = [
         "correctif. Le widget (PATCH 10/11) suit désormais le même id "
         "par ligne plutôt que sa position.",
     ),
+    (
+        "PATCH 26 — Menu contextuel",
+        "Clic droit complet, en deux temps. Sur un bloc : "
+        "<i>BlockContainer.contextMenuEvent</i> délègue à "
+        "<i>MainWindow._show_block_context_menu</i>, qui propose "
+        "Dupliquer (via <i>blocks.registry.block_from_dict</i> avec "
+        "un nouvel id), Supprimer, Déplacer ↑/↓, et Convertir en "
+        "(uniquement entre blocs à <i>content</i> texte simple : "
+        "texte, titres, citation, code — la conversion préserve le "
+        "contenu). Sur une zone vide : <i>BlocksArea</i> propose "
+        "d'ajouter n'importe quel type de bloc en fin de document, "
+        "via la même fabrique que le menu « / » (PATCH 25), désormais "
+        "partagée (<i>_block_factory</i>) pour éviter toute "
+        "divergence entre les deux menus.",
+    ),
 ]

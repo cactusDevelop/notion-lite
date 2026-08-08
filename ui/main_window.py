@@ -5,15 +5,17 @@ from __future__ import annotations
 
 import base64
 import json
+import uuid
 from pathlib import Path
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QPoint, Qt
 from PySide6.QtGui import QAction, QColor, QKeySequence, QTextCursor
 from PySide6.QtWidgets import (
     QColorDialog,
     QFileDialog,
     QLineEdit,
     QMainWindow,
+    QMenu,
     QMessageBox,
     QTextEdit,
     QWidget,
@@ -29,6 +31,7 @@ from blocks.quote_block import QuoteBlock
 from blocks.separator_block import SeparatorBlock
 from blocks.simple_table_block import SimpleTableBlock
 from blocks.table_block import TableBlock
+from blocks.registry import block_from_dict
 from blocks.text_block import TextBlock
 from core.document import Document
 from ui.blocks.block_container import BlockContainer
@@ -45,6 +48,7 @@ from ui.blocks.table_block_widget import TableBlockWidget
 from ui.blocks.text_block_widget import TextBlockWidget
 from ui.blocks_area import BlocksArea
 from ui.command_menu import CommandMenu
+from ui.command_registry import COMMANDS
 from ui.info_dialog import InfoDialog
 from ui.people_manager_dialog import PeopleManagerDialog
 from ui.toolbar import MainToolBar
@@ -52,6 +56,17 @@ from ui.toolbar import MainToolBar
 # Racine du projet (deux niveaux au-dessus de ce fichier : ui/main_window.py).
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 _INFO_ICON_PATH = str(_PROJECT_ROOT / "icon-info.svg")
+
+# PATCH 26 — Cibles de conversion proposées dans le menu contextuel :
+# uniquement les blocs à contenu texte simple (voir _create_content_widget_for_block).
+_CONVERT_TARGETS: list[tuple[str, str]] = [
+    ("text", "Texte"),
+    ("heading1", "Titre 1"),
+    ("heading2", "Titre 2"),
+    ("heading3", "Titre 3"),
+    ("quote", "Citation"),
+    ("code", "Code"),
+]
 
 
 class MainWindow(QMainWindow):
@@ -110,7 +125,10 @@ class MainWindow(QMainWindow):
         self.addToolBar(toolbar)
         self._setup_file_menu()
 
-        central = BlocksArea(on_block_dropped=self._on_block_dropped)
+        central = BlocksArea(
+            on_block_dropped=self._on_block_dropped,
+            on_empty_context_menu=self._show_empty_context_menu,
+        )
         self._blocks_layout = central.blocks_layout
         self.setCentralWidget(central)
 
@@ -226,7 +244,9 @@ class MainWindow(QMainWindow):
 
     def _wrap(self, content: QWidget, block_id: str) -> BlockContainer:
         """PATCH 13 — Ajoute la poignée de glisser-déposer à un widget de bloc."""
-        return BlockContainer(content, block_id)
+        return BlockContainer(
+            content, block_id, on_context_menu_requested=self._show_block_context_menu
+        )
 
     def _find_container(self, content_widget: QWidget) -> tuple[int, BlockContainer | None]:
         """Retrouve (index dans le layout, BlockContainer) d'un widget de contenu."""
@@ -275,6 +295,131 @@ class MainWindow(QMainWindow):
             return
         self._document.move_block(block_id, target_index)
         self._render_document()
+
+    # -- Menu contextuel (PATCH 26) ----------------------------------------
+
+    def _show_block_context_menu(self, block_id: str, global_pos: QPoint) -> None:
+        """Clic droit complet sur un bloc : dupliquer, supprimer,
+        déplacer, convertir."""
+        index = next(
+            (i for i, b in enumerate(self._document.blocks) if b.id == block_id), None
+        )
+        if index is None:
+            return
+        block = self._document.blocks[index]
+
+        menu = QMenu(self)
+        duplicate_action = menu.addAction("Dupliquer")
+        delete_action = menu.addAction("Supprimer")
+        menu.addSeparator()
+
+        move_up_action = menu.addAction("Déplacer vers le haut")
+        move_up_action.setEnabled(index > 0)
+        move_down_action = menu.addAction("Déplacer vers le bas")
+        move_down_action.setEnabled(index < len(self._document.blocks) - 1)
+
+        convert_actions: dict[QAction, str] = {}
+        if hasattr(block, "content"):
+            # Conversion uniquement entre blocs à contenu texte simple.
+            menu.addSeparator()
+            convert_menu = menu.addMenu("Convertir en")
+            for target_id, label in _CONVERT_TARGETS:
+                action = convert_menu.addAction(label)
+                action.setEnabled(block.type != target_id)
+                convert_actions[action] = target_id
+
+        chosen = menu.exec(global_pos)
+        if chosen is None:
+            return
+        if chosen is duplicate_action:
+            self._duplicate_block(block_id)
+        elif chosen is delete_action:
+            self._delete_block(block_id)
+        elif chosen is move_up_action:
+            self._move_block(block_id, -1)
+        elif chosen is move_down_action:
+            self._move_block(block_id, 1)
+        elif chosen in convert_actions:
+            self._convert_block(block_id, convert_actions[chosen])
+
+    def _show_empty_context_menu(self, global_pos: QPoint) -> None:
+        """Clic droit sur une zone vide : propose d'ajouter un bloc en fin
+        de document (mêmes cibles que le menu "/")."""
+        menu = QMenu(self)
+        actions: dict[QAction, str] = {}
+        for command in COMMANDS:
+            action = menu.addAction(command["label"])
+            actions[action] = command["id"]
+
+        chosen = menu.exec(global_pos)
+        if chosen is None:
+            return
+        self._append_block_from_command(actions[chosen])
+
+    def _duplicate_block(self, block_id: str) -> None:
+        """PATCH 26 — Duplique un bloc et l'insère juste après l'original."""
+        index = next(
+            (i for i, b in enumerate(self._document.blocks) if b.id == block_id), None
+        )
+        if index is None:
+            return
+        raw = self._document.blocks[index].to_dict()
+        raw["id"] = str(uuid.uuid4())
+        duplicate = block_from_dict(raw)
+        self._document.add_block(duplicate, index=index + 1)
+        self._render_document()
+
+    def _convert_block(self, block_id: str, target_id: str) -> None:
+        """PATCH 26 — Remplace un bloc par un autre type, contenu conservé."""
+        factory = self._block_factory(target_id)
+        if factory is None:
+            return
+        index = next(
+            (i for i, b in enumerate(self._document.blocks) if b.id == block_id), None
+        )
+        if index is None:
+            return
+
+        old_block = self._document.blocks[index]
+        new_block = factory()
+        if hasattr(new_block, "content"):
+            new_block.content = getattr(old_block, "content", "")
+
+        self._document.remove_block(block_id)
+        self._document.add_block(new_block, index=index)
+        self._render_document()
+
+    def _append_block_from_command(self, command_id: str) -> None:
+        """PATCH 26 — Ajoute en fin de document le bloc associé à `command_id`."""
+        if command_id == "image":
+            self._add_image_block()
+            return
+
+        factory = self._block_factory(command_id)
+        if factory is None:
+            return
+        block = factory()
+        self._document.add_block(block)
+        widget = self._create_content_widget_for_block(block)
+        self._blocks_layout.addWidget(self._wrap(widget, block.id))
+
+    def _block_factory(self, command_id: str):
+        """Fabrique de bloc partagée entre le menu "/" (PATCH 25) et le
+        menu contextuel (PATCH 26)."""
+        return {
+            "text": lambda: TextBlock(),
+            "heading1": lambda: HeadingBlock(level=1),
+            "heading2": lambda: HeadingBlock(level=2),
+            "heading3": lambda: HeadingBlock(level=3),
+            "checklist": lambda: ChecklistBlock(),
+            "table": self._new_default_table_block,
+            "simple_table": lambda: SimpleTableBlock(),
+            "gantt": lambda: GanttBlock(),
+            "separator": lambda: SeparatorBlock(),
+            "quote": lambda: QuoteBlock(),
+            "code": lambda: CodeBlock(),
+            "list": self._new_default_list_block,
+        }.get(command_id)
 
     # -- Sauvegarde / chargement (PATCH 8) --------------------------------
 
@@ -568,20 +713,7 @@ class MainWindow(QMainWindow):
             self._add_image_block()
             return
 
-        factory = {
-            "text": lambda: TextBlock(),
-            "heading1": lambda: HeadingBlock(level=1),
-            "heading2": lambda: HeadingBlock(level=2),
-            "heading3": lambda: HeadingBlock(level=3),
-            "checklist": lambda: ChecklistBlock(),
-            "table": self._new_default_table_block,
-            "simple_table": lambda: SimpleTableBlock(),
-            "gantt": lambda: GanttBlock(),
-            "separator": lambda: SeparatorBlock(),
-            "quote": lambda: QuoteBlock(),
-            "code": lambda: CodeBlock(),
-            "list": self._new_default_list_block,
-        }.get(command_id)
+        factory = self._block_factory(command_id)
         if factory is None:
             return
 
