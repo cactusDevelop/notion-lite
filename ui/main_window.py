@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMenu,
     QMessageBox,
+    QScrollArea,
     QTextEdit,
     QWidget,
 )
@@ -53,6 +54,7 @@ from ui.command_menu import CommandMenu
 from ui.command_registry import COMMANDS
 from ui.info_dialog import InfoDialog
 from ui.people_manager_dialog import PeopleManagerDialog
+from ui.search_dialog import SearchDialog
 from ui.toolbar import MainToolBar
 
 # Racine du projet (deux niveaux au-dessus de ce fichier : ui/main_window.py).
@@ -137,7 +139,13 @@ class MainWindow(QMainWindow):
             on_empty_context_menu=self._show_empty_context_menu,
         )
         self._blocks_layout = central.blocks_layout
-        self.setCentralWidget(central)
+
+        # PATCH 28 : zone de défilement, nécessaire pour pouvoir amener
+        # un résultat de recherche à l'écran (`_scroll_to_block`).
+        self._scroll_area = QScrollArea(self)
+        self._scroll_area.setWidgetResizable(True)
+        self._scroll_area.setWidget(central)
+        self.setCentralWidget(self._scroll_area)
 
         # Document de démonstration pour valider les PATCH 3 et 4.
         self._document.add_block(HeadingBlock(level=1, content="Titre principal"))
@@ -203,6 +211,11 @@ class MainWindow(QMainWindow):
         people_action.triggered.connect(self._show_people_manager)
         edit_menu.addAction(people_action)
 
+        search_action = QAction("Rechercher...", self)
+        search_action.setShortcut(QKeySequence("Ctrl+F"))
+        search_action.triggered.connect(self._show_search_dialog)
+        edit_menu.addAction(search_action)
+
     # -- Mise en forme (PATCH 5 / 6) -------------------------------------
 
     def _with_active(self, method):
@@ -237,6 +250,22 @@ class MainWindow(QMainWindow):
         """PATCH 16 — Ouvre le gestionnaire du registre partagé de personnes."""
         PeopleManagerDialog(self._document, self).exec()
         self._render_document()
+
+    # -- Recherche globale (PATCH 28) --------------------------------------
+
+    def _show_search_dialog(self) -> None:
+        """CTRL+F — Ouvre la recherche globale (texte, checklists, tableaux)."""
+        SearchDialog(self._document, on_result_activated=self._scroll_to_block, parent=self).exec()
+
+    def _scroll_to_block(self, block_id: str) -> None:
+        """Fait défiler jusqu'au bloc et le met en surbrillance brièvement."""
+        for i in range(self._blocks_layout.count()):
+            item = self._blocks_layout.itemAt(i)
+            widget = item.widget() if item else None
+            if isinstance(widget, BlockContainer) and widget.block_id == block_id:
+                self._scroll_area.ensureWidgetVisible(widget)
+                widget.content.setFocus()
+                return
 
     # -- Undo / Redo (PATCH 27) --------------------------------------------
 

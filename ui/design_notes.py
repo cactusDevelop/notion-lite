@@ -143,4 +143,17 @@ DESIGN_NOTES: list[tuple[str, str]] = [
         "l'undo natif de QTextEdit/QLineEdit (désactivé sur le bloc "
         "texte) pour garantir un historique unique et cohérent.",
     ),
+    (
+        "PATCH 28 — Recherche",
+        "<i>core/search.py</i> : fonction pure "
+        "(<i>search_document</i>), testable sans Qt, qui parcourt "
+        "texte/titres/citation/code, checklists, listes et les deux "
+        "moteurs de tableau (PATCH 14 typé et PATCH 24 simple). "
+        "<i>SearchDialog</i> (Ctrl+F) relance la recherche à chaque "
+        "frappe et fait défiler jusqu'au résultat choisi. Cela a "
+        "révélé l'absence de <i>QScrollArea</i> autour des blocs : "
+        "ajoutée ici (prérequis pour qu'« aller au résultat » ait un "
+        "sens), sans changer la logique de drag & drop (coordonnées "
+        "toujours relatives à <i>BlocksArea</i>).",
+    ),
 ]
