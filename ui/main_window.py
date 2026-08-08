@@ -35,6 +35,7 @@ from blocks.simple_table_block import SimpleTableBlock
 from blocks.table_block import TableBlock
 from blocks.registry import block_from_dict
 from blocks.text_block import TextBlock
+from core.block_preview import preview_for_block
 from core.document import Document
 from core.history import UndoHistory
 from ui.blocks.block_container import BlockContainer
@@ -49,6 +50,7 @@ from ui.blocks.separator_block_widget import SeparatorBlockWidget
 from ui.blocks.simple_table_block_widget import SimpleTableBlockWidget
 from ui.blocks.table_block_widget import TableBlockWidget
 from ui.blocks.text_block_widget import TextBlockWidget
+from ui.block_picker_dialog import BlockPickerDialog
 from ui.blocks_area import BlocksArea
 from ui.command_menu import CommandMenu
 from ui.command_registry import COMMANDS
@@ -126,6 +128,7 @@ class MainWindow(QMainWindow):
                 "quote": self._with_active(TextBlockWidget.toggle_quote),
                 "code": self._with_active(TextBlockWidget.toggle_code),
                 "color": self._apply_color,
+                "insert_link": self._insert_internal_link,
             },
             on_size_changed=self._apply_size,
             on_info=self._show_info_dialog,
@@ -241,6 +244,25 @@ class MainWindow(QMainWindow):
         color = QColorDialog.getColor(QColor("black"), self, "Choisir une couleur")
         if color.isValid():
             self._active_text_widget.set_text_color(color)
+
+    def _insert_internal_link(self) -> None:
+        """PATCH 30 — Insère, dans le bloc texte actif, un lien vers un
+        autre bloc du document (Ctrl+Clic dessus pour y naviguer)."""
+        if self._active_text_widget is None:
+            return
+        source_block_id = self._active_text_widget.block.id
+        picker = BlockPickerDialog(self._document, exclude_block_id=source_block_id, parent=self)
+        picker.exec()
+        if picker.selected_block_id is None:
+            return
+
+        target = next(
+            (b for b in self._document.blocks if b.id == picker.selected_block_id), None
+        )
+        if target is None:
+            return
+        label = preview_for_block(target)
+        self._active_text_widget.insert_internal_link(picker.selected_block_id, label)
 
     def _apply_size(self, size: int) -> None:
         if self._active_text_widget is not None:
@@ -605,6 +627,7 @@ class MainWindow(QMainWindow):
         widget.merge_requested.connect(self._on_merge_requested)
         widget.delete_requested.connect(self._on_delete_requested)
         widget.command_requested.connect(self._on_command_requested)
+        widget.link_activated.connect(self._scroll_to_block)
         return widget
 
     def _add_text_block(self, content: str = "") -> None:

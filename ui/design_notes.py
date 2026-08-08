@@ -173,4 +173,18 @@ DESIGN_NOTES: list[tuple[str, str]] = [
         "annulable via l'historique générique du PATCH 27, sans code "
         "supplémentaire.",
     ),
+    (
+        "PATCH 30 — Liens internes",
+        "Un lien interne est une ancre HTML "
+        "<code>&lt;a href=\"block://ID\"&gt;</code> insérée dans le "
+        "texte riche (PATCH 6) : il profite donc gratuitement de la "
+        "sauvegarde JSON (le HTML du bloc le contient déjà) sans "
+        "nouveau format. Le sélecteur de bloc (<i>BlockPickerDialog</i>, "
+        "ouvert via le bouton « Lien interne » de la toolbar) réutilise "
+        "<i>core/block_preview.py</i> (aperçu textuel générique, testé "
+        "seul) pour afficher chaque bloc candidat. Ctrl+Clic sur le "
+        "lien émet <i>link_activated</i>, branché sur "
+        "<i>_scroll_to_block</i> (PATCH 28) : navigation et recherche "
+        "partagent le même mécanisme de défilement.",
+    ),
 ]

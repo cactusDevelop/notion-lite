@@ -10,6 +10,8 @@ souligné, barré, couleurs, alignement, listes, citations, code.
 """
 from __future__ import annotations
 
+import html as html_module
+
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import (
     QColor,
@@ -23,6 +25,8 @@ from blocks.text_block import TextBlock
 
 _CODE_FONT_FAMILY = "Consolas"
 _QUOTE_INDENT = 24
+# PATCH 30 — Schéma d'URL privé pour les liens internes (vers un autre bloc).
+_INTERNAL_LINK_SCHEME = "block://"
 
 
 class TextBlockWidget(QTextEdit):
@@ -41,6 +45,8 @@ class TextBlockWidget(QTextEdit):
     # "/" tapé seul dans un bloc vide : ouvrir le menu de commandes
     # (PATCH 25).
     command_requested = Signal(object)
+    # PATCH 30 — Ctrl+Clic sur un lien interne : (id du bloc visé).
+    link_activated = Signal(str)
 
     def __init__(self, block: TextBlock, parent=None) -> None:
         super().__init__(parent)
@@ -56,6 +62,8 @@ class TextBlockWidget(QTextEdit):
             self.setPlainText(block.content)
         self.setPlaceholderText("Tapez du texte...")
         self.setFrameStyle(0)
+        # PATCH 30 — Nécessaire pour changer le curseur au survol d'un lien.
+        self.setMouseTracking(True)
 
         self.textChanged.connect(self._on_text_changed)
 
@@ -100,6 +108,36 @@ class TextBlockWidget(QTextEdit):
             return
 
         super().keyPressEvent(event)
+
+    def mouseMoveEvent(self, event) -> None:
+        """PATCH 30 — Curseur en forme de main au survol d'un lien interne."""
+        anchor = self.anchorAt(event.pos())
+        self.viewport().setCursor(
+            Qt.PointingHandCursor if anchor.startswith(_INTERNAL_LINK_SCHEME) else Qt.IBeamCursor
+        )
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event) -> None:
+        """PATCH 30 — Ctrl+Clic sur un lien interne : navigue vers le bloc visé.
+
+        Le Ctrl évite qu'un simple clic (pour positionner le curseur
+        d'édition) ne déclenche accidentellement une navigation.
+        """
+        anchor = self.anchorAt(event.pos())
+        if (
+            event.button() == Qt.LeftButton
+            and event.modifiers() & Qt.ControlModifier
+            and anchor.startswith(_INTERNAL_LINK_SCHEME)
+        ):
+            self.link_activated.emit(anchor[len(_INTERNAL_LINK_SCHEME) :])
+            return
+        super().mouseReleaseEvent(event)
+
+    def insert_internal_link(self, block_id: str, label: str) -> None:
+        """PATCH 30 — Insère un lien interne vers `block_id` au curseur."""
+        safe_label = html_module.escape(label) or "(bloc)"
+        cursor = self.textCursor()
+        cursor.insertHtml(f'<a href="{_INTERNAL_LINK_SCHEME}{block_id}">{safe_label}</a> ')
 
     def _on_text_changed(self) -> None:
         """Synchronise le texte brut et le HTML vers le bloc de données."""
