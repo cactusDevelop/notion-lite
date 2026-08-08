@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import Any
 
 from blocks.checklist_block import CHECKLIST_BLOCK_TYPE, ChecklistBlock
+from blocks.gantt_block import GANTT_BLOCK_TYPE, GanttBlock
 from blocks.heading_block import HEADING_TYPES, HeadingBlock
 from blocks.image_block import IMAGE_BLOCK_TYPE, ImageBlock
 from blocks.table_block import TABLE_BLOCK_TYPE, TableBlock
@@ -51,6 +52,14 @@ def block_from_dict(raw: dict[str, Any]) -> Block:
         return TableBlock(
             columns=data.get("columns", []),
             rows=data.get("rows", []),
+            id=block_id,
+        )
+
+    if block_type == GANTT_BLOCK_TYPE:
+        return GanttBlock(
+            table_block_id=data.get("table_block_id"),
+            label_column_id=data.get("label_column_id"),
+            date_column_id=data.get("date_column_id"),
             id=block_id,
         )
 

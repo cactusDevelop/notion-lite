@@ -22,11 +22,13 @@ from PySide6.QtWidgets import (
 from blocks.checklist_block import ChecklistBlock
 from blocks.heading_block import HeadingBlock
 from blocks.image_block import ImageBlock
+from blocks.gantt_block import GanttBlock
 from blocks.table_block import TableBlock
 from blocks.text_block import TextBlock
 from core.document import Document
 from ui.blocks.block_container import BlockContainer
 from ui.blocks.checklist_block_widget import ChecklistBlockWidget
+from ui.blocks.gantt_block_widget import GanttBlockWidget
 from ui.blocks.heading_block_widget import HeadingBlockWidget
 from ui.blocks.image_block_widget import ImageBlockWidget
 from ui.blocks.table_block_widget import TableBlockWidget
@@ -70,6 +72,7 @@ class MainWindow(QMainWindow):
                 "new_checklist": self._add_checklist_block,
                 "new_image": self._add_image_block,
                 "new_table": self._add_table_block,
+                "new_gantt": self._add_gantt_block,
                 "bold": self._with_active(TextBlockWidget.toggle_bold),
                 "italic": self._with_active(TextBlockWidget.toggle_italic),
                 "underline": self._with_active(TextBlockWidget.toggle_underline),
@@ -184,6 +187,8 @@ class MainWindow(QMainWindow):
             return ChecklistBlockWidget(block)
         if isinstance(block, TableBlock):
             return TableBlockWidget(block, self._document)
+        if isinstance(block, GanttBlock):
+            return GanttBlockWidget(block, self._document)
         if isinstance(block, ImageBlock):
             return ImageBlockWidget(
                 block,
@@ -348,6 +353,14 @@ class MainWindow(QMainWindow):
         self._document.add_block(block)
 
         widget = TableBlockWidget(block, self._document)
+        self._blocks_layout.addWidget(self._wrap(widget, block.id))
+
+    def _add_gantt_block(self) -> None:
+        """PATCH 19 — Ajoute un bloc Gantt vide (à configurer via ses sélecteurs)."""
+        block = GanttBlock()
+        self._document.add_block(block)
+
+        widget = GanttBlockWidget(block, self._document)
         self._blocks_layout.addWidget(self._wrap(widget, block.id))
 
     def _add_image_block(self) -> None:
