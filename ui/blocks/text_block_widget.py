@@ -38,6 +38,9 @@ class TextBlockWidget(QTextEdit):
     # Retour arrière sur un bloc vide : simplement le supprimer
     # (PATCH 7 - suppression).
     delete_requested = Signal(object)
+    # "/" tapé seul dans un bloc vide : ouvrir le menu de commandes
+    # (PATCH 25).
+    command_requested = Signal(object)
 
     def __init__(self, block: TextBlock, parent=None) -> None:
         super().__init__(parent)
@@ -99,6 +102,8 @@ class TextBlockWidget(QTextEdit):
         """Synchronise le texte brut et le HTML vers le bloc de données."""
         self._block.content = self.toPlainText()
         self._block.html = self.toHtml()
+        if self.toPlainText() == "/":
+            self.command_requested.emit(self)
 
     # -- Mise en forme caractère ----------------------------------------
 

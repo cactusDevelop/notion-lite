@@ -44,6 +44,7 @@ from ui.blocks.simple_table_block_widget import SimpleTableBlockWidget
 from ui.blocks.table_block_widget import TableBlockWidget
 from ui.blocks.text_block_widget import TextBlockWidget
 from ui.blocks_area import BlocksArea
+from ui.command_menu import CommandMenu
 from ui.info_dialog import InfoDialog
 from ui.people_manager_dialog import PeopleManagerDialog
 from ui.toolbar import MainToolBar
@@ -349,6 +350,7 @@ class MainWindow(QMainWindow):
         widget.split_requested.connect(self._on_split_requested)
         widget.merge_requested.connect(self._on_merge_requested)
         widget.delete_requested.connect(self._on_delete_requested)
+        widget.command_requested.connect(self._on_command_requested)
         return widget
 
     def _add_text_block(self, content: str = "") -> None:
@@ -544,3 +546,72 @@ class MainWindow(QMainWindow):
             container.deleteLater()
         if self._active_text_widget is widget:
             self._active_text_widget = None
+
+    # -- Menu de commandes "/" (PATCH 25) ----------------------------------
+
+    def _on_command_requested(self, widget: TextBlockWidget) -> None:
+        """Ouvre le menu "/" ancré sous le curseur du bloc texte vide."""
+        menu = CommandMenu(self)
+        menu.command_selected.connect(lambda command_id, w=widget: self._run_command(w, command_id))
+        cursor_rect = widget.cursorRect()
+        anchor = widget.mapToGlobal(cursor_rect.bottomLeft())
+        menu.move(anchor)
+        menu.show()
+
+    def _run_command(self, widget: TextBlockWidget, command_id: str) -> None:
+        """Remplace le bloc texte (contenant juste "/") par le bloc choisi."""
+        if command_id == "image":
+            # L'insertion d'image passe par un sélecteur de fichier ;
+            # on se contente de vider le "/" puis de laisser le flux
+            # habituel ajouter l'image (en fin de document).
+            widget.setPlainText("")
+            self._add_image_block()
+            return
+
+        factory = {
+            "text": lambda: TextBlock(),
+            "heading1": lambda: HeadingBlock(level=1),
+            "heading2": lambda: HeadingBlock(level=2),
+            "heading3": lambda: HeadingBlock(level=3),
+            "checklist": lambda: ChecklistBlock(),
+            "table": self._new_default_table_block,
+            "simple_table": lambda: SimpleTableBlock(),
+            "gantt": lambda: GanttBlock(),
+            "separator": lambda: SeparatorBlock(),
+            "quote": lambda: QuoteBlock(),
+            "code": lambda: CodeBlock(),
+            "list": self._new_default_list_block,
+        }.get(command_id)
+        if factory is None:
+            return
+
+        new_block = factory()
+        doc_index = self._document.blocks.index(widget.block)
+        layout_index = self._layout_index_of_content(widget)
+
+        self._document.remove_block(widget.block.id)
+        self._document.add_block(new_block, index=doc_index)
+
+        _, old_container = self._find_container(widget)
+        if old_container is not None:
+            self._blocks_layout.removeWidget(old_container)
+            old_container.deleteLater()
+
+        if isinstance(new_block, TextBlock):
+            new_widget = self._create_text_widget(new_block)
+        else:
+            new_widget = self._create_content_widget_for_block(new_block)
+        self._blocks_layout.insertWidget(layout_index, self._wrap(new_widget, new_block.id))
+        new_widget.setFocus()
+
+    def _new_default_table_block(self) -> TableBlock:
+        block = TableBlock()
+        block.add_column(name="Colonne 1")
+        block.add_column(name="Colonne 2")
+        block.add_row()
+        return block
+
+    def _new_default_list_block(self) -> ListBlock:
+        block = ListBlock()
+        block.add_item("")
+        return block
