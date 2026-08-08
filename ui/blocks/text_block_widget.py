@@ -47,6 +47,9 @@ class TextBlockWidget(QTextEdit):
         self._block = block
 
         self.setAcceptRichText(False)
+        # PATCH 27 : un seul historique Undo/Redo applicatif (MainWindow) ;
+        # l'undo natif de QTextEdit interférerait sinon avec Ctrl+Z/Ctrl+Y.
+        self.setUndoRedoEnabled(False)
         if block.html:
             self.setHtml(block.html)
         else:

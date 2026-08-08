@@ -128,4 +128,19 @@ DESIGN_NOTES: list[tuple[str, str]] = [
         "partagée (<i>_block_factory</i>) pour éviter toute "
         "divergence entre les deux menus.",
     ),
+    (
+        "PATCH 27 — Undo / Redo",
+        "Une seule pile d'historique (<i>core/history.UndoHistory</i>), "
+        "agnostique du type de bloc : chaque point d'annulation est un "
+        "snapshot JSON complet du document (même sérialisation que la "
+        "sauvegarde du PATCH 8/9), comparé à l'état courant par un "
+        "<i>QTimer</i> qui sonde toutes les 600 ms — ce qui regroupe "
+        "les frappes rapides en un seul « undo » par pause, sans "
+        "instrumenter chaque widget de bloc individuellement. Ctrl+Z "
+        "force de toute façon un flush immédiat, donc annuler "
+        "fonctionne même juste après une frappe. Un filtre d'événements "
+        "au niveau de l'application intercepte Ctrl+Z/Ctrl+Y avant "
+        "l'undo natif de QTextEdit/QLineEdit (désactivé sur le bloc "
+        "texte) pour garantir un historique unique et cohérent.",
+    ),
 ]

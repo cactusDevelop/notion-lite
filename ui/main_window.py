@@ -8,9 +8,10 @@ import json
 import uuid
 from pathlib import Path
 
-from PySide6.QtCore import QPoint, Qt
+from PySide6.QtCore import QEvent, QPoint, Qt, QTimer
 from PySide6.QtGui import QAction, QColor, QKeySequence, QTextCursor
 from PySide6.QtWidgets import (
+    QApplication,
     QColorDialog,
     QFileDialog,
     QLineEdit,
@@ -34,6 +35,7 @@ from blocks.table_block import TableBlock
 from blocks.registry import block_from_dict
 from blocks.text_block import TextBlock
 from core.document import Document
+from core.history import UndoHistory
 from ui.blocks.block_container import BlockContainer
 from ui.blocks.checklist_block_widget import ChecklistBlockWidget
 from ui.blocks.code_block_widget import CodeBlockWidget
@@ -56,6 +58,11 @@ from ui.toolbar import MainToolBar
 # Racine du projet (deux niveaux au-dessus de ce fichier : ui/main_window.py).
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 _INFO_ICON_PATH = str(_PROJECT_ROOT / "icon-info.svg")
+
+# PATCH 27 — Intervalle (ms) du sondage qui regroupe les frappes rapides
+# (édition de texte) en un seul point d'annulation ("undo" par pause,
+# pas par caractère). Ctrl+Z force de toute façon un flush immédiat.
+_UNDO_POLL_INTERVAL_MS = 600
 
 # PATCH 26 — Cibles de conversion proposées dans le menu contextuel :
 # uniquement les blocs à contenu texte simple (voir _create_content_widget_for_block).
@@ -145,6 +152,16 @@ class MainWindow(QMainWindow):
         self._document.add_block(checklist_demo)
         self._render_document(focus_last=True)
 
+        # -- Undo/Redo (PATCH 27) ------------------------------------
+        self._undo_history = UndoHistory(self._document_snapshot())
+        self._undo_timer = QTimer(self)
+        self._undo_timer.setInterval(_UNDO_POLL_INTERVAL_MS)
+        self._undo_timer.timeout.connect(self._poll_undo_snapshot)
+        self._undo_timer.start()
+        # Intercepte Ctrl+Z/Ctrl+Y avant que QTextEdit/QLineEdit ne les
+        # traitent eux-mêmes (undo natif local, non désiré ici).
+        QApplication.instance().installEventFilter(self)
+
     def _setup_file_menu(self) -> None:
         """Menu Fichier : Nouveau / Ouvrir / Sauvegarder / Sauvegarder sous (PATCH 8)."""
         file_menu = self.menuBar().addMenu("&Fichier")
@@ -170,6 +187,18 @@ class MainWindow(QMainWindow):
         file_menu.addAction(save_as_action)
 
         edit_menu = self.menuBar().addMenu("&Édition")
+
+        undo_action = QAction("Annuler", self)
+        undo_action.setShortcut(QKeySequence("Ctrl+Z"))
+        undo_action.triggered.connect(self._undo)
+        edit_menu.addAction(undo_action)
+
+        redo_action = QAction("Rétablir", self)
+        redo_action.setShortcut(QKeySequence("Ctrl+Y"))
+        redo_action.triggered.connect(self._redo)
+        edit_menu.addAction(redo_action)
+
+        edit_menu.addSeparator()
         people_action = QAction("Gestionnaire de personnes...", self)
         people_action.triggered.connect(self._show_people_manager)
         edit_menu.addAction(people_action)
@@ -208,6 +237,48 @@ class MainWindow(QMainWindow):
         """PATCH 16 — Ouvre le gestionnaire du registre partagé de personnes."""
         PeopleManagerDialog(self._document, self).exec()
         self._render_document()
+
+    # -- Undo / Redo (PATCH 27) --------------------------------------------
+
+    def _document_snapshot(self) -> str:
+        """Sérialise l'état courant du document (indépendant, réutilise
+        le format de sauvegarde JSON du PATCH 8/9)."""
+        return json.dumps(self._document.to_dict(), sort_keys=True)
+
+    def _poll_undo_snapshot(self) -> None:
+        """Sondage périodique : regroupe les frappes rapides d'une même
+        pause en un seul point d'annulation."""
+        self._undo_history.check(self._document_snapshot())
+
+    def _restore_snapshot(self, raw_snapshot: str) -> None:
+        self._document = Document.from_dict(json.loads(raw_snapshot))
+        self._render_document()
+
+    def _undo(self) -> None:
+        """CTRL+Z — Annule la dernière action (toute action est
+        annulable : ajout, suppression, déplacement, conversion,
+        édition de texte, de checklist, de tableau, ...)."""
+        snapshot = self._undo_history.undo(self._document_snapshot())
+        if snapshot is not None:
+            self._restore_snapshot(snapshot)
+
+    def _redo(self) -> None:
+        """CTRL+Y — Rétablit la dernière action annulée."""
+        snapshot = self._undo_history.redo()
+        if snapshot is not None:
+            self._restore_snapshot(snapshot)
+
+    def eventFilter(self, obj, event) -> bool:  # noqa: N802
+        """Intercepte Ctrl+Z/Ctrl+Y avant les widgets d'édition natifs
+        (QTextEdit/QLineEdit ont sinon leur propre undo local)."""
+        if event.type() == QEvent.KeyPress and event.modifiers() == Qt.ControlModifier:
+            if event.key() == Qt.Key_Z:
+                self._undo()
+                return True
+            if event.key() == Qt.Key_Y:
+                self._redo()
+                return True
+        return super().eventFilter(obj, event)
 
     # -- Rendu générique des blocs / drag & drop (PATCH 8, 13) ------------
 
