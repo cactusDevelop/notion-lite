@@ -24,8 +24,41 @@ _QSS_STYLE_NAME = "Fusion"
 
 
 def _light_palette() -> QPalette:
-    """Palette claire (par défaut) — reprend les teintes standard de Qt."""
-    return QPalette()
+    """Palette claire explicite (PATCH 32 correctif).
+
+    Volontairement codée en dur plutôt que `QPalette()` : sur certains
+    systèmes (ou IDE, ex. PyCharm) la palette Qt par défaut suit déjà
+    le thème sombre de l'OS, ce qui rendait le thème "clair" à peine
+    différent du thème sombre lors du basculement.
+    """
+    palette = QPalette()
+
+    window = QColor(240, 240, 240)
+    base = QColor(255, 255, 255)
+    alternate_base = QColor(233, 233, 233)
+    text = QColor(20, 20, 20)
+    disabled_text = QColor(150, 150, 150)
+    highlight = QColor(61, 132, 199)
+
+    palette.setColor(QPalette.Window, window)
+    palette.setColor(QPalette.WindowText, text)
+    palette.setColor(QPalette.Base, base)
+    palette.setColor(QPalette.AlternateBase, alternate_base)
+    palette.setColor(QPalette.ToolTipBase, base)
+    palette.setColor(QPalette.ToolTipText, text)
+    palette.setColor(QPalette.Text, text)
+    palette.setColor(QPalette.Button, window)
+    palette.setColor(QPalette.ButtonText, text)
+    palette.setColor(QPalette.BrightText, QColor(200, 0, 0))
+    palette.setColor(QPalette.Link, highlight)
+    palette.setColor(QPalette.Highlight, highlight)
+    palette.setColor(QPalette.HighlightedText, QColor(255, 255, 255))
+
+    palette.setColor(QPalette.Disabled, QPalette.WindowText, disabled_text)
+    palette.setColor(QPalette.Disabled, QPalette.Text, disabled_text)
+    palette.setColor(QPalette.Disabled, QPalette.ButtonText, disabled_text)
+
+    return palette
 
 
 def _dark_palette() -> QPalette:
