@@ -34,6 +34,7 @@ class Document:
     def __init__(self) -> None:
         self._blocks: list[Block] = []
         self._people: list[dict[str, Any]] = []
+        self._favorite_ids: list[str] = []
 
     @property
     def blocks(self) -> list[Block]:
@@ -62,6 +63,8 @@ class Document:
         if block is None:
             return False
         self._blocks.remove(block)
+        if block_id in self._favorite_ids:
+            self._favorite_ids.remove(block_id)
         return True
 
     def move_block(self, block_id: str, new_index: int) -> bool:
@@ -150,6 +153,47 @@ class Document:
                         block.set_cell(row["id"], column["id"], [p for p in current if p != person_id])
         return True
 
+    # -- Favoris (PATCH 31) ------------------------------------------------
+
+    @property
+    def favorite_ids(self) -> list[str]:
+        """Ids des blocs favoris, dans leur ordre d'ajout aux favoris."""
+        return list(self._favorite_ids)
+
+    def is_favorite(self, block_id: str) -> bool:
+        return block_id in self._favorite_ids
+
+    def add_favorite(self, block_id: str) -> bool:
+        """Marque un bloc comme favori. False si le bloc n'existe pas
+        ou s'il est déjà favori."""
+        if self.find_block(block_id) is None or block_id in self._favorite_ids:
+            return False
+        self._favorite_ids.append(block_id)
+        return True
+
+    def remove_favorite(self, block_id: str) -> bool:
+        if block_id not in self._favorite_ids:
+            return False
+        self._favorite_ids.remove(block_id)
+        return True
+
+    def toggle_favorite(self, block_id: str) -> Optional[bool]:
+        """Bascule l'état favori d'un bloc. Retourne le nouvel état
+        (True si désormais favori), ou None si le bloc n'existe pas."""
+        if self.find_block(block_id) is None:
+            return None
+        if self.is_favorite(block_id):
+            self.remove_favorite(block_id)
+            return False
+        self.add_favorite(block_id)
+        return True
+
+    def favorite_blocks(self) -> list[Block]:
+        """Blocs favoris, dans l'ordre du document (pas l'ordre d'ajout
+        aux favoris) — plus utile pour un panneau de navigation."""
+        favorites = set(self._favorite_ids)
+        return [block for block in self._blocks if block.id in favorites]
+
     # -- Sauvegarde / chargement JSON (PATCH 8) ---------------------------
 
     def to_dict(self) -> dict[str, Any]:
@@ -158,6 +202,7 @@ class Document:
             "version": DOCUMENT_FORMAT_VERSION,
             "blocks": [block.to_dict() for block in self._blocks],
             "people": list(self._people),
+            "favorite_ids": list(self._favorite_ids),
         }
 
     @classmethod
@@ -195,4 +240,10 @@ class Document:
                     "color": raw_person.get("color", PERSON_COLOR_PALETTE[0]),
                 }
             )
+        # Ne conserve que les ids référençant un bloc effectivement chargé
+        # (robustesse face à un fichier corrompu ou édité à la main).
+        existing_ids = {block.id for block in document._blocks}
+        document._favorite_ids = [
+            fid for fid in raw.get("favorite_ids", []) if fid in existing_ids
+        ]
         return document

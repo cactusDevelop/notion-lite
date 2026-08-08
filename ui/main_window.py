@@ -223,6 +223,9 @@ class MainWindow(QMainWindow):
         replace_action.setShortcut(QKeySequence("Ctrl+H"))
         replace_action.triggered.connect(self._show_search_dialog)
         edit_menu.addAction(replace_action)
+
+        self._favorites_menu = self.menuBar().addMenu("&Favoris")
+        self._favorites_menu.aboutToShow.connect(self._populate_favorites_menu)
     # -- Mise en forme (PATCH 5 / 6) -------------------------------------
 
     def _with_active(self, method):
@@ -297,6 +300,22 @@ class MainWindow(QMainWindow):
                 self._scroll_area.ensureWidgetVisible(widget)
                 widget.content.setFocus()
                 return
+
+    # -- Favoris (PATCH 31) ------------------------------------------------
+
+    def _populate_favorites_menu(self) -> None:
+        """Reconstruit le menu "Favoris" juste avant son ouverture, pour
+        toujours refléter l'état courant du document."""
+        self._favorites_menu.clear()
+        favorites = self._document.favorite_blocks()
+        if not favorites:
+            empty_action = self._favorites_menu.addAction("(aucun favori)")
+            empty_action.setEnabled(False)
+            return
+        for block in favorites:
+            label = preview_for_block(block)
+            action = self._favorites_menu.addAction(label)
+            action.triggered.connect(lambda _, bid=block.id: self._scroll_to_block(bid))
 
     # -- Undo / Redo (PATCH 27) --------------------------------------------
 
@@ -444,6 +463,10 @@ class MainWindow(QMainWindow):
         delete_action = menu.addAction("Supprimer")
         menu.addSeparator()
 
+        favorite_label = "Retirer des favoris" if self._document.is_favorite(block_id) else "Ajouter aux favoris"
+        favorite_action = menu.addAction(favorite_label)
+        menu.addSeparator()
+
         move_up_action = menu.addAction("Déplacer vers le haut")
         move_up_action.setEnabled(index > 0)
         move_down_action = menu.addAction("Déplacer vers le bas")
@@ -466,6 +489,8 @@ class MainWindow(QMainWindow):
             self._duplicate_block(block_id)
         elif chosen is delete_action:
             self._delete_block(block_id)
+        elif chosen is favorite_action:
+            self._document.toggle_favorite(block_id)
         elif chosen is move_up_action:
             self._move_block(block_id, -1)
         elif chosen is move_down_action:
