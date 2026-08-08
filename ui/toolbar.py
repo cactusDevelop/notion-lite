@@ -23,6 +23,7 @@ _ACTIONS: list[tuple[str, Optional[str]]] = [
     ("new_image", "Insérer une image"),
     ("new_table", "Nouveau tableau"),
     ("new_gantt", "Nouveau Gantt"),
+    ("new_separator", "Insérer un séparateur"),
     ("sep1", None),
     ("bold", "Gras"),
     ("italic", "Italique"),
