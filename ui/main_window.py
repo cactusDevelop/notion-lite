@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
 )
 
 from blocks.checklist_block import ChecklistBlock
+from blocks.code_block import CodeBlock
 from blocks.heading_block import HeadingBlock
 from blocks.image_block import ImageBlock
 from blocks.gantt_block import GanttBlock
@@ -30,6 +31,7 @@ from blocks.text_block import TextBlock
 from core.document import Document
 from ui.blocks.block_container import BlockContainer
 from ui.blocks.checklist_block_widget import ChecklistBlockWidget
+from ui.blocks.code_block_widget import CodeBlockWidget
 from ui.blocks.gantt_block_widget import GanttBlockWidget
 from ui.blocks.heading_block_widget import HeadingBlockWidget
 from ui.blocks.image_block_widget import ImageBlockWidget
@@ -79,6 +81,7 @@ class MainWindow(QMainWindow):
                 "new_gantt": self._add_gantt_block,
                 "new_separator": self._add_separator_block,
                 "new_quote": self._add_quote_block,
+                "new_code": self._add_code_block,
                 "bold": self._with_active(TextBlockWidget.toggle_bold),
                 "italic": self._with_active(TextBlockWidget.toggle_italic),
                 "underline": self._with_active(TextBlockWidget.toggle_underline),
@@ -199,6 +202,8 @@ class MainWindow(QMainWindow):
             return SeparatorBlockWidget(block)
         if isinstance(block, QuoteBlock):
             return QuoteBlockWidget(block)
+        if isinstance(block, CodeBlock):
+            return CodeBlockWidget(block)
         if isinstance(block, ImageBlock):
             return ImageBlockWidget(
                 block,
@@ -363,6 +368,14 @@ class MainWindow(QMainWindow):
         self._document.add_block(block)
 
         widget = TableBlockWidget(block, self._document)
+        self._blocks_layout.addWidget(self._wrap(widget, block.id))
+
+    def _add_code_block(self) -> None:
+        """PATCH 22 — Ajoute un bloc de code (police monospace)."""
+        block = CodeBlock()
+        self._document.add_block(block)
+
+        widget = CodeBlockWidget(block)
         self._blocks_layout.addWidget(self._wrap(widget, block.id))
 
     def _add_quote_block(self) -> None:

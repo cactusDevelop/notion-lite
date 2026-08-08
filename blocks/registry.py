@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import Any
 
 from blocks.checklist_block import CHECKLIST_BLOCK_TYPE, ChecklistBlock
+from blocks.code_block import CODE_BLOCK_TYPE, CodeBlock
 from blocks.gantt_block import GANTT_BLOCK_TYPE, GanttBlock
 from blocks.heading_block import HEADING_TYPES, HeadingBlock
 from blocks.image_block import IMAGE_BLOCK_TYPE, ImageBlock
@@ -67,6 +68,9 @@ def block_from_dict(raw: dict[str, Any]) -> Block:
 
     if block_type == SEPARATOR_BLOCK_TYPE:
         return SeparatorBlock(id=block_id)
+
+    if block_type == CODE_BLOCK_TYPE:
+        return CodeBlock(content=data.get("content", ""), language=data.get("language", "text"), id=block_id)
 
     if block_type == QUOTE_BLOCK_TYPE:
         return QuoteBlock(content=data.get("content", ""), id=block_id)
