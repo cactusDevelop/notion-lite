@@ -39,6 +39,7 @@ from core.block_icons import icon_for_block
 from core.block_preview import preview_for_block
 from core.document_html_export import document_to_full_html
 from core.document_markdown_export import document_to_markdown
+from core.document_markdown_import import markdown_to_document
 from core.document import Document
 from core.history import UndoHistory
 from ui.blocks.block_container import BlockContainer
@@ -222,6 +223,10 @@ class MainWindow(QMainWindow):
         export_html_action = QAction("Exporter en HTML...", self)
         export_html_action.triggered.connect(self._export_html)
         file_menu.addAction(export_html_action)
+
+        import_md_action = QAction("Importer un Markdown...", self)
+        import_md_action.triggered.connect(self._import_markdown)
+        file_menu.addAction(import_md_action)
 
         edit_menu = self.menuBar().addMenu("&Édition")
 
@@ -691,6 +696,29 @@ class MainWindow(QMainWindow):
 
         self._document = document
         self._set_current_file(Path(path_str))
+        self._render_document()
+
+    def _import_markdown(self) -> None:
+        """PATCH 39 — Importe un fichier Markdown, remplace le document
+        courant (comme "Ouvrir", mais sans fichier de sauvegarde associé
+        : un import Markdown n'a pas de round-trip garanti vers .json)."""
+        path_str, _ = QFileDialog.getOpenFileName(
+            self, "Importer un Markdown", "", "Markdown (*.md)"
+        )
+        if not path_str:
+            return
+
+        try:
+            text = Path(path_str).read_text(encoding="utf-8")
+            document = markdown_to_document(text)
+        except OSError as exc:
+            QMessageBox.critical(
+                self, "Erreur d'import", f"Impossible de lire le fichier :\n{exc}"
+            )
+            return
+
+        self._document = document
+        self._set_current_file(None)
         self._render_document()
 
     def _write_document(self, path: Path) -> None:
