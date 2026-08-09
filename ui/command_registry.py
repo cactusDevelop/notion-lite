@@ -17,6 +17,7 @@ COMMANDS: list[dict[str, str]] = [
     {"id": "table", "label": "Tableau", "keyword": "tableau"},
     {"id": "simple_table", "label": "Tableau simple", "keyword": "tableausimple"},
     {"id": "gantt", "label": "Gantt", "keyword": "gantt"},
+    {"id": "formula", "label": "Résultat calculé", "keyword": "resultat"},
     {"id": "image", "label": "Image", "keyword": "image"},
     {"id": "separator", "label": "Séparateur", "keyword": "separateur"},
     {"id": "quote", "label": "Citation", "keyword": "citation"},

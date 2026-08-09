@@ -11,6 +11,7 @@ from typing import Any
 
 from blocks.checklist_block import CHECKLIST_BLOCK_TYPE, ChecklistBlock
 from blocks.code_block import CODE_BLOCK_TYPE, CodeBlock
+from blocks.formula_block import FORMULA_BLOCK_TYPE, FormulaBlock
 from blocks.gantt_block import GANTT_BLOCK_TYPE, GanttBlock
 from blocks.heading_block import HEADING_TYPES, HeadingBlock
 from blocks.image_block import IMAGE_BLOCK_TYPE, ImageBlock
@@ -71,6 +72,15 @@ def block_from_dict(raw: dict[str, Any]) -> Block:
             table_block_id=data.get("table_block_id"),
             label_column_id=data.get("label_column_id"),
             date_column_id=data.get("date_column_id"),
+            id=block_id,
+        )
+
+    if block_type == FORMULA_BLOCK_TYPE:
+        return FormulaBlock(
+            table_block_id=data.get("table_block_id"),
+            number_column_id=data.get("number_column_id"),
+            boolean_column_id=data.get("boolean_column_id"),
+            label=data.get("label", "Résultat: "),
             id=block_id,
         )
 

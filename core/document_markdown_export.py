@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from blocks.checklist_block import ChecklistBlock
 from blocks.code_block import CodeBlock
+from blocks.formula_block import FormulaBlock, compute_formula_result, format_formula_text
 from blocks.gantt_block import GanttBlock, compute_gantt_rows
 from blocks.heading_block import HeadingBlock
 from blocks.image_block import ImageBlock
@@ -131,6 +132,8 @@ def _render_block(document, block) -> str:
         return _render_simple_table_block(block)
     if isinstance(block, GanttBlock):
         return _render_gantt_block(document, block)
+    if isinstance(block, FormulaBlock):
+        return format_formula_text(block, compute_formula_result(document, block))
     if isinstance(block, ImageBlock):
         if not block.data.get("image_base64"):
             return "*(image vide)*"

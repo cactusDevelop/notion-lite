@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from blocks.checklist_block import ChecklistBlock
 from blocks.code_block import CodeBlock
+from blocks.formula_block import FormulaBlock
 from blocks.gantt_block import GanttBlock
 from blocks.heading_block import HeadingBlock
 from blocks.image_block import ImageBlock
@@ -60,6 +61,9 @@ def preview_for_block(block) -> str:
 
     if isinstance(block, GanttBlock):
         return "(diagramme de Gantt)"
+
+    if isinstance(block, FormulaBlock):
+        return f"({block.label.strip() or 'résultat calculé'})"
 
     if isinstance(block, SeparatorBlock):
         return "(séparateur)"
