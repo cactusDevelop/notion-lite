@@ -55,6 +55,7 @@ from ui.block_picker_dialog import BlockPickerDialog
 from ui.blocks_area import BlocksArea
 from ui.command_menu import CommandMenu
 from ui.command_registry import COMMANDS
+from ui.emoji_picker import EmojiPicker
 from ui.info_dialog import InfoDialog
 from ui.people_manager_dialog import PeopleManagerDialog
 from ui.search_dialog import SearchDialog
@@ -138,6 +139,7 @@ class MainWindow(QMainWindow):
                 "code": self._with_active(TextBlockWidget.toggle_code),
                 "color": self._apply_color,
                 "insert_link": self._insert_internal_link,
+                "insert_emoji": self._show_emoji_picker,
             },
             on_size_changed=self._apply_size,
             on_info=self._show_info_dialog,
@@ -296,6 +298,19 @@ class MainWindow(QMainWindow):
             return
         label = preview_for_block(target)
         self._active_text_widget.insert_internal_link(picker.selected_block_id, label)
+
+    def _show_emoji_picker(self) -> None:
+        """PATCH 35 — Ouvre le sélecteur d'emoji, insère au curseur du
+        bloc texte actif."""
+        if self._active_text_widget is None:
+            return
+        widget = self._active_text_widget
+        picker = EmojiPicker(self)
+        picker.emoji_selected.connect(widget.insert_emoji)
+        cursor_rect = widget.cursorRect()
+        anchor = widget.mapToGlobal(cursor_rect.bottomLeft())
+        picker.move(anchor)
+        picker.show()
 
     def _apply_size(self, size: int) -> None:
         if self._active_text_widget is not None:

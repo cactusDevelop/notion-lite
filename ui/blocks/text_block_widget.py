@@ -17,11 +17,13 @@ from PySide6.QtGui import (
     QColor,
     QFont,
     QTextCharFormat,
+    QTextCursor,
     QTextListFormat,
 )
 from PySide6.QtWidgets import QTextEdit
 
 from blocks.text_block import TextBlock
+from core.emoji_data import resolve_trailing_shortcode
 
 _CODE_FONT_FAMILY = "Consolas"
 _QUOTE_INDENT = 24
@@ -51,6 +53,7 @@ class TextBlockWidget(QTextEdit):
     def __init__(self, block: TextBlock, parent=None) -> None:
         super().__init__(parent)
         self._block = block
+        self._applying_shortcode = False
 
         self.setAcceptRichText(False)
         # PATCH 27 : un seul historique Undo/Redo applicatif (MainWindow) ;
@@ -141,10 +144,39 @@ class TextBlockWidget(QTextEdit):
 
     def _on_text_changed(self) -> None:
         """Synchronise le texte brut et le HTML vers le bloc de données."""
+        if self._applying_shortcode:
+            return
         self._block.content = self.toPlainText()
         self._block.html = self.toHtml()
         if self.toPlainText() == "/":
             self.command_requested.emit(self)
+            return
+        self._maybe_convert_shortcode()
+
+    def _maybe_convert_shortcode(self) -> None:
+        """PATCH 35 — Convertit automatiquement un ":shortcode:" tout juste
+        tapé en emoji (façon Slack/Discord), uniquement quand le curseur
+        est en fin de texte (évite les surprises en édition ailleurs)."""
+        if not self.textCursor().atEnd():
+            return
+        resolved = resolve_trailing_shortcode(self.toPlainText())
+        if resolved is None:
+            return
+        new_text, _emoji = resolved
+
+        self._applying_shortcode = True
+        self.setPlainText(new_text)
+        cursor = self.textCursor()
+        cursor.movePosition(QTextCursor.End)
+        self.setTextCursor(cursor)
+        self._applying_shortcode = False
+
+        self._block.content = self.toPlainText()
+        self._block.html = self.toHtml()
+
+    def insert_emoji(self, emoji: str) -> None:
+        """PATCH 35 — Insère un emoji au curseur (depuis le sélecteur)."""
+        self.textCursor().insertText(emoji)
 
     # -- Mise en forme caractère ----------------------------------------
 

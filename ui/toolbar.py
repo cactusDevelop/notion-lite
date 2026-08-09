@@ -47,6 +47,7 @@ _ACTIONS: list[tuple[str, Optional[str]]] = [
     ("color", "Couleur"),
     ("sep5", None),
     ("insert_link", "Lien interne..."),
+    ("insert_emoji", "Emoji..."),
 ]
 
 
