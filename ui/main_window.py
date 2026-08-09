@@ -38,6 +38,7 @@ from blocks.text_block import TextBlock
 from core.block_icons import icon_for_block
 from core.block_preview import preview_for_block
 from core.document_html_export import document_to_full_html
+from core.document_html_import import html_to_document
 from core.document_markdown_export import document_to_markdown
 from core.document_markdown_import import markdown_to_document
 from core.document import Document
@@ -227,6 +228,10 @@ class MainWindow(QMainWindow):
         import_md_action = QAction("Importer un Markdown...", self)
         import_md_action.triggered.connect(self._import_markdown)
         file_menu.addAction(import_md_action)
+
+        import_html_action = QAction("Importer un HTML...", self)
+        import_html_action.triggered.connect(self._import_html)
+        file_menu.addAction(import_html_action)
 
         edit_menu = self.menuBar().addMenu("&Édition")
 
@@ -711,6 +716,28 @@ class MainWindow(QMainWindow):
         try:
             text = Path(path_str).read_text(encoding="utf-8")
             document = markdown_to_document(text)
+        except OSError as exc:
+            QMessageBox.critical(
+                self, "Erreur d'import", f"Impossible de lire le fichier :\n{exc}"
+            )
+            return
+
+        self._document = document
+        self._set_current_file(None)
+        self._render_document()
+
+    def _import_html(self) -> None:
+        """PATCH 40 — Importe un fichier HTML, remplace le document courant
+        (comme l'import Markdown : pas de fichier de sauvegarde associé)."""
+        path_str, _ = QFileDialog.getOpenFileName(
+            self, "Importer un HTML", "", "HTML (*.html *.htm)"
+        )
+        if not path_str:
+            return
+
+        try:
+            text = Path(path_str).read_text(encoding="utf-8")
+            document = html_to_document(text)
         except OSError as exc:
             QMessageBox.critical(
                 self, "Erreur d'import", f"Impossible de lire le fichier :\n{exc}"
