@@ -13,7 +13,8 @@ l'application, un point unique pour tout le programme.
 """
 from __future__ import annotations
 
-from PySide6.QtGui import QColor, QPalette
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor, QGuiApplication, QPalette
 from PySide6.QtWidgets import QApplication
 
 THEME_LIGHT = "light"
@@ -188,6 +189,21 @@ def build_palette(theme_name: str) -> QPalette:
     `theme_name` est inconnu."""
     builder = _PALETTE_BUILDERS.get(theme_name, _light_palette)
     return builder()
+
+
+def detect_system_theme() -> str:
+    """Détecte le thème clair/sombre de l'OS via QStyleHints (Qt >= 6.5).
+
+    Retourne THEME_DARK si l'OS est en mode sombre, THEME_LIGHT sinon
+    (y compris si la détection est indisponible/inconnue : repli sûr).
+    """
+    try:
+        color_scheme = QGuiApplication.styleHints().colorScheme()
+    except Exception:
+        return THEME_LIGHT
+    if color_scheme == Qt.ColorScheme.Dark:
+        return THEME_DARK
+    return THEME_LIGHT
 
 
 def apply_theme(app: QApplication, theme_name: str) -> None:
