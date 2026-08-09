@@ -56,6 +56,7 @@ from ui.blocks_area import BlocksArea
 from ui.command_menu import CommandMenu
 from ui.command_registry import COMMANDS
 from ui.emoji_picker import EmojiPicker
+from ui.export_pdf import export_document_to_pdf
 from ui.info_dialog import InfoDialog
 from ui.people_manager_dialog import PeopleManagerDialog
 from ui.search_dialog import SearchDialog
@@ -207,6 +208,10 @@ class MainWindow(QMainWindow):
         save_as_action.setShortcut(QKeySequence.SaveAs)
         save_as_action.triggered.connect(self._save_document_as)
         file_menu.addAction(save_as_action)
+
+        export_pdf_action = QAction("Exporter en PDF...", self)
+        export_pdf_action.triggered.connect(self._export_pdf)
+        file_menu.addAction(export_pdf_action)
 
         edit_menu = self.menuBar().addMenu("&Édition")
 
@@ -709,6 +714,16 @@ class MainWindow(QMainWindow):
         if path.suffix != ".json":
             path = path.with_suffix(".json")
         self._write_document(path)
+
+    def _export_pdf(self) -> None:
+        """PATCH 36 — Exporte le document courant en PDF."""
+        path_str, _ = QFileDialog.getSaveFileName(self, "Exporter en PDF", "", "PDF (*.pdf)")
+        if not path_str:
+            return
+        path = Path(path_str)
+        if path.suffix != ".pdf":
+            path = path.with_suffix(".pdf")
+        export_document_to_pdf(self._document, str(path))
 
     # -- Gestion des blocs texte -----------------------------------------
 
