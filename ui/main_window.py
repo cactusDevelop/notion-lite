@@ -37,6 +37,7 @@ from blocks.registry import block_from_dict
 from blocks.text_block import TextBlock
 from core.block_icons import icon_for_block
 from core.block_preview import preview_for_block
+from core.document_markdown_export import document_to_markdown
 from core.document import Document
 from core.history import UndoHistory
 from ui.blocks.block_container import BlockContainer
@@ -212,6 +213,10 @@ class MainWindow(QMainWindow):
         export_pdf_action = QAction("Exporter en PDF...", self)
         export_pdf_action.triggered.connect(self._export_pdf)
         file_menu.addAction(export_pdf_action)
+
+        export_md_action = QAction("Exporter en Markdown...", self)
+        export_md_action.triggered.connect(self._export_markdown)
+        file_menu.addAction(export_md_action)
 
         edit_menu = self.menuBar().addMenu("&Édition")
 
@@ -724,6 +729,16 @@ class MainWindow(QMainWindow):
         if path.suffix != ".pdf":
             path = path.with_suffix(".pdf")
         export_document_to_pdf(self._document, str(path))
+
+    def _export_markdown(self) -> None:
+        """PATCH 37 — Exporte le document courant en Markdown."""
+        path_str, _ = QFileDialog.getSaveFileName(self, "Exporter en Markdown", "", "Markdown (*.md)")
+        if not path_str:
+            return
+        path = Path(path_str)
+        if path.suffix != ".md":
+            path = path.with_suffix(".md")
+        path.write_text(document_to_markdown(self._document), encoding="utf-8")
 
     # -- Gestion des blocs texte -----------------------------------------
 
