@@ -14,7 +14,6 @@ petit tableau markdown), pas à une base de données.
 from __future__ import annotations
 
 import uuid
-from typing import Any
 
 from core.block import Block
 

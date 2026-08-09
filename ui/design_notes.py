@@ -203,4 +203,20 @@ DESIGN_NOTES: list[tuple[str, str]] = [
         "<code>requirements-dev.txt</code> ajoutés : absents jusqu'ici, "
         "alors que le README doit pouvoir s'appuyer dessus.",
     ),
+    (
+        "PATCH 42 — Version 1.0",
+        "Stabilisation : nettoyage des imports inutilisés repérés par "
+        "analyse statique (<code>pyflakes</code>, 0 avertissement "
+        "restant sur <code>core/</code>, <code>blocks/</code>, "
+        "<code>ui/</code>), et un test d'intégration bout-en-bout "
+        "(<code>tests/test_full_document_integration.py</code>) : un "
+        "document avec un bloc de chaque type, cycle complet "
+        "sauvegarde/rechargement disque, recherche et remplacement "
+        "transverses, puis un smoke-test <i>MainWindow</i> réel "
+        "(ajout de neuf types de blocs, annulé puis rétabli en un "
+        "seul geste). Gel des fonctionnalités et publication : "
+        "<code>core/version.py</code> (source unique de la version, "
+        "affichée dans le titre de fenêtre et « À propos ») et "
+        "<code>CHANGELOG.md</code> résumant les 42 patches.",
+    ),
 ]

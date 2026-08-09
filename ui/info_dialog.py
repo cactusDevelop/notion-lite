@@ -6,6 +6,7 @@ from __future__ import annotations
 from PySide6.QtWidgets import QDialog, QTextBrowser, QVBoxLayout
 
 from ui.design_notes import DESIGN_NOTES
+from core.version import __version__
 
 
 class InfoDialog(QDialog):
@@ -25,7 +26,7 @@ class InfoDialog(QDialog):
 
     @staticmethod
     def _build_html() -> str:
-        parts = ["<h3>Explications et choix de design</h3>"]
+        parts = [f"<h3>Notion Lite {__version__}</h3>", "<h4>Explications et choix de design</h4>"]
         for title, text in DESIGN_NOTES:
             parts.append(f"<p><b>{title}</b><br>{text}</p>")
         return "".join(parts)

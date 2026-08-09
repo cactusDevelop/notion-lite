@@ -43,6 +43,7 @@ from core.document_markdown_export import document_to_markdown
 from core.document_markdown_import import markdown_to_document
 from core.document import Document
 from core.history import UndoHistory
+from core.version import __version__
 from ui.blocks.block_container import BlockContainer
 from ui.blocks.checklist_block_widget import ChecklistBlockWidget
 from ui.blocks.code_block_widget import CodeBlockWidget
@@ -107,7 +108,7 @@ class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
 
-        self.setWindowTitle("Notion Lite")
+        self.setWindowTitle(f"Notion Lite {__version__}")
         self.resize(1000, 700)
 
         self._document = Document()
@@ -674,7 +675,8 @@ class MainWindow(QMainWindow):
 
     def _set_current_file(self, path: Path | None) -> None:
         self._current_file = path
-        self.setWindowTitle("Notion Lite" + (f" — {path.name}" if path else ""))
+        title = f"Notion Lite {__version__}"
+        self.setWindowTitle(title + (f" — {path.name}" if path else ""))
 
     def _new_document(self) -> None:
         """PATCH 8 — Nouveau : repart d'un document vide."""

@@ -4,6 +4,9 @@
 PySide6 (Qt). Application de bureau locale : les documents sont des
 fichiers `.json` sur disque, sans compte ni serveur.
 
+**Version 1.0.0** — voir [`CHANGELOG.md`](CHANGELOG.md) pour la liste
+complète des fonctionnalités livrées, patch par patch.
+
 Ce document sert de référence : architecture générale, API interne,
 format de sauvegarde JSON, et guide pour ajouter un nouveau type de
 bloc. Le détail des choix de conception patch par patch reste dans
