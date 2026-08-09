@@ -135,3 +135,34 @@ def document_to_html(document) -> str:
     plutôt que de faire échouer tout l'export."""
     parts = [_render_block(document, block) for block in document.blocks]
     return "\n".join(part for part in parts if part)
+
+
+_PAGE_TEMPLATE = """<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<title>{title}</title>
+<style>
+  body {{ font-family: -apple-system, "Segoe UI", Arial, sans-serif; max-width: 800px;
+          margin: 40px auto; padding: 0 16px; line-height: 1.5; color: #222; }}
+  table {{ border-collapse: collapse; width: 100%; margin: 12px 0; }}
+  th, td {{ border: 1px solid #ccc; padding: 6px 10px; text-align: left; }}
+  blockquote {{ border-left: 3px solid #999; margin: 12px 0; padding-left: 12px; color: #555; }}
+  pre {{ background: #f5f5f5; border: 1px solid #ddd; padding: 10px; overflow-x: auto; }}
+  img {{ max-width: 100%; }}
+  hr {{ border: none; border-top: 1px solid #ccc; margin: 20px 0; }}
+</style>
+</head>
+<body>
+{body}
+</body>
+</html>
+"""
+
+
+def document_to_full_html(document, title: str = "Document") -> str:
+    """PATCH 38 — Document HTML autonome et lisible dans un navigateur
+    (doctype, head avec charset + CSS minimal, body). Réutilise
+    `document_to_html` pour le contenu, sans dupliquer la logique de
+    rendu par bloc — un seul moteur pour les exports PDF et HTML."""
+    return _PAGE_TEMPLATE.format(title=_esc(title), body=document_to_html(document))

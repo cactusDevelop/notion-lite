@@ -37,6 +37,7 @@ from blocks.registry import block_from_dict
 from blocks.text_block import TextBlock
 from core.block_icons import icon_for_block
 from core.block_preview import preview_for_block
+from core.document_html_export import document_to_full_html
 from core.document_markdown_export import document_to_markdown
 from core.document import Document
 from core.history import UndoHistory
@@ -217,6 +218,10 @@ class MainWindow(QMainWindow):
         export_md_action = QAction("Exporter en Markdown...", self)
         export_md_action.triggered.connect(self._export_markdown)
         file_menu.addAction(export_md_action)
+
+        export_html_action = QAction("Exporter en HTML...", self)
+        export_html_action.triggered.connect(self._export_html)
+        file_menu.addAction(export_html_action)
 
         edit_menu = self.menuBar().addMenu("&Édition")
 
@@ -739,6 +744,17 @@ class MainWindow(QMainWindow):
         if path.suffix != ".md":
             path = path.with_suffix(".md")
         path.write_text(document_to_markdown(self._document), encoding="utf-8")
+
+    def _export_html(self) -> None:
+        """PATCH 38 — Exporte le document courant en HTML autonome."""
+        path_str, _ = QFileDialog.getSaveFileName(self, "Exporter en HTML", "", "HTML (*.html)")
+        if not path_str:
+            return
+        path = Path(path_str)
+        if path.suffix != ".html":
+            path = path.with_suffix(".html")
+        title = path.stem
+        path.write_text(document_to_full_html(self._document, title=title), encoding="utf-8")
 
     # -- Gestion des blocs texte -----------------------------------------
 
