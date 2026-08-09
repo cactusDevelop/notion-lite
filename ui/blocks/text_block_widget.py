@@ -81,15 +81,15 @@ class TextBlockWidget(QTextEdit):
     def keyPressEvent(self, event) -> None:
         """Intercepte Entrée et Retour arrière pour l'expérience multi-blocs.
 
-        - Entrée seule : sépare le bloc en deux (Maj+Entrée garde le
+        - Maj+Entrée : sépare le bloc en deux (Entrée seule garde le
           comportement natif de retour à la ligne dans le même bloc).
         - Retour arrière en tout début de bloc : fusionne avec le
           bloc précédent (ou le supprime s'il est vide).
         """
-        is_plain_enter = event.key() in (Qt.Key_Return, Qt.Key_Enter) and not (
+        is_split_enter = event.key() in (Qt.Key_Return, Qt.Key_Enter) and (
             event.modifiers() & Qt.ShiftModifier
         )
-        if is_plain_enter:
+        if is_split_enter:
             cursor = self.textCursor()
             full_text = self.toPlainText()
             pos = cursor.position()

@@ -40,8 +40,9 @@ DESIGN_NOTES: list[tuple[str, str]] = [
     ),
     (
         "PATCH 7 — Gestion du curseur",
-        "Entrée seule sépare le bloc en deux (comportement Notion). "
-        "Maj+Entrée fait un retour à la ligne dans le même bloc. "
+        "Maj+Entrée sépare le bloc en deux ; Entrée seule fait un "
+        "retour à la ligne dans le même bloc (inversé par rapport au "
+        "comportement Notion d'origine, sur demande explicite). "
         "Retour arrière en début de bloc vide supprime le bloc, "
         "sinon il fusionne avec le bloc texte précédent (la fusion "
         "avec un titre n'est pas encore supportée).",
