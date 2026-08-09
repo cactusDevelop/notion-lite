@@ -187,4 +187,20 @@ DESIGN_NOTES: list[tuple[str, str]] = [
         "<i>_scroll_to_block</i> (PATCH 28) : navigation et recherche "
         "partagent le même mécanisme de défilement.",
     ),
+    (
+        "PATCH 41 — Documentation",
+        "<code>README.md</code> à la racine : installation, "
+        "commande de tests correcte (<code>pytest</code>, pas "
+        "<code>unittest discover</code> — voir le correctif du "
+        "PATCH 13), architecture en trois couches "
+        "(<code>core</code>/<code>blocks</code>/<code>ui</code>), API "
+        "interne des points d'entrée les plus réutilisés "
+        "(<i>Document</i>, <i>block_from_dict</i>, <i>UndoHistory</i>, "
+        "recherche/remplacement, export/import), format de sauvegarde "
+        "JSON complet avec un exemple généré depuis le code (pas "
+        "inventé à la main), et un guide en cinq étapes pour ajouter "
+        "un nouveau type de bloc. <code>requirements.txt</code> / "
+        "<code>requirements-dev.txt</code> ajoutés : absents jusqu'ici, "
+        "alors que le README doit pouvoir s'appuyer dessus.",
+    ),
 ]
