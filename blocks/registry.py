@@ -14,6 +14,7 @@ from blocks.code_block import CODE_BLOCK_TYPE, CodeBlock
 from blocks.gantt_block import GANTT_BLOCK_TYPE, GanttBlock
 from blocks.heading_block import HEADING_TYPES, HeadingBlock
 from blocks.image_block import IMAGE_BLOCK_TYPE, ImageBlock
+from blocks.linked_checklist_block import LINKED_CHECKLIST_BLOCK_TYPE, LinkedChecklistBlock
 from blocks.list_block import LIST_BLOCK_TYPE, ListBlock
 from blocks.quote_block import QUOTE_BLOCK_TYPE, QuoteBlock
 from blocks.separator_block import SEPARATOR_BLOCK_TYPE, SeparatorBlock
@@ -44,6 +45,11 @@ def block_from_dict(raw: dict[str, Any]) -> Block:
 
     if block_type == CHECKLIST_BLOCK_TYPE:
         return ChecklistBlock(items=data.get("items", []), id=block_id)
+
+    if block_type == LINKED_CHECKLIST_BLOCK_TYPE:
+        return LinkedChecklistBlock(
+            items=data.get("items", []), split=data.get("split", 0.5), id=block_id
+        )
 
     if block_type == IMAGE_BLOCK_TYPE:
         return ImageBlock(

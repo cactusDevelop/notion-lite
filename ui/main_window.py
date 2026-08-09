@@ -28,6 +28,7 @@ from blocks.code_block import CodeBlock
 from blocks.heading_block import HeadingBlock
 from blocks.image_block import ImageBlock
 from blocks.gantt_block import GanttBlock
+from blocks.linked_checklist_block import LinkedChecklistBlock
 from blocks.list_block import ListBlock
 from blocks.quote_block import QuoteBlock
 from blocks.separator_block import SeparatorBlock
@@ -50,6 +51,7 @@ from ui.blocks.code_block_widget import CodeBlockWidget
 from ui.blocks.gantt_block_widget import GanttBlockWidget
 from ui.blocks.heading_block_widget import HeadingBlockWidget
 from ui.blocks.image_block_widget import ImageBlockWidget
+from ui.blocks.linked_checklist_block_widget import LinkedChecklistBlockWidget
 from ui.blocks.list_block_widget import ListBlockWidget
 from ui.blocks.quote_block_widget import QuoteBlockWidget
 from ui.blocks.separator_block_widget import SeparatorBlockWidget
@@ -458,6 +460,8 @@ class MainWindow(QMainWindow):
             return HeadingBlockWidget(block)
         if isinstance(block, ChecklistBlock):
             return ChecklistBlockWidget(block)
+        if isinstance(block, LinkedChecklistBlock):
+            return LinkedChecklistBlockWidget(block)
         if isinstance(block, TableBlock):
             return TableBlockWidget(block, self._document)
         if isinstance(block, SimpleTableBlock):
@@ -662,6 +666,7 @@ class MainWindow(QMainWindow):
             "heading2": lambda: HeadingBlock(level=2),
             "heading3": lambda: HeadingBlock(level=3),
             "checklist": lambda: ChecklistBlock(),
+            "linked_checklist": lambda: LinkedChecklistBlock(),
             "table": self._new_default_table_block,
             "simple_table": lambda: SimpleTableBlock(),
             "gantt": lambda: GanttBlock(),

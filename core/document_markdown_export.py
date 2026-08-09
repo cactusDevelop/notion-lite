@@ -15,6 +15,7 @@ from blocks.code_block import CodeBlock
 from blocks.gantt_block import GanttBlock, compute_gantt_rows
 from blocks.heading_block import HeadingBlock
 from blocks.image_block import ImageBlock
+from blocks.linked_checklist_block import LinkedChecklistBlock
 from blocks.list_block import LIST_TYPE_NUMBERED, ListBlock
 from blocks.quote_block import QuoteBlock
 from blocks.separator_block import SeparatorBlock
@@ -99,6 +100,13 @@ def _render_checklist_block(block: ChecklistBlock) -> str:
     )
 
 
+def _render_linked_checklist_block(block: LinkedChecklistBlock) -> str:
+    todo = "\n".join(f"- [ ] {item.get('text', '')}" for item in block.todo_items())
+    done = "\n".join(f"- [x] {item.get('text', '')}" for item in block.done_items())
+    parts = [p for p in ("**À faire**\n" + todo, "**Faites**\n" + done) if p.strip()]
+    return "\n\n".join(parts)
+
+
 def _render_list_block(block: ListBlock) -> str:
     if block.list_type == LIST_TYPE_NUMBERED:
         return "\n".join(f"{i + 1}. {item.get('text', '')}" for i, item in enumerate(block.items))
@@ -113,6 +121,8 @@ def _render_block(document, block) -> str:
         return block.content
     if isinstance(block, ChecklistBlock):
         return _render_checklist_block(block)
+    if isinstance(block, LinkedChecklistBlock):
+        return _render_linked_checklist_block(block)
     if isinstance(block, ListBlock):
         return _render_list_block(block)
     if isinstance(block, TableBlock):

@@ -15,6 +15,7 @@ from blocks.code_block import CodeBlock
 from blocks.gantt_block import GanttBlock, compute_gantt_rows
 from blocks.heading_block import HeadingBlock
 from blocks.image_block import ImageBlock
+from blocks.linked_checklist_block import LinkedChecklistBlock
 from blocks.list_block import LIST_TYPE_NUMBERED, ListBlock
 from blocks.quote_block import QuoteBlock
 from blocks.separator_block import SeparatorBlock
@@ -91,6 +92,17 @@ def _render_checklist_block(block: ChecklistBlock) -> str:
     return f"<ul>{items}</ul>"
 
 
+def _render_linked_checklist_block(block: LinkedChecklistBlock) -> str:
+    todo = "".join(f"<li>☐ {_esc(item.get('text', ''))}</li>" for item in block.todo_items())
+    done = "".join(f"<li>☑ {_esc(item.get('text', ''))}</li>" for item in block.done_items())
+    return (
+        '<table border="0" cellspacing="0" cellpadding="4"><tr>'
+        f'<td valign="top"><b>À faire</b><ul>{todo}</ul></td>'
+        f'<td valign="top"><b>Faites</b><ul>{done}</ul></td>'
+        "</tr></table>"
+    )
+
+
 def _render_list_block(block: ListBlock) -> str:
     tag = "ol" if block.list_type == LIST_TYPE_NUMBERED else "ul"
     items = "".join(f"<li>{_esc(item.get('text', ''))}</li>" for item in block.items)
@@ -105,6 +117,8 @@ def _render_block(document, block) -> str:
         return block.html or f"<p>{_esc(block.content)}</p>"
     if isinstance(block, ChecklistBlock):
         return _render_checklist_block(block)
+    if isinstance(block, LinkedChecklistBlock):
+        return _render_linked_checklist_block(block)
     if isinstance(block, ListBlock):
         return _render_list_block(block)
     if isinstance(block, TableBlock):

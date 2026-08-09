@@ -13,6 +13,7 @@ COMMANDS: list[dict[str, str]] = [
     {"id": "heading2", "label": "Titre 2", "keyword": "titre2"},
     {"id": "heading3", "label": "Titre 3", "keyword": "titre3"},
     {"id": "checklist", "label": "Checklist", "keyword": "checklist"},
+    {"id": "linked_checklist", "label": "Checklists liées", "keyword": "checklistsliees"},
     {"id": "table", "label": "Tableau", "keyword": "tableau"},
     {"id": "simple_table", "label": "Tableau simple", "keyword": "tableausimple"},
     {"id": "gantt", "label": "Gantt", "keyword": "gantt"},

@@ -14,6 +14,7 @@ from blocks.code_block import CodeBlock
 from blocks.gantt_block import GanttBlock
 from blocks.heading_block import HeadingBlock
 from blocks.image_block import ImageBlock
+from blocks.linked_checklist_block import LinkedChecklistBlock
 from blocks.list_block import ListBlock
 from blocks.quote_block import QuoteBlock
 from blocks.separator_block import SeparatorBlock
@@ -33,6 +34,7 @@ _ICON_RULES: list[tuple[type, str]] = [
     (HeadingBlock, "H"),
     (TextBlock, "¶"),
     (ChecklistBlock, "☑"),
+    (LinkedChecklistBlock, "⇄"),
     (ListBlock, "•"),
     (TableBlock, "▦"),
     (SimpleTableBlock, "▤"),

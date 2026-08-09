@@ -12,6 +12,7 @@ from blocks.code_block import CodeBlock
 from blocks.gantt_block import GanttBlock
 from blocks.heading_block import HeadingBlock
 from blocks.image_block import ImageBlock
+from blocks.linked_checklist_block import LinkedChecklistBlock
 from blocks.list_block import ListBlock
 from blocks.quote_block import QuoteBlock
 from blocks.separator_block import SeparatorBlock
@@ -39,6 +40,9 @@ def preview_for_block(block) -> str:
         if block.items:
             return _truncate(block.items[0].get("text", "")) or "(checklist)"
         return "(checklist vide)"
+
+    if isinstance(block, LinkedChecklistBlock):
+        return f"(checklists liées, {len(block.todo_items())} à faire / {len(block.done_items())} faites)"
 
     if isinstance(block, ListBlock):
         if block.items:
