@@ -7,6 +7,7 @@ d'un bloc, quel que soit son type.
 """
 from __future__ import annotations
 
+from blocks.bar_chart_block import BarChartBlock
 from blocks.checklist_block import ChecklistBlock
 from blocks.code_block import CodeBlock
 from blocks.dependency_gantt_block import DependencyGanttBlock
@@ -14,6 +15,7 @@ from blocks.formula_block import FormulaBlock
 from blocks.gantt_block import GanttBlock
 from blocks.heading_block import HeadingBlock
 from blocks.image_block import ImageBlock
+from blocks.line_chart_block import LineChartBlock
 from blocks.linked_checklist_block import LinkedChecklistBlock
 from blocks.list_block import ListBlock
 from blocks.quote_block import QuoteBlock
@@ -65,6 +67,12 @@ def preview_for_block(block) -> str:
 
     if isinstance(block, DependencyGanttBlock):
         return "(Gantt calculé par dépendances)"
+
+    if isinstance(block, LineChartBlock):
+        return f"(graphique en courbes, {len(block.series)} série(s))"
+
+    if isinstance(block, BarChartBlock):
+        return f"(graphique en bâtonnets, {len(block.bars)} barre(s))"
 
     if isinstance(block, FormulaBlock):
         return f"({block.label.strip() or 'résultat calculé'})"

@@ -175,6 +175,22 @@ def _to_number(value: Any) -> float:
         return 0.0
 
 
+def compute_efficiency_ratio(document, block: "DependencyGanttBlock") -> Optional[float]:
+    """Ratio "vélocité réelle" = durée planifiée totale / (durée planifiée
+    totale + retard total), utilisé par le bloc graphique "Courbes"
+    pour tracer une droite de vélocité réelle du planning. None si le
+    planning est vide ou sans aucune durée."""
+    schedule = compute_schedule(document, block)
+    if not schedule:
+        return None
+    total_duration = sum(t["duration"] for t in schedule)
+    total_delay = sum(max(t["delta"], 0.0) for t in schedule)
+    denominator = total_duration + total_delay
+    if denominator <= 0:
+        return None
+    return total_duration / denominator
+
+
 def compute_schedule(document, block: DependencyGanttBlock) -> list[dict[str, Any]]:
     """Calcule le planning complet à partir de l'état actuel du document.
 

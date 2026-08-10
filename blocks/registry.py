@@ -11,12 +11,14 @@ from typing import Any
 
 from blocks.checklist_block import CHECKLIST_BLOCK_TYPE, ChecklistBlock
 from blocks.code_block import CODE_BLOCK_TYPE, CodeBlock
+from blocks.bar_chart_block import BAR_CHART_BLOCK_TYPE, BarChartBlock
 from blocks.dependency_gantt_block import DEPENDENCY_GANTT_BLOCK_TYPE, DependencyGanttBlock
 from blocks.formula_block import FORMULA_BLOCK_TYPE, FormulaBlock
 from blocks.gantt_block import GANTT_BLOCK_TYPE, GanttBlock
 from blocks.heading_block import HEADING_TYPES, HeadingBlock
 from blocks.image_block import IMAGE_BLOCK_TYPE, ImageBlock
 from blocks.linked_checklist_block import LINKED_CHECKLIST_BLOCK_TYPE, LinkedChecklistBlock
+from blocks.line_chart_block import LINE_CHART_BLOCK_TYPE, LineChartBlock
 from blocks.list_block import LIST_BLOCK_TYPE, ListBlock
 from blocks.quote_block import QUOTE_BLOCK_TYPE, QuoteBlock
 from blocks.separator_block import SEPARATOR_BLOCK_TYPE, SeparatorBlock
@@ -94,6 +96,22 @@ def block_from_dict(raw: dict[str, Any]) -> Block:
             risk_column_id=data.get("risk_column_id"),
             dependency_column_id=data.get("dependency_column_id"),
             deltas=data.get("deltas", {}),
+            id=block_id,
+        )
+
+    if block_type == LINE_CHART_BLOCK_TYPE:
+        return LineChartBlock(
+            title=data.get("title", "Efficacité"),
+            x_max=data.get("x_max", 10.0),
+            series=data.get("series", []),
+            id=block_id,
+        )
+
+    if block_type == BAR_CHART_BLOCK_TYPE:
+        return BarChartBlock(
+            title=data.get("title", "Graphique"),
+            y_axis_label=data.get("y_axis_label", ""),
+            bars=data.get("bars", []),
             id=block_id,
         )
 

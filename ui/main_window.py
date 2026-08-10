@@ -28,7 +28,9 @@ from blocks.code_block import CodeBlock
 from blocks.formula_block import FormulaBlock
 from blocks.heading_block import HeadingBlock
 from blocks.image_block import ImageBlock
+from blocks.bar_chart_block import BarChartBlock
 from blocks.dependency_gantt_block import DependencyGanttBlock
+from blocks.line_chart_block import LineChartBlock
 from blocks.gantt_block import GanttBlock
 from blocks.linked_checklist_block import LinkedChecklistBlock
 from blocks.list_block import ListBlock
@@ -51,7 +53,9 @@ from ui.blocks.block_container import BlockContainer
 from ui.blocks.checklist_block_widget import ChecklistBlockWidget
 from ui.blocks.code_block_widget import CodeBlockWidget
 from ui.blocks.formula_block_widget import FormulaBlockWidget
+from ui.blocks.bar_chart_block_widget import BarChartBlockWidget
 from ui.blocks.dependency_gantt_block_widget import DependencyGanttBlockWidget
+from ui.blocks.line_chart_block_widget import LineChartBlockWidget
 from ui.blocks.gantt_block_widget import GanttBlockWidget
 from ui.blocks.heading_block_widget import HeadingBlockWidget
 from ui.blocks.image_block_widget import ImageBlockWidget
@@ -474,6 +478,10 @@ class MainWindow(QMainWindow):
             return GanttBlockWidget(block, self._document)
         if isinstance(block, DependencyGanttBlock):
             return DependencyGanttBlockWidget(block, self._document)
+        if isinstance(block, LineChartBlock):
+            return LineChartBlockWidget(block, self._document)
+        if isinstance(block, BarChartBlock):
+            return BarChartBlockWidget(block)
         if isinstance(block, FormulaBlock):
             return FormulaBlockWidget(block, self._document)
         if isinstance(block, SeparatorBlock):
@@ -679,6 +687,8 @@ class MainWindow(QMainWindow):
             "simple_table": lambda: SimpleTableBlock(),
             "gantt": lambda: GanttBlock(),
             "dependency_gantt": lambda: DependencyGanttBlock(),
+            "line_chart": lambda: LineChartBlock(),
+            "bar_chart": lambda: BarChartBlock(),
             "formula": lambda: FormulaBlock(),
             "separator": lambda: SeparatorBlock(),
             "quote": lambda: QuoteBlock(),

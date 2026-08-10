@@ -13,7 +13,9 @@ from __future__ import annotations
 from blocks.checklist_block import ChecklistBlock
 from blocks.code_block import CodeBlock
 from blocks.formula_block import FormulaBlock, compute_formula_result, format_formula_text
+from blocks.bar_chart_block import BarChartBlock
 from blocks.dependency_gantt_block import DependencyGanttBlock, compute_schedule
+from blocks.line_chart_block import LineChartBlock, compute_line_series
 from blocks.gantt_block import GanttBlock, compute_gantt_rows
 from blocks.heading_block import HeadingBlock
 from blocks.image_block import ImageBlock
@@ -108,6 +110,21 @@ def _render_dependency_gantt_block(document, block: DependencyGanttBlock) -> str
     )
 
 
+def _render_line_chart_block(document, block: LineChartBlock) -> str:
+    series = compute_line_series(document, block)
+    if not series:
+        return f"**{block.title}** *(aucune série)*"
+    table = _markdown_table(["Droite", "Pente"], [[s["name"], str(s["slope"])] for s in series])
+    return f"**{block.title}**\n\n{table}"
+
+
+def _render_bar_chart_block(block: BarChartBlock) -> str:
+    if not block.bars:
+        return f"**{block.title}** *(aucune barre)*"
+    table = _markdown_table(["Catégorie", "Valeur"], [[b["label"], str(b["value"])] for b in block.bars])
+    return f"**{block.title}** ({block.y_axis_label})\n\n{table}"
+
+
 def _render_checklist_block(block: ChecklistBlock) -> str:
     return "\n".join(
         f"- [{'x' if item.get('checked') else ' '}] {item.get('text', '')}"
@@ -150,6 +167,10 @@ def _render_block(document, block) -> str:
         return _render_dependency_gantt_block(document, block)
     if isinstance(block, FormulaBlock):
         return format_formula_text(block, compute_formula_result(document, block))
+    if isinstance(block, LineChartBlock):
+        return _render_line_chart_block(document, block)
+    if isinstance(block, BarChartBlock):
+        return _render_bar_chart_block(block)
     if isinstance(block, ImageBlock):
         if not block.data.get("image_base64"):
             return "*(image vide)*"

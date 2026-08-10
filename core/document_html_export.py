@@ -13,7 +13,9 @@ import html as html_module
 from blocks.checklist_block import ChecklistBlock
 from blocks.code_block import CodeBlock
 from blocks.formula_block import FormulaBlock, compute_formula_result, format_formula_text
+from blocks.bar_chart_block import BarChartBlock
 from blocks.dependency_gantt_block import DependencyGanttBlock, compute_schedule
+from blocks.line_chart_block import LineChartBlock, compute_line_series
 from blocks.gantt_block import GanttBlock, compute_gantt_rows
 from blocks.heading_block import HeadingBlock
 from blocks.image_block import ImageBlock
@@ -103,6 +105,31 @@ def _render_dependency_gantt_block(document, block: DependencyGanttBlock) -> str
     )
 
 
+def _render_line_chart_block(document, block: LineChartBlock) -> str:
+    series = compute_line_series(document, block)
+    if not series:
+        return f"<p><b>{_esc(block.title)}</b> (aucune série)</p>"
+    rows_html = "".join(
+        f"<tr><td>{_esc(s['name'])}</td><td>{_esc(s['slope'])}</td></tr>" for s in series
+    )
+    return (
+        f"<p><b>{_esc(block.title)}</b></p>"
+        '<table border="1" cellspacing="0" cellpadding="4">'
+        "<tr><th>Droite</th><th>Pente</th></tr>" + rows_html + "</table>"
+    )
+
+
+def _render_bar_chart_block(block: BarChartBlock) -> str:
+    if not block.bars:
+        return f"<p><b>{_esc(block.title)}</b> (aucune barre)</p>"
+    rows_html = "".join(f"<tr><td>{_esc(b['label'])}</td><td>{_esc(b['value'])}</td></tr>" for b in block.bars)
+    return (
+        f"<p><b>{_esc(block.title)}</b> ({_esc(block.y_axis_label)})</p>"
+        '<table border="1" cellspacing="0" cellpadding="4">'
+        "<tr><th>Catégorie</th><th>Valeur</th></tr>" + rows_html + "</table>"
+    )
+
+
 def _render_checklist_block(block: ChecklistBlock) -> str:
     items = "".join(
         f"<li>{'☑' if item.get('checked') else '☐'} {_esc(item.get('text', ''))}</li>"
@@ -150,6 +177,10 @@ def _render_block(document, block) -> str:
         return _render_dependency_gantt_block(document, block)
     if isinstance(block, FormulaBlock):
         return f"<p>{_esc(format_formula_text(block, compute_formula_result(document, block)))}</p>"
+    if isinstance(block, LineChartBlock):
+        return _render_line_chart_block(document, block)
+    if isinstance(block, BarChartBlock):
+        return _render_bar_chart_block(block)
     if isinstance(block, ImageBlock):
         if not block.data.get("image_base64"):
             return "<p><i>(image vide)</i></p>"

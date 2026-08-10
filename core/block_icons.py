@@ -9,6 +9,7 @@ vérité, réutilisable aussi bien par l'UI que par d'éventuels exports
 """
 from __future__ import annotations
 
+from blocks.bar_chart_block import BarChartBlock
 from blocks.checklist_block import ChecklistBlock
 from blocks.code_block import CodeBlock
 from blocks.dependency_gantt_block import DependencyGanttBlock
@@ -16,6 +17,7 @@ from blocks.formula_block import FormulaBlock
 from blocks.gantt_block import GanttBlock
 from blocks.heading_block import HeadingBlock
 from blocks.image_block import ImageBlock
+from blocks.line_chart_block import LineChartBlock
 from blocks.linked_checklist_block import LinkedChecklistBlock
 from blocks.list_block import ListBlock
 from blocks.quote_block import QuoteBlock
@@ -42,6 +44,8 @@ _ICON_RULES: list[tuple[type, str]] = [
     (SimpleTableBlock, "▤"),
     (GanttBlock, "📊"),
     (DependencyGanttBlock, "📈"),
+    (LineChartBlock, "📉"),
+    (BarChartBlock, "📶"),
     (FormulaBlock, "Σ"),
     (ImageBlock, "🖼"),
     (QuoteBlock, "❝"),
