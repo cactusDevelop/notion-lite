@@ -33,7 +33,10 @@ class _LineChartCanvas(QWidget):
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self._series: list[dict] = []
-        self.setMinimumHeight(220)
+        # PATCH 49 — graphique carré et compact (au lieu de s'étirer sur
+        # toute la largeur du bloc), demandé pour rester lisible sans
+        # dominer la mise en page.
+        self.setFixedSize(260, 260)
 
     def set_series(self, series: list[dict]) -> None:
         self._series = series
@@ -98,7 +101,7 @@ class LineChartBlockWidget(QWidget):
         layout.addLayout(header)
 
         self._canvas = _LineChartCanvas(self)
-        layout.addWidget(self._canvas)
+        layout.addWidget(self._canvas, 0, Qt.AlignLeft)
 
         self._series_area = QGridLayout()
         layout.addLayout(self._series_area)

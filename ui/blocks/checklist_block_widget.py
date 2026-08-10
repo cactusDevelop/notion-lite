@@ -43,6 +43,7 @@ class _ChecklistItemRow(QWidget):
         self.line_edit.setText(text)
         self.line_edit.setPlaceholderText("Élément de la liste...")
         self.line_edit.textChanged.connect(self._on_text_changed)
+        self.line_edit.returnPressed.connect(self._on_return_pressed)
         layout.addWidget(self.line_edit, 1)
 
         remove_button = QToolButton(self)
@@ -56,6 +57,12 @@ class _ChecklistItemRow(QWidget):
 
     def _on_text_changed(self, text: str) -> None:
         self._owner.on_item_text_changed(self, text)
+
+    def _on_return_pressed(self) -> None:
+        """PATCH 49 — Entrée dans le champ ajoute un nouvel élément,
+        comme le bouton "+ Ajouter un élément", et donne le focus au
+        nouveau champ."""
+        self._owner.insert_row_after(self)
 
 
 class ChecklistBlockWidget(QWidget):
@@ -115,6 +122,14 @@ class ChecklistBlockWidget(QWidget):
         item = self._block.add_item()
         row = self._append_row(item)
         row.line_edit.setFocus()
+
+    def insert_row_after(self, row: "_ChecklistItemRow") -> None:
+        """PATCH 49 — Ajoute un nouvel élément (identique au bouton
+        "+ Ajouter un élément") suite à un appui sur Entrée dans une
+        ligne existante, et donne le focus au nouveau champ."""
+        item = self._block.add_item()
+        new_row = self._append_row(item)
+        new_row.line_edit.setFocus()
 
     def remove_row(self, row: "_ChecklistItemRow") -> None:
         self._block.remove_item(row.item_id)

@@ -10,12 +10,14 @@ from __future__ import annotations
 
 from PySide6.QtCore import QDate, Qt
 from PySide6.QtWidgets import (
+    QAbstractScrollArea,
     QCheckBox,
     QComboBox,
     QDateEdit,
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QSizePolicy,
     QSpinBox,
     QTableWidget,
     QTableWidgetItem,
@@ -63,6 +65,12 @@ class TableBlockWidget(QWidget):
         self._table.horizontalHeader().sectionDoubleClicked.connect(
             self._on_header_double_clicked
         )
+        # PATCH 49 — évite que le tableau soit comprimé dans une hauteur
+        # par défaut trop petite (avec sa propre scrollbar interne) :
+        # sa hauteur s'ajuste au nombre de lignes (voir _adjust_table_height).
+        self._table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self._table.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self._table.setSizeAdjustPolicy(QAbstractScrollArea.AdjustToContents)
         layout.addWidget(self._table)
 
         buttons = QHBoxLayout()
@@ -113,7 +121,43 @@ class TableBlockWidget(QWidget):
             for col_index, column in enumerate(columns):
                 self._set_cell_display(row_index, col_index, row, column)
 
+        self._apply_merged_cells(columns, rows)
+        self._adjust_table_height()
         self._syncing = False
+
+    def _apply_merged_cells(self, columns: list[dict], rows: list[dict]) -> None:
+        """PATCH 49 — fusionne visuellement les cellules consécutives d'une
+        même colonne "Texte" qui ont la valeur identique (ex : plusieurs
+        lignes "Phase 1" à la suite), pour éviter la répétition inutile.
+        Ne modifie jamais les données du bloc, uniquement l'affichage
+        (setSpan) ; refait à chaque _rebuild.
+        """
+        self._table.clearSpans()
+        for col_index, column in enumerate(columns):
+            if column["type"] != COLUMN_TYPE_TEXT:
+                continue
+            run_start = 0
+            while run_start < len(rows):
+                value = rows[run_start]["cells"].get(column["id"])
+                run_end = run_start + 1
+                while run_end < len(rows) and rows[run_end]["cells"].get(column["id"]) == value and value:
+                    run_end += 1
+                run_length = run_end - run_start
+                if run_length > 1:
+                    self._table.setSpan(run_start, col_index, run_length, 1)
+                run_start = run_end
+
+    def _adjust_table_height(self) -> None:
+        """PATCH 49 — dimensionne le tableau à son contenu réel (au lieu de
+        la hauteur par défaut de QTableWidget, qui le fait paraître
+        comprimé avec une scrollbar interne)."""
+        self._table.resizeRowsToContents()
+        header_height = self._table.horizontalHeader().height()
+        rows_height = sum(self._table.rowHeight(i) for i in range(self._table.rowCount()))
+        frame = 2 * self._table.frameWidth()
+        total_height = header_height + rows_height + frame + 4
+        self._table.setMinimumHeight(max(total_height, header_height + 40))
+        self._table.setMaximumHeight(max(total_height, header_height + 40))
 
     def _set_cell_display(self, row_index: int, col_index: int, row: dict, column: dict) -> None:
         """Place le widget/item adapté au type de `column` dans la grille."""

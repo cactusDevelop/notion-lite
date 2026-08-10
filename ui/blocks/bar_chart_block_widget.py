@@ -1,10 +1,13 @@
 """
-Widget graphique du bloc "Graphique en bâtonnets" (PATCH 47).
+Widget graphique du bloc "Graphique en bâtonnets" (PATCH 47, révisé PATCH 49).
+
+Barre pleine bleue = "Prévu". Marqueur en pointillés = "Réel" (rouge
+en dépassement de budget, vert sinon), si renseigné.
 """
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor, QPainter
+from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtWidgets import (
     QDoubleSpinBox,
     QGridLayout,
@@ -16,7 +19,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from blocks.bar_chart_block import BarChartBlock
+from blocks.bar_chart_block import BarChartBlock, budget_marker_color
 
 _MARGIN = 30
 
@@ -54,7 +57,9 @@ class _BarChartCanvas(QWidget):
             painter.end()
             return
 
-        max_value = max((abs(b["value"]) for b in self._bars), default=1.0) or 1.0
+        max_value = max(
+            (max(abs(b["value"]), abs(b["actual"] or 0)) for b in self._bars), default=1.0
+        ) or 1.0
         slot_w = plot_w / len(self._bars)
         bar_w = slot_w * 0.6
 
@@ -62,15 +67,29 @@ class _BarChartCanvas(QWidget):
             bar_h = abs(bar["value"]) / max_value * plot_h
             x = _MARGIN + i * slot_w + (slot_w - bar_w) / 2
             y = h - _MARGIN - bar_h
+            # Barre "Prévu" pleine, toujours bleue.
             painter.fillRect(int(x), int(y), int(bar_w), int(bar_h), QColor(bar["color"]))
             painter.drawText(int(x - 10), h - _MARGIN + 2, int(bar_w + 20), 16, Qt.AlignCenter, bar["label"])
             painter.drawText(int(x - 10), int(y) - 16, int(bar_w + 20), 16, Qt.AlignCenter, str(bar["value"]))
+
+            # Marqueur "Réel" en pointillés (rouge si dépassement, vert sinon).
+            marker_color = budget_marker_color(bar)
+            if marker_color is not None:
+                actual_h = abs(bar["actual"]) / max_value * plot_h
+                actual_y = h - _MARGIN - actual_h
+                pen = QPen(QColor(marker_color), 2, Qt.DashLine)
+                painter.setPen(pen)
+                painter.drawLine(int(x), int(actual_y), int(x + bar_w), int(actual_y))
+                painter.drawText(
+                    int(x - 10), int(actual_y) - 16, int(bar_w + 20), 16, Qt.AlignCenter, str(bar["actual"])
+                )
+                painter.setPen(QPen(QColor("#000000")))
 
         painter.end()
 
 
 class BarChartBlockWidget(QWidget):
-    """Widget d'un BarChartBlock : titre, barres éditables (label + valeur), graphique."""
+    """Widget d'un BarChartBlock : titre, barres éditables (Prévu + Réel), graphique."""
 
     def __init__(self, block: BarChartBlock, parent=None) -> None:
         super().__init__(parent)
@@ -94,6 +113,9 @@ class BarChartBlockWidget(QWidget):
         layout.addWidget(self._canvas)
 
         self._bars_area = QGridLayout()
+        self._bars_area.addWidget(QLabel("<b>Phase</b>", self), 0, 0)
+        self._bars_area.addWidget(QLabel("<b>Prévu</b>", self), 0, 1)
+        self._bars_area.addWidget(QLabel("<b>Réel</b>", self), 0, 2)
         layout.addLayout(self._bars_area)
 
         add_button = QPushButton("+ Ajouter une barre", self)
@@ -108,13 +130,14 @@ class BarChartBlockWidget(QWidget):
         return self._block
 
     def _rebuild_bar_rows(self) -> None:
-        while self._bars_area.count():
-            item = self._bars_area.takeAt(0)
-            widget = item.widget()
-            if widget is not None:
-                widget.deleteLater()
+        # Conserve la ligne d'en-tête (ligne 0), vide seulement les lignes de données.
+        for row_index in range(1, self._bars_area.rowCount()):
+            for col in range(4):
+                item = self._bars_area.itemAtPosition(row_index, col)
+                if item is not None and item.widget() is not None:
+                    item.widget().deleteLater()
 
-        for row_index, bar in enumerate(self._block.bars):
+        for row_index, bar in enumerate(self._block.bars, start=1):
             label_edit = QLineEdit(bar["label"], self)
             label_edit.textChanged.connect(lambda text, bid=bar["id"]: self._on_bar_label_changed(bid, text))
             self._bars_area.addWidget(label_edit, row_index, 0)
@@ -125,9 +148,15 @@ class BarChartBlockWidget(QWidget):
             value_spin.valueChanged.connect(lambda v, bid=bar["id"]: self._on_bar_value_changed(bid, v))
             self._bars_area.addWidget(value_spin, row_index, 1)
 
+            actual_spin = QDoubleSpinBox(self)
+            actual_spin.setRange(-1000000, 1000000)
+            actual_spin.setValue(bar["actual"] if bar["actual"] is not None else 0.0)
+            actual_spin.valueChanged.connect(lambda v, bid=bar["id"]: self._on_bar_actual_changed(bid, v))
+            self._bars_area.addWidget(actual_spin, row_index, 2)
+
             remove_button = QPushButton("×", self)
             remove_button.clicked.connect(lambda _, bid=bar["id"]: self._on_remove_bar(bid))
-            self._bars_area.addWidget(remove_button, row_index, 2)
+            self._bars_area.addWidget(remove_button, row_index, 3)
 
     def _refresh_canvas(self) -> None:
         self._canvas.set_data(self._block.bars, self._block.y_axis_label)
@@ -142,7 +171,7 @@ class BarChartBlockWidget(QWidget):
         self._refresh_canvas()
 
     def _on_add_bar(self) -> None:
-        self._block.add_bar(label=f"Barre {len(self._block.bars) + 1}", value=0)
+        self._block.add_bar(label=f"Phase {len(self._block.bars) + 1}", value=0)
         self._rebuild_bar_rows()
         self._refresh_canvas()
 
@@ -157,4 +186,8 @@ class BarChartBlockWidget(QWidget):
 
     def _on_bar_value_changed(self, bar_id: str, value: float) -> None:
         self._block.set_bar_value(bar_id, value)
+        self._refresh_canvas()
+
+    def _on_bar_actual_changed(self, bar_id: str, value: float) -> None:
+        self._block.set_bar_actual(bar_id, value)
         self._refresh_canvas()
