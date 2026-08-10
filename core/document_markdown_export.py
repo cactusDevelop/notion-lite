@@ -121,7 +121,10 @@ def _render_line_chart_block(document, block: LineChartBlock) -> str:
 def _render_bar_chart_block(block: BarChartBlock) -> str:
     if not block.bars:
         return f"**{block.title}** *(aucune barre)*"
-    table = _markdown_table(["Catégorie", "Valeur"], [[b["label"], str(b["value"])] for b in block.bars])
+    table = _markdown_table(
+        ["Catégorie", "Prévu", "Réel"],
+        [[b["label"], str(b["value"]), str(b["actual"]) if b["actual"] is not None else "—"] for b in block.bars],
+    )
     return f"**{block.title}** ({block.y_axis_label})\n\n{table}"
 
 

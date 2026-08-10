@@ -107,17 +107,18 @@ def build_momo_template() -> Document:
     duration_col = tasks_table.add_column("Temps estimé (jours)", col_type=COLUMN_TYPE_NUMBER)
     risk_col = tasks_table.add_column("Risques", col_type=COLUMN_TYPE_SELECT, options=list(_RISK_OPTIONS))
     dependency_col = tasks_table.add_column("Dépendances", col_type=COLUMN_TYPE_MULTI_SELECT)
+    delta_col = tasks_table.add_column("Ecarts", col_type=COLUMN_TYPE_NUMBER)
 
     example_tasks = [
-        ("Phase 1", "Conception", [people[0]["id"]], "3", "vert", []),
-        ("Phase 1", "Maquettes", [people[1]["id"]], "2", "orange", ["Conception"]),
-        ("Phase 2", "Développement", [people[1]["id"], people[2]["id"]], "5", "orange", ["Maquettes"]),
-        ("Phase 2", "Tests", [people[2]["id"]], "2.5", "rouge", ["Développement"]),
+        ("Phase 1", "Conception", [people[0]["id"]], "3", "vert", [], "0"),
+        ("Phase 1", "Maquettes", [people[1]["id"]], "2", "orange", ["Conception"], "0"),
+        ("Phase 2", "Développement", [people[1]["id"], people[2]["id"]], "5", "orange", ["Maquettes"], "0"),
+        ("Phase 2", "Tests", [people[2]["id"]], "2.5", "rouge", ["Développement"], "0"),
     ]
     subtask_labels = [row[1] for row in example_tasks]
     tasks_table.set_column_options(dependency_col["id"], subtask_labels)
 
-    for phase, subtask, assignees, duration, risk, dependencies in example_tasks:
+    for phase, subtask, assignees, duration, risk, dependencies, ecart in example_tasks:
         tasks_table.add_row(
             values={
                 phase_col["id"]: phase,
@@ -126,6 +127,7 @@ def build_momo_template() -> Document:
                 duration_col["id"]: duration,
                 risk_col["id"]: risk,
                 dependency_col["id"]: dependencies,
+                delta_col["id"]: ecart,
             }
         )
     document.add_block(tasks_table)
@@ -137,6 +139,7 @@ def build_momo_template() -> Document:
         duration_column_id=duration_col["id"],
         risk_column_id=risk_col["id"],
         dependency_column_id=dependency_col["id"],
+        delta_column_id=delta_col["id"],
     )
     document.add_block(gantt)
 
@@ -153,10 +156,11 @@ def build_momo_template() -> Document:
     )
     document.add_block(efficiency_chart)
 
-    # -- Graphique "Delta de budget" (contenu provisoire) -------------------
+    # -- Graphique "Delta de budget" (une barre "Prévu" par phase, marqueur
+    # "Réel" en pointillés — contenu provisoire) -----------------------------
     budget_chart = BarChartBlock(title="Delta de budget", y_axis_label="Prix")
-    budget_chart.add_bar(label="Prévu", value=1000, color="#7986cb")
-    budget_chart.add_bar(label="Réel", value=1200, color="#e57373")
+    budget_chart.add_bar(label="Phase 1", value=1000, actual=1150)
+    budget_chart.add_bar(label="Phase 2", value=1500, actual=1400)
     document.add_block(budget_chart)
 
     return document

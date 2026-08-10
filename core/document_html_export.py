@@ -122,11 +122,15 @@ def _render_line_chart_block(document, block: LineChartBlock) -> str:
 def _render_bar_chart_block(block: BarChartBlock) -> str:
     if not block.bars:
         return f"<p><b>{_esc(block.title)}</b> (aucune barre)</p>"
-    rows_html = "".join(f"<tr><td>{_esc(b['label'])}</td><td>{_esc(b['value'])}</td></tr>" for b in block.bars)
+    rows_html = "".join(
+        f"<tr><td>{_esc(b['label'])}</td><td>{_esc(b['value'])}</td>"
+        f"<td>{_esc(b['actual']) if b['actual'] is not None else '—'}</td></tr>"
+        for b in block.bars
+    )
     return (
         f"<p><b>{_esc(block.title)}</b> ({_esc(block.y_axis_label)})</p>"
         '<table border="1" cellspacing="0" cellpadding="4">'
-        "<tr><th>Catégorie</th><th>Valeur</th></tr>" + rows_html + "</table>"
+        "<tr><th>Catégorie</th><th>Prévu</th><th>Réel</th></tr>" + rows_html + "</table>"
     )
 
 

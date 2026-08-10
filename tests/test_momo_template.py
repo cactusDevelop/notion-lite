@@ -109,8 +109,10 @@ def test_efficiency_chart_tracks_the_gantt_block():
     assert series[2]["slope"] == 1.0
 
     # Un retard sur une sous-tâche fait baisser la vélocité réelle.
+    # Le Gantt du template a une colonne "Ecarts" configurée : l'écart se
+    # règle désormais via cette colonne du tableau, plus via set_delta.
     table = document.find_block(gantt.table_block_id)
-    gantt.set_delta(table.rows[0]["id"], 5)
+    table.set_cell(table.rows[0]["id"], gantt.delta_column_id, "5")
     series_after_delay = compute_line_series(document, chart)
     assert series_after_delay[2]["slope"] < 1.0
 
@@ -119,7 +121,8 @@ def test_budget_chart_has_two_placeholder_bars():
     document = build_momo_template()
     chart = document.blocks[12]
     assert isinstance(chart, BarChartBlock)
-    assert [b["label"] for b in chart.bars] == ["Prévu", "Réel"]
+    assert [b["label"] for b in chart.bars] == ["Phase 1", "Phase 2"]
+    assert all(b["actual"] is not None for b in chart.bars)
 
 
 def test_template_document_roundtrips_through_json():

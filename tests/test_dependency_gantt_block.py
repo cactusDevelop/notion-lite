@@ -176,3 +176,50 @@ def test_roundtrip_via_registry_preserves_deltas():
 
 def row_label(table, row, label_col):
     return row["cells"].get(label_col["id"])
+
+
+def test_delta_from_column_takes_priority_over_legacy_deltas():
+    doc, table, label_col, person_col, duration_col, risk_col, dep_col = _build_document()
+    delta_col = table.add_column("Ecarts", col_type=COLUMN_TYPE_NUMBER)
+    gantt = DependencyGanttBlock(
+        table_block_id=table.id,
+        label_column_id=label_col["id"],
+        person_column_id=person_col["id"],
+        duration_column_id=duration_col["id"],
+        risk_column_id=risk_col["id"],
+        dependency_column_id=dep_col["id"],
+        delta_column_id=delta_col["id"],
+    )
+    doc.add_block(gantt)
+
+    conception_row = next(r for r in table.rows if row_label(table, r, label_col) == "Conception")
+    # Un ancien "delta" côté bloc est ignoré dès qu'une colonne "Ecarts" est configurée.
+    gantt.set_delta(conception_row["id"], 99)
+    table.set_cell(conception_row["id"], delta_col["id"], "2")
+
+    schedule = compute_schedule(doc, gantt)
+    conception = next(r for r in schedule if r["label"] == "Conception")
+    assert conception["delta"] == 2.0
+    assert conception["resolution"] == 5.0
+
+
+def test_delta_column_updates_cascade_like_legacy_delta():
+    doc, table, label_col, person_col, duration_col, risk_col, dep_col = _build_document()
+    delta_col = table.add_column("Ecarts", col_type=COLUMN_TYPE_NUMBER)
+    gantt = DependencyGanttBlock(
+        table_block_id=table.id,
+        label_column_id=label_col["id"],
+        person_column_id=person_col["id"],
+        duration_column_id=duration_col["id"],
+        risk_column_id=risk_col["id"],
+        dependency_column_id=dep_col["id"],
+        delta_column_id=delta_col["id"],
+    )
+    doc.add_block(gantt)
+
+    conception_row = next(r for r in table.rows if row_label(table, r, label_col) == "Conception")
+    table.set_cell(conception_row["id"], delta_col["id"], "-1")
+
+    schedule = compute_schedule(doc, gantt)
+    dev = next(r for r in schedule if r["label"] == "Développement")
+    assert dev["start"] == 2.0
