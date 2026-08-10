@@ -1,5 +1,5 @@
 """
-Bloc "Gantt (dépendances)" (PATCH 46).
+Bloc "Gantt (dépendances)" (PATCH 46, révisé PATCH 49).
 
 Contrairement à GanttBlock (qui lit des dates absolues), ce bloc
 calcule un planning à partir de DURÉES (colonne "Nombre", en jours)
@@ -8,14 +8,17 @@ les valeurs sont les libellés d'autres lignes) : la date de début
 d'une sous-tâche est déterminée par la résolution de ses dépendances,
 pas par une date saisie.
 
-Seule donnée propre au bloc (en plus des références de colonnes,
-comme GanttBlock) : `deltas`, un dictionnaire {row_id: jours}
-permettant de déclarer manuellement un retard (valeur positive,
-rendu en noir) ou une avance (valeur négative, rendu en bleu) sur une
-sous-tâche. Ce n'est pas une donnée de "planning" à proprement parler
-(elle ne duplique aucune colonne du tableau) mais une annotation
-propre à la vue Gantt, il n'y a donc pas d'autre endroit où la
-stocker.
+Deux façons de déclarer un retard/avance (en jours) sur une
+sous-tâche :
+    - `delta_column_id` (PATCH 49) : référence vers une colonne
+      "Nombre" du tableau source (ex : "Ecarts"). Dès qu'elle est
+      configurée, c'est TOUJOURS elle qui fait foi — l'écart se
+      règle alors directement dans le tableau, comme n'importe
+      quelle autre valeur d'une sous-tâche.
+    - `deltas` (historique, PATCH 46) : dictionnaire {row_id: jours}
+      propre au bloc, utilisé uniquement tant qu'aucune
+      `delta_column_id` n'est configurée (rétrocompatibilité avec
+      les documents créés avant PATCH 49).
 
 Le point de résolution d'une sous-tâche (utilisé comme date de début
 des sous-tâches qui en dépendent) est toujours `fin_planifiée + delta` :
@@ -24,6 +27,11 @@ des sous-tâches qui en dépendent) est toujours `fin_planifiée + delta` :
     - delta < 0 : la sous-tâche a fini en avance, le temps gagné (la
       fin de la barre normale) est recoloré en bleu.
     - delta == 0 : résolution à l'heure, à la fin planifiée.
+
+Le planning est toujours calculé et stocké EN JOURS ; PATCH 49
+ajoute uniquement un affichage optionnel "en mois" côté widget
+(`DAYS_PER_MONTH` / `format_duration_in_unit` ci-dessous), sans
+jamais changer l'unité de stockage.
 """
 from __future__ import annotations
 
@@ -49,6 +57,22 @@ RISK_COLORS: dict[str, str] = {
 }
 _DEFAULT_BAR_COLOR = "#4db6ac"
 
+# PATCH 49 — équivalence utilisée uniquement pour l'affichage "en mois"
+# (le stockage reste toujours en jours).
+DAYS_PER_MONTH = 30.0
+
+UNIT_DAYS = "jours"
+UNIT_MONTHS = "mois"
+
+
+def format_duration_in_unit(days: float, unit: str) -> str:
+    """Formate une durée (toujours reçue en jours) pour l'affichage,
+    selon `unit` ("jours" ou "mois"). Ne change jamais la valeur
+    stockée, uniquement le texte affiché."""
+    if unit == UNIT_MONTHS:
+        return f"{days / DAYS_PER_MONTH:g} mois"
+    return f"{days:g} j"
+
 
 class DependencyGanttBlock(Block):
     """Bloc Gantt calculé à partir de durées et de dépendances.
@@ -70,6 +94,7 @@ class DependencyGanttBlock(Block):
         duration_column_id: Optional[str] = None,
         risk_column_id: Optional[str] = None,
         dependency_column_id: Optional[str] = None,
+        delta_column_id: Optional[str] = None,
         deltas: dict[str, float] | None = None,
         id: str | None = None,
     ) -> None:
@@ -82,6 +107,7 @@ class DependencyGanttBlock(Block):
                 "duration_column_id": duration_column_id,
                 "risk_column_id": risk_column_id,
                 "dependency_column_id": dependency_column_id,
+                "delta_column_id": delta_column_id,
                 "deltas": dict(deltas or {}),
             },
             id=id or str(uuid.uuid4()),
@@ -111,6 +137,10 @@ class DependencyGanttBlock(Block):
     def dependency_column_id(self) -> Optional[str]:
         return self.data.get("dependency_column_id")
 
+    @property
+    def delta_column_id(self) -> Optional[str]:
+        return self.data.get("delta_column_id")
+
     def set_source(
         self,
         table_block_id: Optional[str],
@@ -119,6 +149,7 @@ class DependencyGanttBlock(Block):
         duration_column_id: Optional[str] = None,
         risk_column_id: Optional[str] = None,
         dependency_column_id: Optional[str] = None,
+        delta_column_id: Optional[str] = None,
     ) -> None:
         self.data["table_block_id"] = table_block_id
         self.data["label_column_id"] = label_column_id
@@ -126,6 +157,7 @@ class DependencyGanttBlock(Block):
         self.data["duration_column_id"] = duration_column_id
         self.data["risk_column_id"] = risk_column_id
         self.data["dependency_column_id"] = dependency_column_id
+        self.data["delta_column_id"] = delta_column_id
 
     @property
     def deltas(self) -> dict[str, float]:
