@@ -84,6 +84,7 @@ from ui.themes.theme import (
     current_theme,
     toggle_theme,
 )
+from ui.settings import get_heading_extra_spacing, set_heading_extra_spacing
 from ui.toolbar import MainToolBar
 
 # Racine du projet (deux niveaux au-dessus de ce fichier : ui/main_window.py).
@@ -290,6 +291,13 @@ class MainWindow(QMainWindow):
             theme_group.addAction(action)
             theme_menu.addAction(action)
             self._theme_actions[theme_name] = action
+
+        view_menu.addSeparator()
+        self._heading_spacing_action = QAction("Espacer les titres", self)
+        self._heading_spacing_action.setCheckable(True)
+        self._heading_spacing_action.setChecked(get_heading_extra_spacing())
+        self._heading_spacing_action.triggered.connect(self._toggle_heading_spacing)
+        view_menu.addAction(self._heading_spacing_action)
     # -- Mise en forme (PATCH 5 / 6) -------------------------------------
 
     def _with_active(self, method):
@@ -400,6 +408,12 @@ class MainWindow(QMainWindow):
         new_theme = toggle_theme(QApplication.instance())
         self._dark_mode_action.setChecked(new_theme == THEME_DARK)
         self._sync_theme_menu(new_theme)
+
+    def _toggle_heading_spacing(self) -> None:
+        """PATCH 49 — bascule l'espacement supplémentaire au-dessus des
+        titres/sous-titres et redessine le document pour l'appliquer."""
+        set_heading_extra_spacing(self._heading_spacing_action.isChecked())
+        self._render_document()
 
     def _set_theme(self, theme_name: str) -> None:
         """PATCH 33 — Applique un thème choisi dans le sous-menu "Thème"."""

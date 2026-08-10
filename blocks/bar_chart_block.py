@@ -1,9 +1,10 @@
 """
-Bloc "Graphique en bâtonnets" (PATCH 47).
+Bloc "Graphique en bâtonnets" (PATCH 47, révisé PATCH 49).
 
-Barres libres (catégorie + valeur), utilisées par exemple pour le
-graphique "Delta de budget" du template — dont le contenu exact sera
-défini plus tard, d'où des valeurs arbitraires par défaut.
+Barres "Prévu" (bleu) avec, pour chacune, une valeur "Réel"
+optionnelle affichée sous forme de marqueur en pointillés (rouge si
+le réel dépasse le prévu — dépassement de budget —, vert sinon).
+Utilisé par exemple pour le graphique "Delta de budget" du template.
 """
 from __future__ import annotations
 
@@ -14,6 +15,10 @@ from core.block import Block
 
 BAR_CHART_BLOCK_TYPE = "bar_chart"
 
+PLANNED_BAR_COLOR = "#1976d2"
+OVER_BUDGET_COLOR = "#e53935"
+UNDER_BUDGET_COLOR = "#43a047"
+
 
 class BarChartBlock(Block):
     """Bloc graphique en bâtonnets.
@@ -21,7 +26,10 @@ class BarChartBlock(Block):
     Données (data) :
         title: titre affiché au-dessus du graphique.
         y_axis_label: libellé de l'axe des ordonnées (ex : "Prix").
-        bars: liste de {id, label, value, color}.
+        bars: liste de {id, label, value, actual, color}.
+            value: montant "Prévu" (barre pleine bleue).
+            actual: montant "Réel" (marqueur en pointillés), ou None
+                si pas encore renseigné (aucun marqueur affiché).
     """
 
     def __init__(
@@ -33,7 +41,9 @@ class BarChartBlock(Block):
     ) -> None:
         normalized_bars: list[dict[str, Any]] = []
         for bar in bars or []:
-            normalized_bars.append({**bar, "id": bar.get("id") or str(uuid.uuid4())})
+            normalized = {**bar, "id": bar.get("id") or str(uuid.uuid4())}
+            normalized.setdefault("actual", None)
+            normalized_bars.append(normalized)
         super().__init__(
             type=BAR_CHART_BLOCK_TYPE,
             data={"title": title, "y_axis_label": y_axis_label, "bars": normalized_bars},
@@ -66,8 +76,20 @@ class BarChartBlock(Block):
                 return bar
         return None
 
-    def add_bar(self, label: str = "", value: float = 0.0, color: str = "#7986cb") -> dict[str, Any]:
-        bar = {"id": str(uuid.uuid4()), "label": label, "value": float(value), "color": color}
+    def add_bar(
+        self,
+        label: str = "",
+        value: float = 0.0,
+        actual: Optional[float] = None,
+        color: str = PLANNED_BAR_COLOR,
+    ) -> dict[str, Any]:
+        bar = {
+            "id": str(uuid.uuid4()),
+            "label": label,
+            "value": float(value),
+            "actual": float(actual) if actual is not None else None,
+            "color": color,
+        }
         self.bars.append(bar)
         return bar
 
@@ -91,3 +113,18 @@ class BarChartBlock(Block):
             return False
         bar["value"] = float(value)
         return True
+
+    def set_bar_actual(self, bar_id: str, actual: Optional[float]) -> bool:
+        bar = self._find_bar(bar_id)
+        if bar is None:
+            return False
+        bar["actual"] = float(actual) if actual is not None else None
+        return True
+
+
+def budget_marker_color(bar: dict[str, Any]) -> Optional[str]:
+    """Couleur du marqueur "Réel" : rouge en dépassement de budget
+    (réel > prévu), vert sinon. None si aucun "Réel" renseigné."""
+    if bar.get("actual") is None:
+        return None
+    return OVER_BUDGET_COLOR if bar["actual"] > bar["value"] else UNDER_BUDGET_COLOR
