@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from blocks.checklist_block import ChecklistBlock
 from blocks.code_block import CodeBlock
+from blocks.dependency_gantt_block import DependencyGanttBlock
 from blocks.formula_block import FormulaBlock
 from blocks.gantt_block import GanttBlock
 from blocks.heading_block import HeadingBlock
@@ -61,6 +62,9 @@ def preview_for_block(block) -> str:
 
     if isinstance(block, GanttBlock):
         return "(diagramme de Gantt)"
+
+    if isinstance(block, DependencyGanttBlock):
+        return "(Gantt calculé par dépendances)"
 
     if isinstance(block, FormulaBlock):
         return f"({block.label.strip() or 'résultat calculé'})"

@@ -11,6 +11,7 @@ from typing import Any
 
 from blocks.checklist_block import CHECKLIST_BLOCK_TYPE, ChecklistBlock
 from blocks.code_block import CODE_BLOCK_TYPE, CodeBlock
+from blocks.dependency_gantt_block import DEPENDENCY_GANTT_BLOCK_TYPE, DependencyGanttBlock
 from blocks.formula_block import FORMULA_BLOCK_TYPE, FormulaBlock
 from blocks.gantt_block import GANTT_BLOCK_TYPE, GanttBlock
 from blocks.heading_block import HEADING_TYPES, HeadingBlock
@@ -81,6 +82,18 @@ def block_from_dict(raw: dict[str, Any]) -> Block:
             number_column_id=data.get("number_column_id"),
             boolean_column_id=data.get("boolean_column_id"),
             label=data.get("label", "Résultat: "),
+            id=block_id,
+        )
+
+    if block_type == DEPENDENCY_GANTT_BLOCK_TYPE:
+        return DependencyGanttBlock(
+            table_block_id=data.get("table_block_id"),
+            label_column_id=data.get("label_column_id"),
+            person_column_id=data.get("person_column_id"),
+            duration_column_id=data.get("duration_column_id"),
+            risk_column_id=data.get("risk_column_id"),
+            dependency_column_id=data.get("dependency_column_id"),
+            deltas=data.get("deltas", {}),
             id=block_id,
         )
 

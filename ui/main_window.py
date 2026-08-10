@@ -28,6 +28,7 @@ from blocks.code_block import CodeBlock
 from blocks.formula_block import FormulaBlock
 from blocks.heading_block import HeadingBlock
 from blocks.image_block import ImageBlock
+from blocks.dependency_gantt_block import DependencyGanttBlock
 from blocks.gantt_block import GanttBlock
 from blocks.linked_checklist_block import LinkedChecklistBlock
 from blocks.list_block import ListBlock
@@ -50,6 +51,7 @@ from ui.blocks.block_container import BlockContainer
 from ui.blocks.checklist_block_widget import ChecklistBlockWidget
 from ui.blocks.code_block_widget import CodeBlockWidget
 from ui.blocks.formula_block_widget import FormulaBlockWidget
+from ui.blocks.dependency_gantt_block_widget import DependencyGanttBlockWidget
 from ui.blocks.gantt_block_widget import GanttBlockWidget
 from ui.blocks.heading_block_widget import HeadingBlockWidget
 from ui.blocks.image_block_widget import ImageBlockWidget
@@ -470,6 +472,8 @@ class MainWindow(QMainWindow):
             return SimpleTableBlockWidget(block)
         if isinstance(block, GanttBlock):
             return GanttBlockWidget(block, self._document)
+        if isinstance(block, DependencyGanttBlock):
+            return DependencyGanttBlockWidget(block, self._document)
         if isinstance(block, FormulaBlock):
             return FormulaBlockWidget(block, self._document)
         if isinstance(block, SeparatorBlock):
@@ -674,6 +678,7 @@ class MainWindow(QMainWindow):
             "table": self._new_default_table_block,
             "simple_table": lambda: SimpleTableBlock(),
             "gantt": lambda: GanttBlock(),
+            "dependency_gantt": lambda: DependencyGanttBlock(),
             "formula": lambda: FormulaBlock(),
             "separator": lambda: SeparatorBlock(),
             "quote": lambda: QuoteBlock(),

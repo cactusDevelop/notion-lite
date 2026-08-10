@@ -13,6 +13,7 @@ from __future__ import annotations
 from blocks.checklist_block import ChecklistBlock
 from blocks.code_block import CodeBlock
 from blocks.formula_block import FormulaBlock, compute_formula_result, format_formula_text
+from blocks.dependency_gantt_block import DependencyGanttBlock, compute_schedule
 from blocks.gantt_block import GanttBlock, compute_gantt_rows
 from blocks.heading_block import HeadingBlock
 from blocks.image_block import ImageBlock
@@ -94,6 +95,19 @@ def _render_gantt_block(document, block: GanttBlock) -> str:
     )
 
 
+def _render_dependency_gantt_block(document, block: DependencyGanttBlock) -> str:
+    schedule = compute_schedule(document, block)
+    if not schedule:
+        return "*(Gantt par dépendances vide ou non configuré)*"
+    return _markdown_table(
+        ["Sous-tâche", "Personnes", "Début", "Fin", "Résolution"],
+        [
+            [t["label"], ", ".join(t["person_names"]), str(t["start"]), str(t["end"]), str(t["resolution"])]
+            for t in schedule
+        ],
+    )
+
+
 def _render_checklist_block(block: ChecklistBlock) -> str:
     return "\n".join(
         f"- [{'x' if item.get('checked') else ' '}] {item.get('text', '')}"
@@ -132,6 +146,8 @@ def _render_block(document, block) -> str:
         return _render_simple_table_block(block)
     if isinstance(block, GanttBlock):
         return _render_gantt_block(document, block)
+    if isinstance(block, DependencyGanttBlock):
+        return _render_dependency_gantt_block(document, block)
     if isinstance(block, FormulaBlock):
         return format_formula_text(block, compute_formula_result(document, block))
     if isinstance(block, ImageBlock):

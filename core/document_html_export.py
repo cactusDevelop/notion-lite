@@ -13,6 +13,7 @@ import html as html_module
 from blocks.checklist_block import ChecklistBlock
 from blocks.code_block import CodeBlock
 from blocks.formula_block import FormulaBlock, compute_formula_result, format_formula_text
+from blocks.dependency_gantt_block import DependencyGanttBlock, compute_schedule
 from blocks.gantt_block import GanttBlock, compute_gantt_rows
 from blocks.heading_block import HeadingBlock
 from blocks.image_block import ImageBlock
@@ -85,6 +86,23 @@ def _render_gantt_block(document, block: GanttBlock) -> str:
     )
 
 
+def _render_dependency_gantt_block(document, block: DependencyGanttBlock) -> str:
+    schedule = compute_schedule(document, block)
+    if not schedule:
+        return "<p><i>(Gantt par dépendances vide ou non configuré)</i></p>"
+    rows_html = "".join(
+        f"<tr><td>{_esc(t['label'])}</td><td>{_esc(', '.join(t['person_names']))}</td>"
+        f"<td>{_esc(t['start'])}</td><td>{_esc(t['end'])}</td><td>{_esc(t['resolution'])}</td></tr>"
+        for t in schedule
+    )
+    return (
+        '<table border="1" cellspacing="0" cellpadding="4">'
+        "<tr><th>Sous-tâche</th><th>Personnes</th><th>Début</th><th>Fin</th><th>Résolution</th></tr>"
+        + rows_html
+        + "</table>"
+    )
+
+
 def _render_checklist_block(block: ChecklistBlock) -> str:
     items = "".join(
         f"<li>{'☑' if item.get('checked') else '☐'} {_esc(item.get('text', ''))}</li>"
@@ -128,6 +146,8 @@ def _render_block(document, block) -> str:
         return _render_simple_table_block(block)
     if isinstance(block, GanttBlock):
         return _render_gantt_block(document, block)
+    if isinstance(block, DependencyGanttBlock):
+        return _render_dependency_gantt_block(document, block)
     if isinstance(block, FormulaBlock):
         return f"<p>{_esc(format_formula_text(block, compute_formula_result(document, block)))}</p>"
     if isinstance(block, ImageBlock):

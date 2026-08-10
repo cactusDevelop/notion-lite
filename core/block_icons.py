@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from blocks.checklist_block import ChecklistBlock
 from blocks.code_block import CodeBlock
+from blocks.dependency_gantt_block import DependencyGanttBlock
 from blocks.formula_block import FormulaBlock
 from blocks.gantt_block import GanttBlock
 from blocks.heading_block import HeadingBlock
@@ -40,6 +41,7 @@ _ICON_RULES: list[tuple[type, str]] = [
     (TableBlock, "▦"),
     (SimpleTableBlock, "▤"),
     (GanttBlock, "📊"),
+    (DependencyGanttBlock, "📈"),
     (FormulaBlock, "Σ"),
     (ImageBlock, "🖼"),
     (QuoteBlock, "❝"),
