@@ -48,6 +48,7 @@ from core.document_markdown_export import document_to_markdown
 from core.document_markdown_import import markdown_to_document
 from core.document import Document
 from core.history import UndoHistory
+from core.momo_template import build_momo_template
 from core.version import __version__
 from ui.blocks.block_container import BlockContainer
 from ui.blocks.checklist_block_widget import ChecklistBlockWidget
@@ -121,7 +122,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(f"Notion Lite {__version__}")
         self.resize(1000, 700)
 
-        self._document = Document()
+        self._document = build_momo_template()
         self._active_text_widget: TextBlockWidget | None = None
         self._current_file: Path | None = None
 
@@ -177,17 +178,8 @@ class MainWindow(QMainWindow):
         self._scroll_area.setWidget(central)
         self.setCentralWidget(self._scroll_area)
 
-        # Document de démonstration pour valider les PATCH 3 et 4.
-        self._document.add_block(HeadingBlock(level=1, content="Titre principal"))
-        self._document.add_block(HeadingBlock(level=2, content="Sous-titre"))
-        self._document.add_block(HeadingBlock(level=3, content="Petit titre"))
-        self._document.add_block(
-            TextBlock(content="Ceci est un bloc de texte modifiable.")
-        )
-        checklist_demo = ChecklistBlock()
-        checklist_demo.add_item("Première tâche", checked=False)
-        checklist_demo.add_item("Deuxième tâche", checked=True)
-        self._document.add_block(checklist_demo)
+        # PATCH 48 — le document initial vient désormais du template
+        # "Méthodo Momo" (voir __init__), plus besoin de contenu de démo ici.
         self._render_document(focus_last=True)
 
         # -- Undo/Redo (PATCH 27) ------------------------------------
@@ -204,10 +196,14 @@ class MainWindow(QMainWindow):
         """Menu Fichier : Nouveau / Ouvrir / Sauvegarder / Sauvegarder sous (PATCH 8)."""
         file_menu = self.menuBar().addMenu("&Fichier")
 
-        new_action = QAction("Nouveau", self)
+        new_action = QAction("Nouveau (Méthodo Momo)", self)
         new_action.setShortcut(QKeySequence.New)
         new_action.triggered.connect(self._new_document)
         file_menu.addAction(new_action)
+
+        new_blank_action = QAction("Nouveau document vide", self)
+        new_blank_action.triggered.connect(self._new_blank_document)
+        file_menu.addAction(new_blank_action)
 
         open_action = QAction("Ouvrir...", self)
         open_action.setShortcut(QKeySequence.Open)
@@ -704,7 +700,13 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(title + (f" — {path.name}" if path else ""))
 
     def _new_document(self) -> None:
-        """PATCH 8 — Nouveau : repart d'un document vide."""
+        """PATCH 48 — Nouveau : repart du template par défaut "Méthodo Momo"."""
+        self._document = build_momo_template()
+        self._set_current_file(None)
+        self._render_document()
+
+    def _new_blank_document(self) -> None:
+        """PATCH 8 — Nouveau document vide (sans template)."""
         self._document = Document()
         self._set_current_file(None)
         self._render_document()
