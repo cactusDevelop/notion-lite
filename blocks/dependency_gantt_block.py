@@ -96,6 +96,7 @@ class DependencyGanttBlock(Block):
         dependency_column_id: Optional[str] = None,
         delta_column_id: Optional[str] = None,
         deltas: dict[str, float] | None = None,
+        time_unit: str = UNIT_DAYS,
         id: str | None = None,
     ) -> None:
         super().__init__(
@@ -109,6 +110,7 @@ class DependencyGanttBlock(Block):
                 "dependency_column_id": dependency_column_id,
                 "delta_column_id": delta_column_id,
                 "deltas": dict(deltas or {}),
+                "time_unit": time_unit,
             },
             id=id or str(uuid.uuid4()),
         )
@@ -140,6 +142,17 @@ class DependencyGanttBlock(Block):
     @property
     def delta_column_id(self) -> Optional[str]:
         return self.data.get("delta_column_id")
+
+    @property
+    def time_unit(self) -> str:
+        """PATCH 49 — unité d'affichage de l'axe temporel et des valeurs
+        chiffrées du planning ("jours" ou "mois"). Le stockage interne
+        reste toujours en jours, voir format_duration_in_unit()."""
+        return self.data.get("time_unit", UNIT_DAYS)
+
+    @time_unit.setter
+    def time_unit(self, value: str) -> None:
+        self.data["time_unit"] = value if value in (UNIT_DAYS, UNIT_MONTHS) else UNIT_DAYS
 
     def set_source(
         self,
@@ -189,6 +202,12 @@ def available_person_columns(table: TableBlock) -> list[dict[str, Any]]:
 
 
 def available_duration_columns(table: TableBlock) -> list[dict[str, Any]]:
+    return [c for c in table.columns if c["type"] == COLUMN_TYPE_NUMBER]
+
+
+def available_delta_columns(table: TableBlock) -> list[dict[str, Any]]:
+    """Colonnes "Nombre" utilisables comme colonne d'écart ("Ecarts") —
+    même filtre que la durée : n'importe quelle colonne numérique."""
     return [c for c in table.columns if c["type"] == COLUMN_TYPE_NUMBER]
 
 
@@ -244,6 +263,7 @@ def compute_schedule(document, block: DependencyGanttBlock) -> list[dict[str, An
     person_column = table._find_column(block.person_column_id) if block.person_column_id else None
     risk_column = table._find_column(block.risk_column_id) if block.risk_column_id else None
     dependency_column = table._find_column(block.dependency_column_id) if block.dependency_column_id else None
+    delta_column = table._find_column(block.delta_column_id) if block.delta_column_id else None
 
     if label_column is None or duration_column is None:
         return []
@@ -264,6 +284,14 @@ def compute_schedule(document, block: DependencyGanttBlock) -> list[dict[str, An
 
     def _duration(row: dict[str, Any]) -> float:
         return max(_to_number(row["cells"].get(duration_column["id"])), 0.0)
+
+    def _get_delta(row: dict[str, Any], row_id: str) -> float:
+        """L'écart vient de la colonne "Ecarts" si configurée (PATCH 49),
+        sinon repli sur l'ancien stockage `deltas` du bloc (documents
+        enregistrés avant cette colonne)."""
+        if delta_column is not None:
+            return _to_number(row["cells"].get(delta_column["id"]))
+        return block.get_delta(row_id)
 
     memo: dict[str, dict[str, float]] = {}
 
@@ -286,7 +314,7 @@ def compute_schedule(document, block: DependencyGanttBlock) -> list[dict[str, An
 
         duration = _duration(row)
         end = start + duration
-        delta = block.get_delta(row_id)
+        delta = _get_delta(row, row_id)
         resolution = end + delta
         result = {"start": start, "end": end, "resolution": resolution}
         memo[row_id] = result
@@ -313,7 +341,7 @@ def compute_schedule(document, block: DependencyGanttBlock) -> list[dict[str, An
                 "start": computed["start"],
                 "end": computed["end"],
                 "resolution": computed["resolution"],
-                "delta": block.get_delta(row["id"]),
+                "delta": _get_delta(row, row["id"]),
             }
         )
     return schedule

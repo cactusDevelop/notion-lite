@@ -47,6 +47,7 @@ class _LinkedItemRow(QWidget):
         self.line_edit.setText(text)
         self.line_edit.setPlaceholderText("Élément...")
         self.line_edit.textChanged.connect(self._on_text_changed)
+        self.line_edit.returnPressed.connect(self._on_return_pressed)
         layout.addWidget(self.line_edit, 1)
 
         remove_button = QToolButton(self)
@@ -60,6 +61,12 @@ class _LinkedItemRow(QWidget):
 
     def _on_text_changed(self, text: str) -> None:
         self._owner.on_item_text_changed(self, text)
+
+    def _on_return_pressed(self) -> None:
+        """PATCH 49 — Entrée dans une ligne ajoute un nouvel élément
+        "à faire" (identique au bouton "+ Ajouter"), comme dans la
+        checklist simple."""
+        self._owner.insert_row_after(self)
 
 
 class _ChecklistColumn(QWidget):
@@ -133,6 +140,13 @@ class LinkedChecklistBlockWidget(QWidget):
             focus_row.line_edit.setFocus()
 
     def _on_add_clicked(self) -> None:
+        item = self._block.add_item()
+        self._rebuild(focus_item_id=item["id"])
+
+    def insert_row_after(self, row: _LinkedItemRow) -> None:
+        """PATCH 49 — Ajoute un nouvel élément "à faire" suite à un appui
+        sur Entrée dans une ligne existante (comme le bouton "+ Ajouter"),
+        quel que soit le panneau où Entrée a été pressée."""
         item = self._block.add_item()
         self._rebuild(focus_item_id=item["id"])
 

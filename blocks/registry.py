@@ -95,7 +95,9 @@ def block_from_dict(raw: dict[str, Any]) -> Block:
             duration_column_id=data.get("duration_column_id"),
             risk_column_id=data.get("risk_column_id"),
             dependency_column_id=data.get("dependency_column_id"),
+            delta_column_id=data.get("delta_column_id"),
             deltas=data.get("deltas", {}),
+            time_unit=data.get("time_unit", "jours"),
             id=block_id,
         )
 
