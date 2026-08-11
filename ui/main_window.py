@@ -84,7 +84,12 @@ from ui.themes.theme import (
     current_theme,
     toggle_theme,
 )
-from ui.settings import get_heading_extra_spacing, set_heading_extra_spacing
+from ui.settings import (
+    get_autosave_enabled,
+    get_block_spacing,
+    set_autosave_enabled,
+    set_block_spacing,
+)
 from ui.toolbar import MainToolBar
 
 # Racine du projet (deux niveaux au-dessus de ce fichier : ui/main_window.py).
@@ -293,11 +298,17 @@ class MainWindow(QMainWindow):
             self._theme_actions[theme_name] = action
 
         view_menu.addSeparator()
-        self._heading_spacing_action = QAction("Espacer les titres", self)
-        self._heading_spacing_action.setCheckable(True)
-        self._heading_spacing_action.setChecked(get_heading_extra_spacing())
-        self._heading_spacing_action.triggered.connect(self._toggle_heading_spacing)
-        view_menu.addAction(self._heading_spacing_action)
+        self._block_spacing_action = QAction("Espacer les titres, tableaux et graphiques", self)
+        self._block_spacing_action.setCheckable(True)
+        self._block_spacing_action.setChecked(get_block_spacing())
+        self._block_spacing_action.triggered.connect(self._toggle_block_spacing)
+        view_menu.addAction(self._block_spacing_action)
+
+        self._autosave_action = QAction("Sauvegarde automatique", self)
+        self._autosave_action.setCheckable(True)
+        self._autosave_action.setChecked(get_autosave_enabled())
+        self._autosave_action.triggered.connect(self._toggle_autosave)
+        view_menu.addAction(self._autosave_action)
     # -- Mise en forme (PATCH 5 / 6) -------------------------------------
 
     def _with_active(self, method):
@@ -409,11 +420,15 @@ class MainWindow(QMainWindow):
         self._dark_mode_action.setChecked(new_theme == THEME_DARK)
         self._sync_theme_menu(new_theme)
 
-    def _toggle_heading_spacing(self) -> None:
-        """PATCH 49 — bascule l'espacement supplémentaire au-dessus des
-        titres/sous-titres et redessine le document pour l'appliquer."""
-        set_heading_extra_spacing(self._heading_spacing_action.isChecked())
+    def _toggle_block_spacing(self) -> None:
+        """PATCH 51 — bascule l'espacement supplémentaire au-dessus des
+        titres/sous-titres, tableaux et graphiques, et redessine le
+        document pour l'appliquer."""
+        set_block_spacing(self._block_spacing_action.isChecked())
         self._render_document()
+
+    def _toggle_autosave(self) -> None:
+        set_autosave_enabled(self._autosave_action.isChecked())
 
     def _set_theme(self, theme_name: str) -> None:
         """PATCH 33 — Applique un thème choisi dans le sous-menu "Thème"."""
@@ -436,7 +451,19 @@ class MainWindow(QMainWindow):
     def _poll_undo_snapshot(self) -> None:
         """Sondage périodique : regroupe les frappes rapides d'une même
         pause en un seul point d'annulation."""
-        self._undo_history.check(self._document_snapshot())
+        if self._undo_history.check(self._document_snapshot()):
+            self._maybe_autosave()
+
+    def _maybe_autosave(self) -> None:
+        """PATCH 51 — Sauvegarde automatique : dès qu'un document a été
+        sauvegardé une première fois (self._current_file défini), toute
+        modification ultérieure détectée par le sondage undo (donc déjà
+        "posée" un court instant, pas frappe par frappe) réécrit
+        silencieusement le même fichier, si l'option est activée
+        (activée par défaut, réglable dans le menu Affichage)."""
+        if not get_autosave_enabled() or self._current_file is None:
+            return
+        self._write_document(self._current_file)
 
     def _restore_snapshot(self, raw_snapshot: str) -> None:
         self._document = Document.from_dict(json.loads(raw_snapshot))
@@ -511,15 +538,33 @@ class MainWindow(QMainWindow):
             )
         raise ValueError(f"Type de bloc non pris en charge à l'affichage : {block.type}")
 
+    # PATCH 51 — types de blocs devant "respirer" (marge au-dessus) quand
+    # l'option d'espacement est activée : titres, tableaux et graphiques.
+    _SPACED_BLOCK_TYPES = (
+        HeadingBlock,
+        TableBlock,
+        SimpleTableBlock,
+        GanttBlock,
+        DependencyGanttBlock,
+        LineChartBlock,
+        BarChartBlock,
+    )
+    _EXTRA_TOP_MARGIN_PX = 22
+
     def _wrap(self, content: QWidget, block_id: str) -> BlockContainer:
         """PATCH 13 — Ajoute la poignée de glisser-déposer à un widget de
-        bloc, PATCH 34 — ainsi que son icône de type."""
+        bloc, PATCH 34 — ainsi que son icône de type, PATCH 51 — et
+        l'espacement optionnel au-dessus des titres/tableaux/graphiques."""
         block = self._document.find_block(block_id)
+        extra_top_margin = 0
+        if get_block_spacing() and isinstance(block, self._SPACED_BLOCK_TYPES):
+            extra_top_margin = self._EXTRA_TOP_MARGIN_PX
         return BlockContainer(
             content,
             block_id,
             on_context_menu_requested=self._show_block_context_menu,
             icon=icon_for_block(block) if block is not None else "",
+            extra_top_margin=extra_top_margin,
         )
 
     def _find_container(self, content_widget: QWidget) -> tuple[int, BlockContainer | None]:

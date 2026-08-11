@@ -20,8 +20,10 @@ PATCH 49 :
 """
 from __future__ import annotations
 
+import math
+
 from PySide6.QtCore import QRect, QTimer, Qt
-from PySide6.QtGui import QColor, QPainter, QPen
+from PySide6.QtGui import QColor, QPainter, QPalette, QPen
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
@@ -60,15 +62,13 @@ _UNIT_LABELS = {UNIT_DAYS: "Jours", UNIT_MONTHS: "Mois"}
 
 
 def _nice_axis_step(max_value: float) -> float:
-    """Choisit un pas d'axe "rond" (1, 2, 5, 10, 20, 50, ...) donnant
-    environ 5 à 10 graduations sur [0, max_value] (max_value déjà
-    exprimé dans l'unité d'affichage choisie)."""
-    if max_value <= 0:
-        return 1.0
-    raw_step = max_value / 8
-    if raw_step < 1:
-        return 0.1 if raw_step >= 0.1 else 0.01
-    magnitude = 10 ** (len(str(int(raw_step))) - 1)
+    """Choisit un pas d'axe "rond" et toujours entier (1, 2, 5, 10, 20,
+    50, 100, ...), qui grandit avec `max_value` (dézoomer donne des
+    graduations plus espacées : 1, 5, 10, 20 J...), quelle que soit
+    l'unité d'affichage (jours ou mois — jamais de graduation
+    fractionnaire comme "0.1")."""
+    raw_step = max(max_value / 8, 1.0)
+    magnitude = 10 ** math.floor(math.log10(raw_step))
     for factor in (1, 2, 5, 10):
         step = factor * magnitude
         if step >= raw_step:
@@ -122,6 +122,7 @@ class _DependencyGanttCanvas(QWidget):
         self._bar_rects = []
 
         if not self._people:
+            painter.setPen(QPen(self.palette().color(QPalette.WindowText)))
             painter.drawText(self.rect(), Qt.AlignCenter, "Aucune donnée à afficher.")
             painter.end()
             return
@@ -153,7 +154,7 @@ class _DependencyGanttCanvas(QWidget):
 
         for i, name in enumerate(self._people):
             y = _AXIS_HEIGHT + i * _ROW_HEIGHT
-            painter.setPen(QPen(QColor("#000000")))
+            painter.setPen(QPen(self.palette().color(QPalette.WindowText)))
             painter.drawText(0, y, _LABEL_WIDTH, _ROW_HEIGHT, Qt.AlignVCenter, name)
             for task in self._tasks_by_person[name]:
                 start, end, resolution = task["start"], task["end"], task["resolution"]

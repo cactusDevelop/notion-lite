@@ -10,12 +10,9 @@ from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QLineEdit
 
 from blocks.heading_block import HeadingBlock
-from ui.settings import get_heading_extra_spacing
 
 # Taille de police par niveau de titre.
 _FONT_SIZES = {1: 28, 2: 22, 3: 18}
-# Espacement ajouté au-dessus du titre quand l'option est activée (PATCH 49).
-_EXTRA_TOP_MARGIN_PX = 22
 
 
 class HeadingBlockWidget(QLineEdit):
@@ -33,9 +30,6 @@ class HeadingBlockWidget(QLineEdit):
         font.setPointSize(_FONT_SIZES.get(block.level, 16))
         font.setBold(True)
         self.setFont(font)
-
-        if get_heading_extra_spacing():
-            self.setStyleSheet(f"QLineEdit {{ border: none; margin-top: {_EXTRA_TOP_MARGIN_PX}px; }}")
 
         self.textChanged.connect(self._on_text_changed)
 

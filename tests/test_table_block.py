@@ -71,3 +71,67 @@ def test_table_roundtrip_via_registry():
     assert isinstance(rebuilt, TableBlock)
     assert rebuilt.columns[0]["name"] == "Nom"
     assert rebuilt.rows[0]["cells"][rebuilt.columns[0]["id"]] == "Alice"
+
+
+def test_merge_cells_creates_group_ordered_by_row_position():
+    table = TableBlock()
+    col = table.add_column(name="A")
+    row1 = table.add_row()
+    row2 = table.add_row()
+    row3 = table.add_row()
+
+    table.merge_cells(col["id"], [row2["id"], row1["id"]])  # ordre inversé en entrée
+
+    groups = table.manual_merge_groups(col["id"])
+    assert groups == [[row1["id"], row2["id"]]]
+    assert row3["id"] not in groups[0]
+
+
+def test_merge_cells_extends_existing_group():
+    table = TableBlock()
+    col = table.add_column(name="A")
+    row1 = table.add_row()
+    row2 = table.add_row()
+    row3 = table.add_row()
+
+    table.merge_cells(col["id"], [row1["id"], row2["id"]])
+    table.merge_cells(col["id"], [row2["id"], row3["id"]])
+
+    assert table.manual_merge_groups(col["id"]) == [[row1["id"], row2["id"], row3["id"]]]
+
+
+def test_unmerge_cell_removes_row_from_group():
+    table = TableBlock()
+    col = table.add_column(name="A")
+    row1 = table.add_row()
+    row2 = table.add_row()
+    row3 = table.add_row()
+    table.merge_cells(col["id"], [row1["id"], row2["id"], row3["id"]])
+
+    table.unmerge_cell(col["id"], row2["id"])
+
+    assert table.manual_merge_groups(col["id"]) == [[row1["id"], row3["id"]]]
+
+
+def test_unmerge_cell_drops_group_with_single_row_left():
+    table = TableBlock()
+    col = table.add_column(name="A")
+    row1 = table.add_row()
+    row2 = table.add_row()
+    table.merge_cells(col["id"], [row1["id"], row2["id"]])
+
+    table.unmerge_cell(col["id"], row2["id"])
+
+    assert table.manual_merge_groups(col["id"]) == []
+
+
+def test_manual_merges_roundtrip_via_registry():
+    table = TableBlock()
+    col = table.add_column(name="A")
+    row1 = table.add_row()
+    row2 = table.add_row()
+    table.merge_cells(col["id"], [row1["id"], row2["id"]])
+
+    rebuilt = block_from_dict(table.to_dict())
+    assert isinstance(rebuilt, TableBlock)
+    assert rebuilt.manual_merge_groups(col["id"]) == [[row1["id"], row2["id"]]]

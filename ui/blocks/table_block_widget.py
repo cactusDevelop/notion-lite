@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QDateEdit,
     QHBoxLayout,
     QLabel,
+    QMenu,
     QPushButton,
     QSizePolicy,
     QSpinBox,
@@ -71,6 +72,8 @@ class TableBlockWidget(QWidget):
         self._table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self._table.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self._table.setSizeAdjustPolicy(QAbstractScrollArea.AdjustToContents)
+        self._table.setContextMenuPolicy(Qt.CustomContextMenu)
+        self._table.customContextMenuRequested.connect(self._on_cell_context_menu)
         layout.addWidget(self._table)
 
         buttons = QHBoxLayout()
@@ -129,11 +132,32 @@ class TableBlockWidget(QWidget):
         """PATCH 49 — fusionne visuellement les cellules consécutives d'une
         même colonne "Texte" qui ont la valeur identique (ex : plusieurs
         lignes "Phase 1" à la suite), pour éviter la répétition inutile.
-        Ne modifie jamais les données du bloc, uniquement l'affichage
-        (setSpan) ; refait à chaque _rebuild.
+        PATCH 51 — une colonne avec des groupes de fusion manuelle
+        (clic droit → "Fusionner...") utilise ces groupes à la place de
+        la détection automatique, quel que soit son type. Ne modifie
+        jamais les données du bloc, uniquement l'affichage (setSpan) ;
+        refait à chaque _rebuild, donc une nouvelle ligne à la valeur
+        identique d'un groupe déjà fusionné y est automatiquement
+        rattachée.
         """
         self._table.clearSpans()
+        row_index_by_id = {row["id"]: index for index, row in enumerate(rows)}
         for col_index, column in enumerate(columns):
+            manual_groups = self._block.manual_merge_groups(column["id"])
+            if manual_groups:
+                for group in manual_groups:
+                    indices = sorted(
+                        row_index_by_id[row_id] for row_id in group if row_id in row_index_by_id
+                    )
+                    if len(indices) < 2:
+                        continue
+                    # Une fusion manuelle ne s'applique que si les lignes
+                    # sont toujours contiguës dans l'ordre actuel du
+                    # tableau (sinon, repli silencieux : pas de fusion).
+                    if indices == list(range(indices[0], indices[0] + len(indices))):
+                        self._table.setSpan(indices[0], col_index, len(indices), 1)
+                continue
+
             if column["type"] != COLUMN_TYPE_TEXT:
                 continue
             run_start = 0
@@ -146,6 +170,43 @@ class TableBlockWidget(QWidget):
                 if run_length > 1:
                     self._table.setSpan(run_start, col_index, run_length, 1)
                 run_start = run_end
+
+    def _on_cell_context_menu(self, pos) -> None:
+        """PATCH 51 — clic droit sur une cellule : fusion manuelle avec la
+        ligne au-dessus / en-dessous, ou annulation de la fusion."""
+        row_index = self._table.rowAt(pos.y())
+        col_index = self._table.columnAt(pos.x())
+        if row_index < 0 or col_index < 0:
+            return
+        columns = self._block.columns
+        rows = self._block.rows
+        if col_index >= len(columns) or row_index >= len(rows):
+            return
+        column = columns[col_index]
+        row_id = rows[row_index]["id"]
+        currently_merged = any(row_id in group for group in self._block.manual_merge_groups(column["id"]))
+
+        menu = QMenu(self)
+        merge_up_action = None
+        merge_down_action = None
+        if row_index > 0:
+            merge_up_action = menu.addAction("Fusionner avec la ligne au-dessus")
+        if row_index < len(rows) - 1:
+            merge_down_action = menu.addAction("Fusionner avec la ligne en dessous")
+        unmerge_action = menu.addAction("Annuler la fusion") if currently_merged else None
+        if merge_up_action is None and merge_down_action is None and unmerge_action is None:
+            return
+
+        chosen = menu.exec(self._table.viewport().mapToGlobal(pos))
+        if chosen is None:
+            return
+        if chosen is merge_up_action:
+            self._block.merge_cells(column["id"], [rows[row_index - 1]["id"], row_id])
+        elif chosen is merge_down_action:
+            self._block.merge_cells(column["id"], [row_id, rows[row_index + 1]["id"]])
+        elif chosen is unmerge_action:
+            self._block.unmerge_cell(column["id"], row_id)
+        self._rebuild()
 
     def _adjust_table_height(self) -> None:
         """PATCH 49 — dimensionne le tableau à son contenu réel (au lieu de

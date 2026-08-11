@@ -67,6 +67,7 @@ class BlockContainer(QWidget):
         block_id: str,
         on_context_menu_requested: Optional[Callable[[str, QPoint], None]] = None,
         icon: str = "",
+        extra_top_margin: int = 0,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -75,7 +76,7 @@ class BlockContainer(QWidget):
         self._on_context_menu_requested = on_context_menu_requested
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setContentsMargins(0, extra_top_margin, 0, 0)
         layout.addWidget(_DragHandle(block_id, self))
         if icon:
             icon_label = QLabel(icon, self)

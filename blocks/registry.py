@@ -67,6 +67,7 @@ def block_from_dict(raw: dict[str, Any]) -> Block:
         return TableBlock(
             columns=data.get("columns", []),
             rows=data.get("rows", []),
+            manual_merges=data.get("manual_merges", {}),
             id=block_id,
         )
 

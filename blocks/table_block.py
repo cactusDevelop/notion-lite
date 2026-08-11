@@ -137,6 +137,7 @@ class TableBlock(Block):
         self,
         columns: list[dict[str, Any]] | None = None,
         rows: list[dict[str, Any]] | None = None,
+        manual_merges: dict[str, list[list[str]]] | None = None,
         id: str | None = None,
     ) -> None:
         normalized_columns: list[dict[str, Any]] = []
@@ -166,7 +167,17 @@ class TableBlock(Block):
 
         super().__init__(
             type=TABLE_BLOCK_TYPE,
-            data={"columns": normalized_columns, "rows": normalized_rows},
+            data={
+                "columns": normalized_columns,
+                "rows": normalized_rows,
+                # PATCH 51 — fusion manuelle de cellules (indépendante des
+                # fusions automatiques par valeur identique) : {column_id:
+                # [[row_id, row_id, ...], ...]}, voir merge_cells/unmerge_cell.
+                "manual_merges": {
+                    column_id: [list(group) for group in groups]
+                    for column_id, groups in (manual_merges or {}).items()
+                },
+            },
             id=id or str(uuid.uuid4()),
         )
 
@@ -189,6 +200,47 @@ class TableBlock(Block):
             if row.get("id") == row_id:
                 return row
         return None
+
+    # -- Fusion manuelle de cellules (PATCH 51) -----------------------
+
+    def manual_merge_groups(self, column_id: str) -> list[list[str]]:
+        return self.data.get("manual_merges", {}).get(column_id, [])
+
+    def merge_cells(self, column_id: str, row_ids: list[str]) -> None:
+        """Fusionne visuellement les cellules de `column_id` pour les
+        lignes `row_ids` (fusionne aussi avec tout groupe existant qui
+        chevaucherait ces lignes). Ne modifie aucune valeur de cellule,
+        uniquement l'affichage."""
+        merges = self.data.setdefault("manual_merges", {})
+        groups = merges.setdefault(column_id, [])
+        combined = set(row_ids)
+        remaining: list[list[str]] = []
+        for group in groups:
+            if combined.intersection(group):
+                combined.update(group)
+            else:
+                remaining.append(group)
+        order = {row["id"]: index for index, row in enumerate(self.rows)}
+        remaining.append(sorted(combined, key=lambda row_id: order.get(row_id, 0)))
+        merges[column_id] = remaining
+
+    def unmerge_cell(self, column_id: str, row_id: str) -> None:
+        """Retire `row_id` de son groupe de fusion manuelle sur
+        `column_id` (le groupe est supprimé s'il ne reste plus qu'une
+        ligne)."""
+        merges = self.data.get("manual_merges", {})
+        groups = merges.get(column_id)
+        if not groups:
+            return
+        new_groups = []
+        for group in groups:
+            if row_id in group:
+                filtered = [r for r in group if r != row_id]
+                if len(filtered) > 1:
+                    new_groups.append(filtered)
+            else:
+                new_groups.append(group)
+        merges[column_id] = new_groups
 
     # -- Colonnes ----------------------------------------------------
 
