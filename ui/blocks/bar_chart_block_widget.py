@@ -1,14 +1,23 @@
 """
-Widget graphique du bloc "Graphique en bâtonnets" (PATCH 47, révisé PATCH 49).
+Widget graphique du bloc "Graphique en bâtonnets" (PATCH 47, révisé PATCH 49, PATCH 54).
 
 Barre pleine bleue = "Prévu". Marqueur en pointillés = "Réel" (rouge
 en dépassement de budget, vert sinon), si renseigné.
+
+PATCH 54 : un sélecteur "Source" permet de relier ce graphique à un
+bloc "Planning par dépendances" existant, avec un regroupement
+optionnel par colonne du tableau source (ex : "Phases"). Une fois
+relié, les barres sont en lecture seule et recalculées en direct
+(sondage périodique, même principe que le bloc Gantt) à partir des
+durées et des écarts ("Ecarts") des sous-tâches — l'édition manuelle
+des barres reste disponible tant qu'aucune source n'est choisie.
 """
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QTimer, Qt
 from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtWidgets import (
+    QComboBox,
     QDoubleSpinBox,
     QGridLayout,
     QHBoxLayout,
@@ -19,9 +28,15 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from blocks.bar_chart_block import BarChartBlock, budget_marker_color
+from blocks.bar_chart_block import BarChartBlock, budget_marker_color, sync_bars_from_gantt
+from blocks.dependency_gantt_block import (
+    DependencyGanttBlock,
+    available_label_columns,
+    find_source_table,
+)
 
 _MARGIN = 30
+_REFRESH_INTERVAL_MS = 500
 
 
 class _BarChartCanvas(QWidget):
@@ -89,11 +104,13 @@ class _BarChartCanvas(QWidget):
 
 
 class BarChartBlockWidget(QWidget):
-    """Widget d'un BarChartBlock : titre, barres éditables (Prévu + Réel), graphique."""
+    """Widget d'un BarChartBlock : titre, source optionnelle, barres, graphique."""
 
-    def __init__(self, block: BarChartBlock, parent=None) -> None:
+    def __init__(self, block: BarChartBlock, document, parent=None) -> None:
         super().__init__(parent)
         self._block = block
+        self._document = document
+        self._syncing = False
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -117,6 +134,18 @@ class BarChartBlockWidget(QWidget):
         header.addWidget(self._y_label_edit, 1)
         layout.addLayout(header)
 
+        # -- PATCH 54 : source (planning par dépendances) + regroupement --
+        source_row = QHBoxLayout()
+        source_row.addWidget(QLabel("Source :", self))
+        self._source_combo = QComboBox(self)
+        self._source_combo.currentIndexChanged.connect(self._on_source_changed)
+        source_row.addWidget(self._source_combo, 1)
+        source_row.addWidget(QLabel("Regrouper par :", self))
+        self._group_combo = QComboBox(self)
+        self._group_combo.currentIndexChanged.connect(self._on_group_changed)
+        source_row.addWidget(self._group_combo, 1)
+        layout.addLayout(source_row)
+
         self._canvas = _BarChartCanvas(self)
         layout.addWidget(self._canvas)
 
@@ -126,16 +155,88 @@ class BarChartBlockWidget(QWidget):
         self._bars_area.addWidget(QLabel("<b>Réel</b>", self), 0, 2)
         layout.addLayout(self._bars_area)
 
-        add_button = QPushButton("+ Ajouter une barre", self)
-        add_button.clicked.connect(self._on_add_bar)
-        layout.addWidget(add_button)
+        self._add_button = QPushButton("+ Ajouter une barre", self)
+        self._add_button.clicked.connect(self._on_add_bar)
+        layout.addWidget(self._add_button)
 
+        self._populate_source_combo()
         self._rebuild_bar_rows()
         self._refresh_canvas()
+
+        # PATCH 54 — tant qu'une source est reliée, les barres dépendent
+        # de l'état (potentiellement modifié ailleurs) du tableau/Gantt
+        # relié : sondage périodique, même principe que DependencyGanttBlockWidget.
+        self._timer = QTimer(self)
+        self._timer.setInterval(_REFRESH_INTERVAL_MS)
+        self._timer.timeout.connect(self._on_timer_refresh)
+        self._timer.start()
 
     @property
     def block(self) -> BarChartBlock:
         return self._block
+
+    # -- Source (PATCH 54) -------------------------------------------------
+
+    def _gantt_blocks(self) -> list[DependencyGanttBlock]:
+        return [b for b in self._document.blocks if isinstance(b, DependencyGanttBlock)]
+
+    def _populate_source_combo(self) -> None:
+        self._syncing = True
+        self._source_combo.clear()
+        self._source_combo.addItem("Aucune (manuel)", None)
+        selected_index = 0
+        for gantt in self._gantt_blocks():
+            self._source_combo.addItem(f"Planning « {gantt.id[:8]} »", gantt.id)
+            if gantt.id == self._block.source_gantt_id:
+                selected_index = self._source_combo.count() - 1
+        self._source_combo.setCurrentIndex(selected_index)
+        self._populate_group_combo()
+        self._syncing = False
+
+    def _populate_group_combo(self) -> None:
+        self._group_combo.clear()
+        self._group_combo.addItem("Par sous-tâche", None)
+        gantt = self._document.find_block(self._block.source_gantt_id) if self._block.source_gantt_id else None
+        selected_index = 0
+        if isinstance(gantt, DependencyGanttBlock):
+            table = find_source_table(self._document, gantt)
+            if table is not None:
+                for column in available_label_columns(table):
+                    self._group_combo.addItem(column["name"], column["id"])
+                    if column["id"] == self._block.group_column_id:
+                        selected_index = self._group_combo.count() - 1
+        self._group_combo.setCurrentIndex(selected_index)
+        self._group_combo.setEnabled(gantt is not None)
+
+    def _is_linked(self) -> bool:
+        return self._block.source_gantt_id is not None
+
+    def _on_source_changed(self) -> None:
+        if self._syncing:
+            return
+        gantt_id = self._source_combo.currentData()
+        self._block.set_source(gantt_id, None)
+        self._populate_group_combo()
+        self._apply_linked_mode()
+        self._refresh_canvas()
+
+    def _on_group_changed(self) -> None:
+        if self._syncing:
+            return
+        self._block.set_source(self._block.source_gantt_id, self._group_combo.currentData())
+        self._refresh_canvas()
+
+    def _apply_linked_mode(self) -> None:
+        """PATCH 54 — édition manuelle désactivée tant qu'une source est reliée."""
+        linked = self._is_linked()
+        self._add_button.setVisible(not linked)
+        self._rebuild_bar_rows()
+
+    def _on_timer_refresh(self) -> None:
+        if self._is_linked():
+            self._refresh_canvas()
+
+    # -- Barres --------------------------------------------------------
 
     def _rebuild_bar_rows(self) -> None:
         # Conserve la ligne d'en-tête (ligne 0), vide seulement les lignes de données.
@@ -144,6 +245,11 @@ class BarChartBlockWidget(QWidget):
                 item = self._bars_area.itemAtPosition(row_index, col)
                 if item is not None and item.widget() is not None:
                     item.widget().deleteLater()
+
+        if self._is_linked():
+            # PATCH 54 — barres recalculées, lecture seule : rien à
+            # éditer ligne par ligne ici, tout passe par le graphique.
+            return
 
         for row_index, bar in enumerate(self._block.bars, start=1):
             label_edit = QLineEdit(bar["label"], self)
@@ -167,7 +273,11 @@ class BarChartBlockWidget(QWidget):
             self._bars_area.addWidget(remove_button, row_index, 3)
 
     def _refresh_canvas(self) -> None:
-        self._canvas.set_data(self._block.bars, self._block.y_axis_label)
+        if self._is_linked():
+            bars = sync_bars_from_gantt(self._document, self._block)
+        else:
+            bars = self._block.bars
+        self._canvas.set_data(bars, self._block.y_axis_label)
 
     # -- Callbacks --------------------------------------------------------
 
