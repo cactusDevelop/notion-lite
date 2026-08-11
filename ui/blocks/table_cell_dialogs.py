@@ -11,7 +11,6 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QCheckBox,
-    QComboBox,
     QDialog,
     QDialogButtonBox,
     QHBoxLayout,
@@ -27,10 +26,12 @@ from PySide6.QtWidgets import (
 from blocks.table_block import (
     COLUMN_TYPE_DATE,
     COLUMN_TYPE_LABELS,
+    COLUMN_TYPE_NUMBER,
     COLUMN_TYPE_SELECT,
     COLUMN_TYPE_MULTI_SELECT,
     COLUMN_TYPES,
 )
+from ui.no_scroll_combo_box import NoScrollComboBox
 
 
 def ask_column_definition(
@@ -39,10 +40,14 @@ def ask_column_definition(
     col_type: str = "text",
     options: list[str] | None = None,
     date_range: bool = False,
-) -> tuple[str, str, list[str], bool] | None:
-    """Dialogue de création/édition de colonne : nom, type, options, plage.
+    unit: str = "",
+) -> tuple[str, str, list[str], bool, str] | None:
+    """Dialogue de création/édition de colonne : nom, type, options, plage, unité.
 
-    Retourne (name, col_type, options, date_range) ou None si annulé.
+    `unit` (PATCH 56) n'est pertinente que pour une colonne "Nombre" —
+    affichée dans l'en-tête ("j", "€", "%", ...) à la place du type.
+
+    Retourne (name, col_type, options, date_range, unit) ou None si annulé.
     """
     dialog = QDialog(parent)
     dialog.setWindowTitle("Colonne")
@@ -53,7 +58,7 @@ def ask_column_definition(
     layout.addWidget(name_edit)
 
     layout.addWidget(QLabel("Type :"))
-    type_combo = QComboBox(dialog)
+    type_combo = NoScrollComboBox(dialog)
     for type_key in COLUMN_TYPES:
         type_combo.addItem(COLUMN_TYPE_LABELS[type_key], type_key)
     type_combo.setCurrentIndex(max(0, COLUMN_TYPES.index(col_type) if col_type in COLUMN_TYPES else 0))
@@ -68,12 +73,20 @@ def ask_column_definition(
     range_checkbox.setChecked(date_range)
     layout.addWidget(range_checkbox)
 
+    unit_label = QLabel("Unité affichée dans l'en-tête (ex : j, €, %) :")
+    unit_edit = QLineEdit(unit, dialog)
+    layout.addWidget(unit_label)
+    layout.addWidget(unit_edit)
+
     def _sync_visibility() -> None:
         current_type = type_combo.currentData()
         is_choice_type = current_type in (COLUMN_TYPE_SELECT, COLUMN_TYPE_MULTI_SELECT)
         options_label.setVisible(is_choice_type)
         options_edit.setVisible(is_choice_type)
         range_checkbox.setVisible(current_type == COLUMN_TYPE_DATE)
+        is_number_type = current_type == COLUMN_TYPE_NUMBER
+        unit_label.setVisible(is_number_type)
+        unit_edit.setVisible(is_number_type)
 
     type_combo.currentIndexChanged.connect(_sync_visibility)
     _sync_visibility()
@@ -87,7 +100,13 @@ def ask_column_definition(
         return None
 
     parsed_options = [part.strip() for part in options_edit.text().split(",") if part.strip()]
-    return name_edit.text(), type_combo.currentData(), parsed_options, range_checkbox.isChecked()
+    return (
+        name_edit.text(),
+        type_combo.currentData(),
+        parsed_options,
+        range_checkbox.isChecked(),
+        unit_edit.text().strip(),
+    )
 
 
 def edit_person_list(parent, document, selected_ids: list[str]) -> list[str] | None:

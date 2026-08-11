@@ -150,6 +150,9 @@ class TableBlock(Block):
                     "type": col_type,
                     "options": list(column.get("options", [])),
                     "range": bool(column.get("range", False)) if col_type == COLUMN_TYPE_DATE else False,
+                    # PATCH 56 — unité affichée dans l'en-tête ("j", "€", "%",
+                    # ...), pertinente uniquement pour une colonne "Nombre".
+                    "unit": str(column.get("unit", "")) if col_type == COLUMN_TYPE_NUMBER else "",
                 }
             )
         columns_by_id = {column["id"]: column for column in normalized_columns}
@@ -250,12 +253,15 @@ class TableBlock(Block):
         col_type: str = COLUMN_TYPE_TEXT,
         options: list[str] | None = None,
         date_range: bool = False,
+        unit: str = "",
         index: int | None = None,
     ) -> dict[str, Any]:
         """Ajoute une colonne typée et une cellule par défaut à chaque ligne.
 
         `date_range` n'a d'effet que pour col_type == "date" (PATCH 18) :
         la cellule stocke alors {"start", "end"} au lieu d'une date seule.
+        `unit` (PATCH 56) n'a d'effet que pour col_type == "number" :
+        affichée dans l'en-tête, ex. "j", "€", "%".
         """
         if col_type not in COLUMN_TYPES:
             col_type = COLUMN_TYPE_TEXT
@@ -265,6 +271,7 @@ class TableBlock(Block):
             "type": col_type,
             "options": list(options or []),
             "range": bool(date_range) if col_type == COLUMN_TYPE_DATE else False,
+            "unit": str(unit) if col_type == COLUMN_TYPE_NUMBER else "",
         }
         if index is None:
             self.columns.append(column)
@@ -321,6 +328,15 @@ class TableBlock(Block):
         column["range"] = bool(date_range)
         for row in self.rows:
             row["cells"][column_id] = default_value_for_column(column)
+        return True
+
+    def set_column_unit(self, column_id: str, unit: str) -> bool:
+        """PATCH 56 — définit l'unité affichée dans l'en-tête d'une colonne
+        "Nombre" (ex : "j", "€", "%"). Sans effet sur les autres types."""
+        column = self._find_column(column_id)
+        if column is None or column["type"] != COLUMN_TYPE_NUMBER:
+            return False
+        column["unit"] = str(unit)
         return True
 
     def move_column(self, column_id: str, new_index: int) -> bool:

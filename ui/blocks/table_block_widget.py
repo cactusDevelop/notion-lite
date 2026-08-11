@@ -5,14 +5,23 @@ Affiche les colonnes/lignes du TableBlock dans un QTableWidget. Le
 widget de cellule dépend du type de la colonne (texte libre, case à
 cocher, sélecteur de date, choix, ...). Toute édition est répercutée
 dans le bloc via les id (colonne/ligne), jamais via la position.
+
+PATCH 56 : le tableau peut aussi être modifié depuis l'extérieur (ex :
+écart saisi via la pop-up du bloc "Gantt (dépendances)", qui écrit
+directement dans la cellule de la colonne "Ecarts" via `set_cell`).
+Comme les blocs graphiques (Gantt, courbes, formules...), on sonde
+donc périodiquement l'état du bloc pour répercuter ces changements
+externes dans l'affichage (voir `_poll_external_changes`).
 """
 from __future__ import annotations
 
-from PySide6.QtCore import QDate, Qt
+import json
+
+from PySide6.QtCore import QDate, Qt, QTimer
 from PySide6.QtWidgets import (
+    QAbstractItemView,
     QAbstractScrollArea,
     QCheckBox,
-    QComboBox,
     QDateEdit,
     QHBoxLayout,
     QLabel,
@@ -31,7 +40,6 @@ from blocks.table_block import (
     COLUMN_TYPE_CHECKLIST,
     COLUMN_TYPE_DATE,
     COLUMN_TYPE_DURATION,
-    COLUMN_TYPE_LABELS,
     COLUMN_TYPE_MULTI_SELECT,
     COLUMN_TYPE_NUMBER,
     COLUMN_TYPE_PERSON,
@@ -47,6 +55,11 @@ from ui.blocks.table_cell_dialogs import (
     edit_multi_select,
     edit_person_list,
 )
+from ui.no_scroll_combo_box import NoScrollComboBox
+
+# PATCH 56 — même intervalle de sondage que les blocs graphiques
+# (Gantt, courbes, formules) pour détecter une modification externe.
+_REFRESH_INTERVAL_MS = 500
 
 
 class TableBlockWidget(QWidget):
@@ -97,6 +110,13 @@ class TableBlockWidget(QWidget):
 
         self._rebuild()
 
+        # PATCH 56 — répercute les modifications faites depuis l'extérieur
+        # (ex : pop-up d'écart du Gantt) sans attendre une action locale.
+        self._timer = QTimer(self)
+        self._timer.setInterval(_REFRESH_INTERVAL_MS)
+        self._timer.timeout.connect(self._poll_external_changes)
+        self._timer.start()
+
     @property
     def block(self) -> TableBlock:
         return self._block
@@ -112,12 +132,7 @@ class TableBlockWidget(QWidget):
         self._table.setColumnCount(len(columns))
         self._table.setRowCount(len(rows))
         self._table.setHorizontalHeaderLabels(
-            [
-                f"{column.get('name') or f'Colonne {i + 1}'} "
-                f"({COLUMN_TYPE_LABELS[column['type']]}"
-                f"{' — début/fin' if column.get('range') else ''})"
-                for i, column in enumerate(columns)
-            ]
+            [self._header_label(i, column) for i, column in enumerate(columns)]
         )
 
         for row_index, row in enumerate(rows):
@@ -127,6 +142,41 @@ class TableBlockWidget(QWidget):
         self._apply_merged_cells(columns, rows)
         self._adjust_table_height()
         self._syncing = False
+        # PATCH 56 — mémorise l'état affiché pour détecter, au prochain
+        # sondage, une modification faite depuis l'extérieur.
+        self._last_signature = self._data_signature()
+
+    def _data_signature(self) -> str:
+        """PATCH 56 — empreinte des colonnes/lignes actuelles du bloc,
+        pour détecter une modification externe (colonnes/lignes ne sont
+        jamais recopiées : comparer les objets directement n'a aucun
+        sens puisqu'ils sont mutés sur place)."""
+        return json.dumps(
+            [self._block.columns, self._block.rows], sort_keys=True, default=str
+        )
+
+    def _poll_external_changes(self) -> None:
+        """PATCH 56 — si le bloc a changé depuis le dernier affichage
+        (ex : écart saisi via la pop-up du Gantt) sans passer par ce
+        widget, reconstruit l'affichage. Ignoré pendant une édition en
+        cours dans le tableau, pour ne jamais écraser une saisie."""
+        if self._syncing or self._table.state() == QAbstractItemView.EditingState:
+            return
+        if self._data_signature() != self._last_signature:
+            self._rebuild()
+
+    def _header_label(self, index: int, column: dict) -> str:
+        """PATCH 56 — l'en-tête n'affiche plus le type de la colonne entre
+        parenthèses (peu utile une fois la colonne configurée) : à la
+        place, son unité si elle est pertinente ("j", "€", "%" pour une
+        colonne "Nombre") ou l'indication "début/fin" pour une colonne
+        "Date" en plage. Rien du tout sinon (texte, booléen, liste...)."""
+        name = column.get("name") or f"Colonne {index + 1}"
+        if column["type"] == COLUMN_TYPE_NUMBER and column.get("unit"):
+            return f"{name} ({column['unit']})"
+        if column["type"] == COLUMN_TYPE_DATE and column.get("range"):
+            return f"{name} (début/fin)"
+        return name
 
     def _apply_merged_cells(self, columns: list[dict], rows: list[dict]) -> None:
         """PATCH 49 — fusionne visuellement les cellules consécutives d'une
@@ -263,6 +313,9 @@ class TableBlockWidget(QWidget):
         self._syncing = True
         self._set_cell_display(row_index, col_index, row, column)
         self._syncing = False
+        # PATCH 56 — évite qu'un sondage déclenche un _rebuild() superflu
+        # juste après cette modification locale (déjà répercutée ici).
+        self._last_signature = self._data_signature()
 
     # -- Widgets de cellule par type -----------------------------------
 
@@ -343,7 +396,7 @@ class TableBlockWidget(QWidget):
         amount_spin.setValue(int(value.get("amount", 0)))
         cell_layout.addWidget(amount_spin)
 
-        unit_combo = QComboBox(container)
+        unit_combo = NoScrollComboBox(container)
         unit_combo.addItems(DURATION_UNITS)
         unit_combo.setCurrentText(value.get("unit", DURATION_UNITS[1]))
         cell_layout.addWidget(unit_combo)
@@ -362,7 +415,7 @@ class TableBlockWidget(QWidget):
         return container
 
     def _build_select_cell(self, row: dict, column: dict, value) -> QWidget:
-        combo = QComboBox(self._table)
+        combo = NoScrollComboBox(self._table)
         combo.addItem("")
         combo.addItems(column.get("options", []))
         combo.setCurrentText(value or "")
@@ -442,8 +495,10 @@ class TableBlockWidget(QWidget):
         result = ask_column_definition(self, name=f"Colonne {len(self._block.columns) + 1}")
         if result is None:
             return
-        name, col_type, options, date_range = result
-        self._block.add_column(name=name, col_type=col_type, options=options, date_range=date_range)
+        name, col_type, options, date_range, unit = result
+        self._block.add_column(
+            name=name, col_type=col_type, options=options, date_range=date_range, unit=unit
+        )
         self._rebuild()
 
     def _on_delete_column(self) -> None:
@@ -464,15 +519,18 @@ class TableBlockWidget(QWidget):
             col_type=column["type"],
             options=column.get("options", []),
             date_range=column.get("range", False),
+            unit=column.get("unit", ""),
         )
         if result is None:
             return
-        name, col_type, options, date_range = result
+        name, col_type, options, date_range, unit = result
         self._block.rename_column(column["id"], name)
         if col_type == column["type"]:
             self._block.set_column_options(column["id"], options)
             if col_type == "date":
                 self._block.set_column_date_range(column["id"], date_range)
+            if col_type == COLUMN_TYPE_NUMBER:
+                self._block.set_column_unit(column["id"], unit)
         self._rebuild()
 
     # -- Lignes --------------------------------------------------------
@@ -500,3 +558,5 @@ class TableBlockWidget(QWidget):
         row_id = self._block.rows[row_index]["id"]
         column_id = self._block.columns[col_index]["id"]
         self._block.set_cell(row_id, column_id, item.text())
+        # PATCH 56 — voir _refresh_cell : évite un _rebuild() superflu.
+        self._last_signature = self._data_signature()

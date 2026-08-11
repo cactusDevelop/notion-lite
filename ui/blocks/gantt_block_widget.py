@@ -14,7 +14,7 @@ from datetime import date
 
 from PySide6.QtCore import QTimer, Qt
 from PySide6.QtGui import QPainter, QColor
-from PySide6.QtWidgets import QComboBox, QHBoxLayout, QLabel, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
 from blocks.gantt_block import (
     GanttBlock,
@@ -23,6 +23,7 @@ from blocks.gantt_block import (
     find_source_table,
 )
 from blocks.table_block import TableBlock
+from ui.no_scroll_combo_box import NoScrollComboBox
 
 _REFRESH_INTERVAL_MS = 500
 _ROW_HEIGHT = 28
@@ -100,17 +101,17 @@ class GanttBlockWidget(QWidget):
 
         selectors = QHBoxLayout()
         selectors.addWidget(QLabel("Tableau :", self))
-        self._table_combo = QComboBox(self)
+        self._table_combo = NoScrollComboBox(self)
         self._table_combo.currentIndexChanged.connect(self._on_table_changed)
         selectors.addWidget(self._table_combo, 1)
 
         selectors.addWidget(QLabel("Libellé :", self))
-        self._label_combo = QComboBox(self)
+        self._label_combo = NoScrollComboBox(self)
         self._label_combo.currentIndexChanged.connect(self._on_label_column_changed)
         selectors.addWidget(self._label_combo, 1)
 
         selectors.addWidget(QLabel("Dates :", self))
-        self._date_combo = QComboBox(self)
+        self._date_combo = NoScrollComboBox(self)
         self._date_combo.currentIndexChanged.connect(self._on_date_column_changed)
         selectors.addWidget(self._date_combo, 1)
         layout.addLayout(selectors)

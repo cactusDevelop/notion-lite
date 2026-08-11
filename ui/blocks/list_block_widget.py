@@ -8,7 +8,6 @@ Un sélecteur permet de basculer entre liste à puces et numérotée.
 from __future__ import annotations
 
 from PySide6.QtWidgets import (
-    QComboBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -18,6 +17,7 @@ from PySide6.QtWidgets import (
 )
 
 from blocks.list_block import LIST_TYPE_BULLET, LIST_TYPE_NUMBERED, ListBlock
+from ui.no_scroll_combo_box import NoScrollComboBox
 
 _TYPE_LABELS = {LIST_TYPE_BULLET: "À puces", LIST_TYPE_NUMBERED: "Numérotée"}
 
@@ -35,7 +35,7 @@ class ListBlockWidget(QWidget):
 
         header = QHBoxLayout()
         header.addWidget(QLabel("Style :", self))
-        self._type_combo = QComboBox(self)
+        self._type_combo = NoScrollComboBox(self)
         for list_type, label in _TYPE_LABELS.items():
             self._type_combo.addItem(label, list_type)
         self._type_combo.currentIndexChanged.connect(self._on_type_changed)

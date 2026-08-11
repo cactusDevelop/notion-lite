@@ -17,7 +17,6 @@ from __future__ import annotations
 from PySide6.QtCore import QTimer, Qt
 from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtWidgets import (
-    QComboBox,
     QDoubleSpinBox,
     QGridLayout,
     QHBoxLayout,
@@ -34,6 +33,7 @@ from blocks.dependency_gantt_block import (
     available_label_columns,
     find_source_table,
 )
+from ui.no_scroll_combo_box import NoScrollComboBox
 
 _MARGIN = 30
 _REFRESH_INTERVAL_MS = 500
@@ -137,11 +137,11 @@ class BarChartBlockWidget(QWidget):
         # -- PATCH 54 : source (planning par dépendances) + regroupement --
         source_row = QHBoxLayout()
         source_row.addWidget(QLabel("Source :", self))
-        self._source_combo = QComboBox(self)
+        self._source_combo = NoScrollComboBox(self)
         self._source_combo.currentIndexChanged.connect(self._on_source_changed)
         source_row.addWidget(self._source_combo, 1)
         source_row.addWidget(QLabel("Regrouper par :", self))
-        self._group_combo = QComboBox(self)
+        self._group_combo = NoScrollComboBox(self)
         self._group_combo.currentIndexChanged.connect(self._on_group_changed)
         source_row.addWidget(self._group_combo, 1)
         layout.addLayout(source_row)

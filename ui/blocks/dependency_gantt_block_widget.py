@@ -25,7 +25,6 @@ import math
 from PySide6.QtCore import QRect, QTimer, Qt
 from PySide6.QtGui import QColor, QPainter, QPalette, QPen
 from PySide6.QtWidgets import (
-    QComboBox,
     QDialog,
     QDialogButtonBox,
     QDoubleSpinBox,
@@ -50,6 +49,7 @@ from blocks.dependency_gantt_block import (
     find_source_table,
 )
 from blocks.table_block import TableBlock
+from ui.no_scroll_combo_box import NoScrollComboBox
 
 _REFRESH_INTERVAL_MS = 500
 _ROW_HEIGHT = 30
@@ -229,7 +229,7 @@ class DependencyGanttBlockWidget(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
 
         selectors = QHBoxLayout()
-        self._combos: dict[str, QComboBox] = {}
+        self._combos: dict[str] = {}
         for key, label in (
             ("table", "Tableau"),
             ("label", "Sous-tâches"),
@@ -240,7 +240,7 @@ class DependencyGanttBlockWidget(QWidget):
             ("delta", "Ecarts"),
         ):
             selectors.addWidget(QLabel(f"{label} :", self))
-            combo = QComboBox(self)
+            combo = NoScrollComboBox(self)
             combo.currentIndexChanged.connect(self._on_source_changed)
             selectors.addWidget(combo, 1)
             self._combos[key] = combo
@@ -248,7 +248,7 @@ class DependencyGanttBlockWidget(QWidget):
 
         unit_row = QHBoxLayout()
         unit_row.addWidget(QLabel("Unité :", self))
-        self._unit_combo = QComboBox(self)
+        self._unit_combo = NoScrollComboBox(self)
         self._unit_combo.addItem("Jours", UNIT_DAYS)
         self._unit_combo.addItem("Mois", UNIT_MONTHS)
         index = self._unit_combo.findData(self._block.time_unit)

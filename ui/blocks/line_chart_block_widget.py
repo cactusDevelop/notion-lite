@@ -19,7 +19,6 @@ from __future__ import annotations
 from PySide6.QtCore import QRect, QTimer, Qt
 from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtWidgets import (
-    QComboBox,
     QDoubleSpinBox,
     QGridLayout,
     QHBoxLayout,
@@ -37,6 +36,7 @@ from blocks.line_chart_block import (
     LineChartBlock,
     compute_line_series,
 )
+from ui.no_scroll_combo_box import NoScrollComboBox
 
 _REFRESH_INTERVAL_MS = 500
 _MARGIN = 30
@@ -199,7 +199,7 @@ class LineChartBlockWidget(QWidget):
             name_edit.textChanged.connect(lambda text, sid=s["id"]: self._on_series_name_changed(sid, text))
             self._series_area.addWidget(name_edit, row_index, 0)
 
-            mode_combo = QComboBox(self)
+            mode_combo = NoScrollComboBox(self)
             mode_combo.addItem("Constante", SLOPE_MODE_CONSTANT)
             mode_combo.addItem("Vélocité réelle (planning)", SLOPE_MODE_EFFICIENCY)
             mode_combo.setCurrentIndex(0 if s["mode"] == SLOPE_MODE_CONSTANT else 1)
@@ -213,7 +213,7 @@ class LineChartBlockWidget(QWidget):
             slope_spin.valueChanged.connect(lambda v, sid=s["id"]: self._on_series_slope_changed(sid, v))
             self._series_area.addWidget(slope_spin, row_index, 2)
 
-            source_combo = QComboBox(self)
+            source_combo = NoScrollComboBox(self)
             source_combo.addItem("(aucun planning)", None)
             for gantt in self._gantt_blocks():
                 source_combo.addItem(f"Planning {gantt.id[:8]}", gantt.id)

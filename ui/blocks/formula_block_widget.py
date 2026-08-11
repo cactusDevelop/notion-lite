@@ -7,7 +7,7 @@ côté widget, relecture périodique du TableBlock référencé.
 from __future__ import annotations
 
 from PySide6.QtCore import QTimer
-from PySide6.QtWidgets import QComboBox, QHBoxLayout, QLabel, QLineEdit, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QLineEdit, QVBoxLayout, QWidget
 
 from blocks.formula_block import (
     FormulaBlock,
@@ -18,6 +18,7 @@ from blocks.formula_block import (
     format_formula_text,
 )
 from blocks.table_block import TableBlock
+from ui.no_scroll_combo_box import NoScrollComboBox
 
 _REFRESH_INTERVAL_MS = 500
 
@@ -41,17 +42,17 @@ class FormulaBlockWidget(QWidget):
         selectors.addWidget(self._label_edit, 1)
 
         selectors.addWidget(QLabel("Tableau :", self))
-        self._table_combo = QComboBox(self)
+        self._table_combo = NoScrollComboBox(self)
         self._table_combo.currentIndexChanged.connect(self._on_table_changed)
         selectors.addWidget(self._table_combo, 1)
 
         selectors.addWidget(QLabel("Points :", self))
-        self._number_combo = QComboBox(self)
+        self._number_combo = NoScrollComboBox(self)
         self._number_combo.currentIndexChanged.connect(self._on_number_column_changed)
         selectors.addWidget(self._number_combo, 1)
 
         selectors.addWidget(QLabel("État :", self))
-        self._boolean_combo = QComboBox(self)
+        self._boolean_combo = NoScrollComboBox(self)
         self._boolean_combo.currentIndexChanged.connect(self._on_boolean_column_changed)
         selectors.addWidget(self._boolean_combo, 1)
         layout.addLayout(selectors)
