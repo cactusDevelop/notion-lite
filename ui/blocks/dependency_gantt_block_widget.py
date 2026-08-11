@@ -1,5 +1,5 @@
 """
-Widget graphique du bloc "Gantt (dépendances)" (PATCH 46, révisé PATCH 49).
+Widget graphique du bloc "Gantt (dépendances)" (PATCH 46, révisé PATCH 49, PATCH 57).
 
 Une ligne par personne assignée à au moins une sous-tâche ; chaque
 sous-tâche est dessinée comme une barre (couleur = risque) sur la
@@ -17,6 +17,16 @@ PATCH 49 :
       et l'affichage des valeurs chiffrées (l'écart saisi et les
       graduations), sans jamais changer le stockage interne, qui
       reste toujours en jours (voir DAYS_PER_MONTH côté bloc).
+
+PATCH 57 :
+    - Les bâtonnets sont désormais directement ajustables au clic-
+      glissé, à l'instar du séparateur "À faire"/"Faites" du bloc
+      "Checklists liées" (QSplitter) : cliquer-glisser un bâtonnet
+      vers la droite/gauche rallonge/raccourcit son retard ou son
+      avance en temps réel (voir `_DependencyGanttCanvas` et
+      `on_bar_drag_moved`/`on_bar_drag_finished`). Un simple clic
+      (sans glissement notable) ouvre toujours la pop-up de saisie
+      précise (`_DeltaDialog`), pour une valeur exacte.
 """
 from __future__ import annotations
 
@@ -57,6 +67,11 @@ _AXIS_HEIGHT = 24
 _LABEL_WIDTH = 120
 _DELAY_COLOR = QColor("#1a1a1a")
 _ADVANCE_COLOR = QColor("#2196f3")
+# PATCH 57 — en-deçà de ce nombre de pixels de glissement, le geste est
+# traité comme un simple clic (ouvre la pop-up de saisie précise) plutôt
+# que comme un ajustement direct de l'écart.
+_DRAG_THRESHOLD_PX = 4
+_DELTA_RANGE_DAYS = 999.0
 
 _UNIT_LABELS = {UNIT_DAYS: "Jours", UNIT_MONTHS: "Mois"}
 
@@ -78,8 +93,14 @@ def _nice_axis_step(max_value: float) -> float:
 
 class _DependencyGanttCanvas(QWidget):
     """Zone de dessin : axe temporel + une ligne par personne, une barre
-    par sous-tâche assignée. Cliquer sur une barre ouvre la pop-up
-    d'écart (retard/avance) via le callback `on_bar_clicked`."""
+    par sous-tâche assignée.
+
+    PATCH 57 — Cliquer-glisser un bâtonnet ajuste directement son écart
+    (retard/avance) en temps réel, à l'instar du séparateur ajustable
+    des "Checklists liées" : `on_bar_drag_moved(row_id, delta_days)` est
+    appelé à chaque déplacement, `on_bar_drag_finished` une fois relâché.
+    Un clic sans glissement notable appelle plutôt `on_bar_clicked`
+    (pop-up de saisie précise, PATCH 49)."""
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -88,7 +109,16 @@ class _DependencyGanttCanvas(QWidget):
         self._bar_rects: list[tuple[QRect, dict]] = []
         self._time_unit = UNIT_DAYS
         self.on_bar_clicked = None
+        self.on_bar_drag_moved = None
+        self.on_bar_drag_finished = None
+        # PATCH 57 — état du glisser en cours (None si aucun).
+        self._drag_task: dict | None = None
+        self._drag_start_x = 0
+        self._drag_start_delta = 0.0
+        self._drag_moved = False
+        self._days_per_pixel = 0.0
         self.setMinimumHeight(_ROW_HEIGHT + _AXIS_HEIGHT)
+        self.setCursor(Qt.PointingHandCursor)
 
     def set_time_unit(self, unit: str) -> None:
         self._time_unit = unit
@@ -108,13 +138,50 @@ class _DependencyGanttCanvas(QWidget):
         self.setMinimumHeight(max(_ROW_HEIGHT, _ROW_HEIGHT * len(people)) + _AXIS_HEIGHT)
         self.update()
 
+    def _bar_at(self, pos) -> dict | None:
+        for rect, task in reversed(self._bar_rects):
+            if rect.contains(pos):
+                return task
+        return None
+
     def mousePressEvent(self, event) -> None:  # noqa: N802
-        if self.on_bar_clicked is not None:
-            for rect, task in reversed(self._bar_rects):
-                if rect.contains(event.pos()):
-                    self.on_bar_clicked(task)
-                    return
+        if event.button() == Qt.LeftButton:
+            task = self._bar_at(event.pos())
+            if task is not None:
+                self._drag_task = task
+                self._drag_start_x = event.pos().x()
+                self._drag_start_delta = task["delta"]
+                self._drag_moved = False
+                self.setCursor(Qt.SizeHorCursor)
+                return
         super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event) -> None:  # noqa: N802
+        if self._drag_task is None:
+            super().mouseMoveEvent(event)
+            return
+        dx = event.pos().x() - self._drag_start_x
+        if not self._drag_moved and abs(dx) < _DRAG_THRESHOLD_PX:
+            return
+        self._drag_moved = True
+        delta_days = self._drag_start_delta + dx * self._days_per_pixel
+        delta_days = max(-_DELTA_RANGE_DAYS, min(_DELTA_RANGE_DAYS, delta_days))
+        if self.on_bar_drag_moved is not None:
+            self.on_bar_drag_moved(self._drag_task["row_id"], delta_days)
+
+    def mouseReleaseEvent(self, event) -> None:  # noqa: N802
+        if self._drag_task is None:
+            super().mouseReleaseEvent(event)
+            return
+        task, moved = self._drag_task, self._drag_moved
+        self._drag_task = None
+        self._drag_moved = False
+        self.setCursor(Qt.PointingHandCursor)
+        if moved:
+            if self.on_bar_drag_finished is not None:
+                self.on_bar_drag_finished(task["row_id"])
+        elif self.on_bar_clicked is not None:
+            self.on_bar_clicked(task)
 
     def paintEvent(self, event) -> None:  # noqa: N802
         painter = QPainter(self)
@@ -133,6 +200,12 @@ class _DependencyGanttCanvas(QWidget):
         ) or 1.0
 
         chart_width = max(self.width() - _LABEL_WIDTH - 10, 20)
+        # PATCH 57 — mémorisé pour convertir un déplacement en pixels (lors
+        # d'un clic-glissé) en jours ; figé au clic (`mousePressEvent`
+        # capture cette valeur avant que l'échelle ne bouge pendant le
+        # glissement, pour un geste stable plutôt qu'un ré-échelonnage en
+        # direct qui rendrait le glisser imprévisible).
+        self._days_per_pixel = max_x_days / chart_width if chart_width else 0.0
 
         def to_x(day: float) -> int:
             return _LABEL_WIDTH + int(day / max_x_days * chart_width)
@@ -260,6 +333,8 @@ class DependencyGanttBlockWidget(QWidget):
 
         self._canvas = _DependencyGanttCanvas(self)
         self._canvas.on_bar_clicked = self._on_bar_clicked
+        self._canvas.on_bar_drag_moved = self._on_bar_drag_moved
+        self._canvas.on_bar_drag_finished = self._on_bar_drag_finished
         self._canvas.set_time_unit(self._block.time_unit)
         layout.addWidget(self._canvas)
 
@@ -340,22 +415,38 @@ class DependencyGanttBlockWidget(QWidget):
         self._canvas.set_time_unit(self._block.time_unit)
         self.refresh()
 
-    # -- Édition de l'écart via pop-up (PATCH 49) ------------------------
+    # -- Édition de l'écart : clic-glissé direct (PATCH 57) ou pop-up
+    # de saisie précise pour un simple clic (PATCH 49) -------------------
+
+    def _apply_delta(self, row_id: str, value_days: float) -> None:
+        """Écrit l'écart dans la colonne "Ecarts" si configurée, sinon
+        dans le stockage historique propre au bloc (voir
+        DependencyGanttBlock.set_delta)."""
+        table = find_source_table(self._document, self._block)
+        delta_column_id = self._block.delta_column_id
+        if table is not None and delta_column_id is not None:
+            table.set_cell(row_id, delta_column_id, str(value_days))
+        else:
+            self._block.set_delta(row_id, value_days)
 
     def _on_bar_clicked(self, task: dict) -> None:
         dialog = _DeltaDialog(task["label"], task["delta"], self._block.time_unit, parent=self)
         if dialog.exec() != QDialog.Accepted:
             return
-        value_days = dialog.value_in_days()
+        self._apply_delta(task["row_id"], dialog.value_in_days())
+        self.refresh()
 
-        table = find_source_table(self._document, self._block)
-        delta_column_id = self._block.delta_column_id
-        if table is not None and delta_column_id is not None:
-            table.set_cell(task["row_id"], delta_column_id, str(value_days))
-        else:
-            # Aucune colonne "Ecarts" configurée : repli sur l'ancien
-            # stockage propre au bloc (voir DependencyGanttBlock.set_delta).
-            self._block.set_delta(task["row_id"], value_days)
+    def _on_bar_drag_moved(self, row_id: str, delta_days: float) -> None:
+        """PATCH 57 — appelé en continu pendant le clic-glissé d'un
+        bâtonnet : écrit la nouvelle valeur et redessine immédiatement,
+        pour un ajustement visuel en temps réel (même principe que le
+        séparateur ajustable des "Checklists liées")."""
+        self._apply_delta(row_id, delta_days)
+        self.refresh()
+
+    def _on_bar_drag_finished(self, row_id: str) -> None:
+        # La valeur est déjà à jour (écrite à chaque _on_bar_drag_moved) ;
+        # rien de plus à faire ici, hormis un dernier rafraîchissement.
         self.refresh()
 
     # -- Rafraîchissement -------------------------------------------------
