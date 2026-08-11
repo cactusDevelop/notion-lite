@@ -1,9 +1,22 @@
 """
-Widget graphique du bloc "Courbes" (PATCH 47).
+Widget graphique du bloc "Courbes" (PATCH 47, révisé PATCH 52).
+
+PATCH 52 :
+    - Titre et noms d'axes éditables directement au clic (comme un
+      titre), sans préfixe "Titre :" / "Axe X :" — un champ vide
+      affiche un texte de substitution ("Titre", "Axe X", "Axe Y").
+    - Le graphique n'est plus limité à un carré fixe : la hauteur
+      reste "carrée" (échelle de référence de la droite "idéal"),
+      mais la largeur s'élargit pour que les droites de pentes
+      différentes se terminent à des abscisses différentes (voir
+      compute_line_series), formant un rectangle plutôt qu'un carré.
+    - Les étiquettes de série sont placées à droite de la fin de
+      chaque droite (jamais au-dessus), avec un anti-chevauchement
+      simple qui les décale verticalement si elles se recouvrent.
 """
 from __future__ import annotations
 
-from PySide6.QtCore import QTimer, Qt
+from PySide6.QtCore import QRect, QTimer, Qt
 from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtWidgets import (
     QComboBox,
@@ -27,56 +40,97 @@ from blocks.line_chart_block import (
 
 _REFRESH_INTERVAL_MS = 500
 _MARGIN = 30
+_PLOT_HEIGHT = 220
+_LABEL_GUTTER = 140
+_LABEL_WIDTH = 130
+_LABEL_HEIGHT = 16
+
+_TITLE_STYLE = "QLineEdit { border: none; background: transparent; font-weight: bold; font-size: 15pt; }"
+_AXIS_STYLE = "QLineEdit { border: none; background: transparent; color: #666666; }"
 
 
 class _LineChartCanvas(QWidget):
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self._series: list[dict] = []
-        # PATCH 49 — graphique carré et compact (au lieu de s'étirer sur
-        # toute la largeur du bloc), demandé pour rester lisible sans
-        # dominer la mise en page.
-        self.setFixedSize(260, 260)
+        self.setFixedSize(_PLOT_HEIGHT + 2 * _MARGIN, _PLOT_HEIGHT + 2 * _MARGIN)
 
     def set_series(self, series: list[dict]) -> None:
         self._series = series
+        y_scale = max((s["y1"] for s in series), default=1.0) or 1.0
+        max_x1 = max((s["x1"] for s in series), default=1.0) or 1.0
+        # PATCH 52 — largeur proportionnelle à l'abscisse la plus lointaine
+        # (jamais moins que la hauteur, qui reste la référence "carrée").
+        plot_w = max(_PLOT_HEIGHT, _PLOT_HEIGHT * (max_x1 / y_scale))
+        width = int(_MARGIN * 2 + plot_w + _LABEL_GUTTER)
+        height = _PLOT_HEIGHT + 2 * _MARGIN
+        self.setFixedSize(width, height)
         self.update()
 
     def paintEvent(self, event) -> None:  # noqa: N802
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
 
-        w, h = self.width(), self.height()
-        plot_w, plot_h = w - 2 * _MARGIN, h - 2 * _MARGIN
+        h = self.height()
+        plot_w = self.width() - 2 * _MARGIN - _LABEL_GUTTER
+        plot_h = _PLOT_HEIGHT
 
-        y_max = max((max(s["y0"], s["y1"]) for s in self._series), default=1.0)
-        x_max = max((max(s["x0"], s["x1"]) for s in self._series), default=1.0)
-        y_max = y_max or 1.0
-        x_max = x_max or 1.0
+        y_scale = max((s["y1"] for s in self._series), default=1.0) or 1.0
+        max_x1 = max((s["x1"] for s in self._series), default=1.0) or 1.0
 
         def to_px(x: float, y: float) -> tuple[int, int]:
-            px = _MARGIN + int(x / x_max * plot_w)
-            py = h - _MARGIN - int(y / y_max * plot_h)
+            px = _MARGIN + int(x / max_x1 * plot_w)
+            py = h - _MARGIN - int(y / y_scale * plot_h)
             return px, py
 
         # Axes.
         painter.setPen(QPen(QColor("#888888"), 1))
-        painter.drawLine(_MARGIN, h - _MARGIN, w - _MARGIN, h - _MARGIN)
+        painter.drawLine(_MARGIN, h - _MARGIN, _MARGIN + plot_w, h - _MARGIN)
         painter.drawLine(_MARGIN, h - _MARGIN, _MARGIN, _MARGIN)
 
+        placed_label_rects: list[QRect] = []
         for s in self._series:
             pen = QPen(QColor(s["color"]), 2)
             painter.setPen(pen)
             x0, y0 = to_px(s["x0"], s["y0"])
             x1, y1 = to_px(s["x1"], s["y1"])
             painter.drawLine(x0, y0, x1, y1)
-            painter.drawText(x1 - 60, y1 - 6, 60, 16, Qt.AlignRight, s["name"])
+            self._draw_label(painter, x1, y1, s["name"], QColor(s["color"]), placed_label_rects)
 
         painter.end()
 
+    def _draw_label(
+        self, painter: QPainter, x1: int, y1: int, text: str, color: QColor, placed: list[QRect]
+    ) -> None:
+        """PATCH 52 — étiquette à droite de la fin de la droite (jamais
+        au-dessus ni tronquée), décalée verticalement si elle
+        chevaucherait une étiquette déjà placée."""
+        rect = QRect(x1 + 8, y1 - _LABEL_HEIGHT // 2, _LABEL_WIDTH, _LABEL_HEIGHT)
+        moved = True
+        while moved:
+            moved = False
+            for other in placed:
+                if rect.intersects(other):
+                    rect.moveTop(other.bottom() + 2)
+                    moved = True
+        placed.append(QRect(rect))
+        painter.setPen(QPen(color))
+        painter.drawText(rect, Qt.AlignLeft | Qt.AlignVCenter, text)
+
+
+class _TitleLikeLineEdit(QLineEdit):
+    """Champ éditable façon "titre" (PATCH 52) : pas de préfixe visible,
+    texte de substitution quand vide, style discret sans bordure."""
+
+    def __init__(self, text: str, placeholder: str, style: str, parent=None) -> None:
+        super().__init__(text, parent)
+        self.setPlaceholderText(placeholder)
+        self.setFrame(False)
+        self.setStyleSheet(style)
+
 
 class LineChartBlockWidget(QWidget):
-    """Widget d'un LineChartBlock : titre, échelle, séries éditables, courbes."""
+    """Widget d'un LineChartBlock : titre, axes, échelle, séries éditables, courbes."""
 
     def __init__(self, block: LineChartBlock, document, parent=None) -> None:
         super().__init__(parent)
@@ -88,11 +142,10 @@ class LineChartBlockWidget(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
 
         header = QHBoxLayout()
-        header.addWidget(QLabel("Titre :", self))
-        self._title_edit = QLineEdit(block.title, self)
+        self._title_edit = _TitleLikeLineEdit(block.title, "Titre", _TITLE_STYLE, self)
         self._title_edit.textChanged.connect(self._on_title_changed)
         header.addWidget(self._title_edit, 1)
-        header.addWidget(QLabel("X max :", self))
+        header.addWidget(QLabel("Échelle :", self))
         self._x_max_spin = QDoubleSpinBox(self)
         self._x_max_spin.setRange(0.01, 100000)
         self._x_max_spin.setValue(block.x_max)
@@ -100,8 +153,16 @@ class LineChartBlockWidget(QWidget):
         header.addWidget(self._x_max_spin)
         layout.addLayout(header)
 
+        self._y_axis_edit = _TitleLikeLineEdit(block.y_axis_label, "Axe Y", _AXIS_STYLE, self)
+        self._y_axis_edit.textChanged.connect(self._on_y_axis_changed)
+        layout.addWidget(self._y_axis_edit)
+
         self._canvas = _LineChartCanvas(self)
         layout.addWidget(self._canvas, 0, Qt.AlignLeft)
+
+        self._x_axis_edit = _TitleLikeLineEdit(block.x_axis_label, "Axe X", _AXIS_STYLE, self)
+        self._x_axis_edit.textChanged.connect(self._on_x_axis_changed)
+        layout.addWidget(self._x_axis_edit)
 
         self._series_area = QGridLayout()
         layout.addLayout(self._series_area)
@@ -179,7 +240,12 @@ class LineChartBlockWidget(QWidget):
 
     def _on_title_changed(self, text: str) -> None:
         self._block.title = text
-        self.refresh()
+
+    def _on_x_axis_changed(self, text: str) -> None:
+        self._block.x_axis_label = text
+
+    def _on_y_axis_changed(self, text: str) -> None:
+        self._block.y_axis_label = text
 
     def _on_x_max_changed(self, value: float) -> None:
         self._block.x_max = value

@@ -107,13 +107,15 @@ def _render_dependency_gantt_block(document, block: DependencyGanttBlock) -> str
 
 def _render_line_chart_block(document, block: LineChartBlock) -> str:
     series = compute_line_series(document, block)
+    title = block.title or "(sans titre)"
+    axes = f" — {_esc(block.x_axis_label)} / {_esc(block.y_axis_label)}" if (block.x_axis_label or block.y_axis_label) else ""
     if not series:
-        return f"<p><b>{_esc(block.title)}</b> (aucune série)</p>"
+        return f"<p><b>{_esc(title)}</b>{axes} (aucune série)</p>"
     rows_html = "".join(
         f"<tr><td>{_esc(s['name'])}</td><td>{_esc(s['slope'])}</td></tr>" for s in series
     )
     return (
-        f"<p><b>{_esc(block.title)}</b></p>"
+        f"<p><b>{_esc(title)}</b>{axes}</p>"
         '<table border="1" cellspacing="0" cellpadding="4">'
         "<tr><th>Droite</th><th>Pente</th></tr>" + rows_html + "</table>"
     )

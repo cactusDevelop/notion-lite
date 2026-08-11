@@ -99,12 +99,20 @@ class BarChartBlockWidget(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
 
         header = QHBoxLayout()
-        header.addWidget(QLabel("Titre :", self))
         self._title_edit = QLineEdit(block.title, self)
+        self._title_edit.setPlaceholderText("Titre")
+        self._title_edit.setFrame(False)
+        self._title_edit.setStyleSheet(
+            "QLineEdit { border: none; background: transparent; font-weight: bold; font-size: 15pt; }"
+        )
         self._title_edit.textChanged.connect(self._on_title_changed)
         header.addWidget(self._title_edit, 1)
-        header.addWidget(QLabel("Axe Y :", self))
         self._y_label_edit = QLineEdit(block.y_axis_label, self)
+        self._y_label_edit.setPlaceholderText("Axe Y")
+        self._y_label_edit.setFrame(False)
+        self._y_label_edit.setStyleSheet(
+            "QLineEdit { border: none; background: transparent; color: #666666; }"
+        )
         self._y_label_edit.textChanged.connect(self._on_y_label_changed)
         header.addWidget(self._y_label_edit, 1)
         layout.addLayout(header)

@@ -1,5 +1,5 @@
 """
-Bloc "Courbes" (PATCH 47).
+Bloc "Courbes" (PATCH 47, révisé PATCH 52).
 
 Trace une ou plusieurs droites passant par l'origine (y = pente * x)
 sur un même repère. Chaque série a sa pente définie soit
@@ -9,6 +9,15 @@ calculée automatiquement à partir d'un bloc "Planning par
 dépendances" (ratio durée planifiée / (durée planifiée + retard),
 voir compute_efficiency_ratio) — ce qui couvre le besoin d'une droite
 de "vélocité réelle" recalculée à chaque modification du planning.
+
+PATCH 52 : chaque droite est désormais tracée jusqu'à ce qu'elle
+atteigne la même hauteur maximale (`y_scale`, la hauteur "carrée" de
+la droite "idéal" y=x) plutôt que jusqu'à une abscisse commune : des
+pentes différentes se terminent donc à des abscisses différentes
+(la zone de tracé s'élargit en rectangle plutôt que de rester
+carrée), ce qui évite que les droites et leurs étiquettes se
+superposent. `x_axis_label`/`y_axis_label` nomment les axes,
+éditables au clic comme le titre.
 """
 from __future__ import annotations
 
@@ -31,7 +40,9 @@ class LineChartBlock(Block):
 
     Données (data) :
         title: titre affiché au-dessus du graphique.
-        x_max: borne supérieure de l'axe des abscisses.
+        x_axis_label / y_axis_label: noms des axes (PATCH 52).
+        x_max: hauteur de référence (voir y_scale) — utilisée comme
+            échelle verticale carrée pour la droite "idéal" y=x.
         series: liste de {
             id, name, color,
             mode: "constant" | "efficiency",
@@ -44,7 +55,9 @@ class LineChartBlock(Block):
 
     def __init__(
         self,
-        title: str = "Efficacité",
+        title: str = "",
+        x_axis_label: str = "",
+        y_axis_label: str = "",
         x_max: float = 10.0,
         series: list[dict[str, Any]] | None = None,
         id: str | None = None,
@@ -54,7 +67,13 @@ class LineChartBlock(Block):
             normalized_series.append({**s, "id": s.get("id") or str(uuid.uuid4())})
         super().__init__(
             type=LINE_CHART_BLOCK_TYPE,
-            data={"title": title, "x_max": x_max, "series": normalized_series},
+            data={
+                "title": title,
+                "x_axis_label": x_axis_label,
+                "y_axis_label": y_axis_label,
+                "x_max": x_max,
+                "series": normalized_series,
+            },
             id=id or str(uuid.uuid4()),
         )
 
@@ -65,6 +84,22 @@ class LineChartBlock(Block):
     @title.setter
     def title(self, value: str) -> None:
         self.data["title"] = value
+
+    @property
+    def x_axis_label(self) -> str:
+        return self.data.get("x_axis_label", "")
+
+    @x_axis_label.setter
+    def x_axis_label(self, value: str) -> None:
+        self.data["x_axis_label"] = value
+
+    @property
+    def y_axis_label(self) -> str:
+        return self.data.get("y_axis_label", "")
+
+    @y_axis_label.setter
+    def y_axis_label(self, value: str) -> None:
+        self.data["y_axis_label"] = value
 
     @property
     def x_max(self) -> float:
@@ -147,11 +182,26 @@ def resolve_series_slope(document, series: dict[str, Any]) -> float:
 
 def compute_line_series(document, block: LineChartBlock) -> list[dict[str, Any]]:
     """Retourne, pour chaque série, {id, name, color, slope, x0, y0, x1, y1}
-    (segment de droite entre 0 et x_max) prêt à être tracé."""
-    x_max = block.x_max
+    prêt à être tracé.
+
+    PATCH 52 — toutes les droites visent la même hauteur maximale
+    `y_scale` (= block.x_max, la hauteur de la droite "idéal" y=x) :
+    chacune s'arrête à l'abscisse où elle atteint cette hauteur
+    (x1 = y_scale / pente), donc des pentes différentes se terminent
+    à des abscisses différentes plutôt que de se superposer au même
+    point. Une pente nulle ou négative n'atteint jamais y_scale ; on
+    la trace alors à plat sur toute la largeur de référence.
+    """
+    y_scale = block.x_max
     result = []
     for s in block.series:
         slope = resolve_series_slope(document, s)
+        if slope > 0:
+            x1 = y_scale / slope
+            y1 = y_scale
+        else:
+            x1 = block.x_max
+            y1 = slope * x1
         result.append(
             {
                 "id": s["id"],
@@ -160,8 +210,8 @@ def compute_line_series(document, block: LineChartBlock) -> list[dict[str, Any]]
                 "slope": slope,
                 "x0": 0.0,
                 "y0": 0.0,
-                "x1": x_max,
-                "y1": slope * x_max,
+                "x1": x1,
+                "y1": y1,
             }
         )
     return result

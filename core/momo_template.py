@@ -144,7 +144,9 @@ def build_momo_template() -> Document:
     document.add_block(gantt)
 
     # -- Graphique "Efficacité" ---------------------------------------------
-    efficiency_chart = LineChartBlock(title="Efficacité", x_max=12)
+    efficiency_chart = LineChartBlock(
+        title="Efficacité", x_axis_label="Temps", y_axis_label="Avancement moyen", x_max=12
+    )
     efficiency_chart.add_series(name="Idéal", mode=SLOPE_MODE_CONSTANT, slope=1.0, color="#43a047")
     # Constante de vélocité arbitraire, à ajuster par l'utilisateur.
     efficiency_chart.add_series(name="Vélocité", mode=SLOPE_MODE_CONSTANT, slope=0.8, color="#fb8c00")

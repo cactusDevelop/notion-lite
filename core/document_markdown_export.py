@@ -112,10 +112,12 @@ def _render_dependency_gantt_block(document, block: DependencyGanttBlock) -> str
 
 def _render_line_chart_block(document, block: LineChartBlock) -> str:
     series = compute_line_series(document, block)
+    title = block.title or "(sans titre)"
+    axes = f" — {block.x_axis_label} / {block.y_axis_label}" if (block.x_axis_label or block.y_axis_label) else ""
     if not series:
-        return f"**{block.title}** *(aucune série)*"
+        return f"**{title}**{axes} *(aucune série)*"
     table = _markdown_table(["Droite", "Pente"], [[s["name"], str(s["slope"])] for s in series])
-    return f"**{block.title}**\n\n{table}"
+    return f"**{title}**{axes}\n\n{table}"
 
 
 def _render_bar_chart_block(block: BarChartBlock) -> str:

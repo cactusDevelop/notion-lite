@@ -51,7 +51,11 @@ def test_efficiency_slope_series_tracks_dependency_gantt():
     gantt.set_delta(table.rows[0]["id"], 4)
     series = compute_line_series(doc, chart)
     assert abs(series[0]["slope"] - (8 / 12)) < 1e-9
-    assert abs(series[0]["y1"] - (8 / 12 * 10)) < 1e-9
+    # PATCH 52 — la droite atteint toujours la même hauteur (y_scale =
+    # x_max = 10), donc y1 reste 10 quelle que soit la pente ; c'est
+    # l'abscisse x1 qui change (10 / pente).
+    assert series[0]["y1"] == 10.0
+    assert abs(series[0]["x1"] - (10 / (8 / 12))) < 1e-9
 
 
 def test_efficiency_series_without_valid_source_defaults_to_zero():
@@ -76,14 +80,53 @@ def test_remove_and_rename_series():
     assert not block.remove_series("id-inconnu")
 
 
+def test_different_slopes_end_at_same_height_different_x():
+    """PATCH 52 — évite que les droites/étiquettes se superposent :
+    toutes atteignent la même hauteur (y_scale = x_max), mais à des
+    abscisses différentes selon leur pente."""
+    doc = Document()
+    block = LineChartBlock(x_max=10)
+    block.add_series(name="Idéal", mode=SLOPE_MODE_CONSTANT, slope=1.0)
+    block.add_series(name="Vélocité", mode=SLOPE_MODE_CONSTANT, slope=0.5)
+    doc.add_block(block)
+
+    series = compute_line_series(doc, block)
+    assert series[0]["y1"] == series[1]["y1"] == 10.0
+    assert series[0]["x1"] != series[1]["x1"]
+    assert series[1]["x1"] == 20.0  # pente 0.5 : il faut x=20 pour atteindre y=10
+
+
+def test_non_positive_slope_falls_back_to_flat_segment():
+    doc = Document()
+    block = LineChartBlock(x_max=10)
+    block.add_series(name="Nulle", mode=SLOPE_MODE_CONSTANT, slope=0.0)
+    doc.add_block(block)
+
+    series = compute_line_series(doc, block)
+    assert series[0]["x1"] == 10.0
+    assert series[0]["y1"] == 0.0
+
+
+def test_axis_labels_default_empty_and_are_settable():
+    block = LineChartBlock()
+    assert block.x_axis_label == ""
+    assert block.y_axis_label == ""
+    block.x_axis_label = "Temps"
+    block.y_axis_label = "Avancement moyen"
+    assert block.x_axis_label == "Temps"
+    assert block.y_axis_label == "Avancement moyen"
+
+
 def test_roundtrip_via_registry():
-    block = LineChartBlock(title="Efficacité", x_max=20)
+    block = LineChartBlock(title="Efficacité", x_axis_label="Temps", y_axis_label="Avancement moyen", x_max=20)
     block.add_series(name="Idéal", mode=SLOPE_MODE_CONSTANT, slope=1.0)
     block.add_series(name="Vélocité", mode=SLOPE_MODE_EFFICIENCY, source_block_id="gantt-1")
 
     rebuilt = block_from_dict(block.to_dict())
     assert isinstance(rebuilt, LineChartBlock)
     assert rebuilt.title == "Efficacité"
+    assert rebuilt.x_axis_label == "Temps"
+    assert rebuilt.y_axis_label == "Avancement moyen"
     assert rebuilt.x_max == 20
     assert len(rebuilt.series) == 2
     assert rebuilt.series[1]["source_block_id"] == "gantt-1"

@@ -104,7 +104,9 @@ def block_from_dict(raw: dict[str, Any]) -> Block:
 
     if block_type == LINE_CHART_BLOCK_TYPE:
         return LineChartBlock(
-            title=data.get("title", "Efficacité"),
+            title=data.get("title", ""),
+            x_axis_label=data.get("x_axis_label", ""),
+            y_axis_label=data.get("y_axis_label", ""),
             x_max=data.get("x_max", 10.0),
             series=data.get("series", []),
             id=block_id,
