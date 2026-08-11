@@ -20,6 +20,7 @@ from blocks.formula_block import FormulaBlock
 from blocks.heading_block import HeadingBlock
 from blocks.line_chart_block import SLOPE_MODE_CONSTANT, SLOPE_MODE_EFFICIENCY, LineChartBlock
 from blocks.linked_checklist_block import LinkedChecklistBlock
+from blocks.people_list_block import PeopleListBlock
 from blocks.table_block import (
     COLUMN_TYPE_BOOLEAN,
     COLUMN_TYPE_MULTI_SELECT,
@@ -59,7 +60,10 @@ def build_momo_template() -> Document:
 
     names = random.sample(_SAMPLE_NAMES, 3)
     people = [document.add_person(name) for name in names]
-    document.add_block(TextBlock(content="\n".join(f"• {name}" for name in names)))
+    # PATCH 52 — L'effectif est désormais un bloc "people_list" éditable
+    # (ajout par Entrée), vue directe du registre partagé Document.people,
+    # synchronisée avec le Gestionnaire de personnes.
+    document.add_block(PeopleListBlock())
 
     # -- Checklist initiale (deux checklists liées) ------------------------
     document.add_block(HeadingBlock(level=2, content="Checklist initiale"))

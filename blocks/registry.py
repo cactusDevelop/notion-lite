@@ -20,6 +20,7 @@ from blocks.image_block import IMAGE_BLOCK_TYPE, ImageBlock
 from blocks.linked_checklist_block import LINKED_CHECKLIST_BLOCK_TYPE, LinkedChecklistBlock
 from blocks.line_chart_block import LINE_CHART_BLOCK_TYPE, LineChartBlock
 from blocks.list_block import LIST_BLOCK_TYPE, ListBlock
+from blocks.people_list_block import PEOPLE_LIST_BLOCK_TYPE, PeopleListBlock
 from blocks.quote_block import QUOTE_BLOCK_TYPE, QuoteBlock
 from blocks.separator_block import SEPARATOR_BLOCK_TYPE, SeparatorBlock
 from blocks.simple_table_block import SIMPLE_TABLE_BLOCK_TYPE, SimpleTableBlock
@@ -135,6 +136,9 @@ def block_from_dict(raw: dict[str, Any]) -> Block:
             list_type=data.get("list_type", "bullet"),
             id=block_id,
         )
+
+    if block_type == PEOPLE_LIST_BLOCK_TYPE:
+        return PeopleListBlock(id=block_id)
 
     if block_type == QUOTE_BLOCK_TYPE:
         return QuoteBlock(content=data.get("content", ""), id=block_id)

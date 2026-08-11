@@ -18,6 +18,7 @@ from blocks.image_block import ImageBlock
 from blocks.line_chart_block import LineChartBlock
 from blocks.linked_checklist_block import LinkedChecklistBlock
 from blocks.list_block import ListBlock
+from blocks.people_list_block import PeopleListBlock
 from blocks.quote_block import QuoteBlock
 from blocks.separator_block import SeparatorBlock
 from blocks.simple_table_block import SimpleTableBlock
@@ -47,6 +48,9 @@ def preview_for_block(block) -> str:
 
     if isinstance(block, LinkedChecklistBlock):
         return f"(checklists liées, {len(block.todo_items())} à faire / {len(block.done_items())} faites)"
+
+    if isinstance(block, PeopleListBlock):
+        return "(effectif)"
 
     if isinstance(block, ListBlock):
         if block.items:

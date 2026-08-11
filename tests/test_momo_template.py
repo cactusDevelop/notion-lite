@@ -6,8 +6,8 @@ from blocks.formula_block import FormulaBlock, compute_formula_result
 from blocks.heading_block import HeadingBlock
 from blocks.line_chart_block import LineChartBlock, compute_line_series
 from blocks.linked_checklist_block import LinkedChecklistBlock
+from blocks.people_list_block import PeopleListBlock
 from blocks.table_block import TableBlock
-from blocks.text_block import TextBlock
 from core.momo_template import build_momo_template
 
 
@@ -23,7 +23,7 @@ def test_template_block_order_and_types():
     assert types == [
         HeadingBlock,  # Méthodo Momo
         HeadingBlock,  # Effectif
-        TextBlock,  # liste des personnes
+        PeopleListBlock,  # liste des personnes (éditable, PATCH 52)
         HeadingBlock,  # Checklist initiale
         LinkedChecklistBlock,
         HeadingBlock,  # Critères
@@ -47,13 +47,14 @@ def test_template_titles():
     assert document.blocks[8].content == "Assignation des tâches"
 
 
-def test_effectif_text_lists_the_three_people():
+def test_effectif_block_is_editable_people_list():
     document = build_momo_template()
+    people_block = document.blocks[2]
+    assert isinstance(people_block, PeopleListBlock)
+    # PATCH 52 — l'effectif n'a pas de contenu propre : il reflète
+    # directement le registre partagé Document.people (source unique).
     names = [p["name"] for p in document.people]
-    text_block = document.blocks[2]
-    assert isinstance(text_block, TextBlock)
-    for name in names:
-        assert name in text_block.content
+    assert len(names) == 3
 
 
 def test_linked_checklist_has_abc_items_all_todo():

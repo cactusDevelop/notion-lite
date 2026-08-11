@@ -8,7 +8,7 @@ import json
 import uuid
 from pathlib import Path
 
-from PySide6.QtCore import QEvent, QPoint, Qt, QTimer
+from PySide6.QtCore import QEvent, QPoint, QSettings, Qt, QTimer
 from PySide6.QtGui import QAction, QActionGroup, QColor, QKeySequence, QTextCursor
 from PySide6.QtWidgets import (
     QApplication,
@@ -34,6 +34,7 @@ from blocks.line_chart_block import LineChartBlock
 from blocks.gantt_block import GanttBlock
 from blocks.linked_checklist_block import LinkedChecklistBlock
 from blocks.list_block import ListBlock
+from blocks.people_list_block import PeopleListBlock
 from blocks.quote_block import QuoteBlock
 from blocks.separator_block import SeparatorBlock
 from blocks.simple_table_block import SimpleTableBlock
@@ -62,6 +63,7 @@ from ui.blocks.heading_block_widget import HeadingBlockWidget
 from ui.blocks.image_block_widget import ImageBlockWidget
 from ui.blocks.linked_checklist_block_widget import LinkedChecklistBlockWidget
 from ui.blocks.list_block_widget import ListBlockWidget
+from ui.blocks.people_list_block_widget import PeopleListBlockWidget
 from ui.blocks.quote_block_widget import QuoteBlockWidget
 from ui.blocks.separator_block_widget import SeparatorBlockWidget
 from ui.blocks.simple_table_block_widget import SimpleTableBlockWidget
@@ -96,6 +98,33 @@ from ui.toolbar import MainToolBar
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 _INFO_ICON_PATH = str(_PROJECT_ROOT / "icon-info.svg")
 
+# PATCH 52 — Identifiants QSettings utilisés pour mémoriser, entre deux
+# lancements de l'application, le chemin du dernier document sauvegardé
+# ou ouvert (voir _load_startup_document / _set_current_file), afin de
+# rouvrir automatiquement la dernière session au démarrage.
+_SETTINGS_ORG = "NotionLite"
+_SETTINGS_APP = "NotionLite"
+_SETTINGS_LAST_FILE_KEY = "last_file"
+
+
+def _load_startup_document() -> tuple[Document, Path | None]:
+    """PATCH 52 — Reprend automatiquement la dernière session : recharge
+    le dernier fichier sauvegardé/ouvert mémorisé (QSettings), si le
+    fichier existe et reste lisible. Sinon (premier lancement, fichier
+    déplacé/supprimé, ou invalide), repart du template par défaut."""
+    settings = QSettings(_SETTINGS_ORG, _SETTINGS_APP)
+    path_str = settings.value(_SETTINGS_LAST_FILE_KEY, "")
+    if path_str:
+        path = Path(path_str)
+        if path.exists():
+            try:
+                raw = json.loads(path.read_text(encoding="utf-8"))
+                return Document.from_dict(raw), path
+            except (OSError, ValueError, KeyError):
+                pass
+    return build_momo_template(), None
+
+
 # PATCH 27 — Intervalle (ms) du sondage qui regroupe les frappes rapides
 # (édition de texte) en un seul point d'annulation ("undo" par pause,
 # pas par caractère). Ctrl+Z force de toute façon un flush immédiat.
@@ -128,11 +157,18 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(f"Notion Lite {__version__}")
         self.resize(1000, 700)
 
-        self._document = build_momo_template()
+        # PATCH 52 — reprend la dernière session (dernier fichier
+        # sauvegardé/ouvert) si elle existe, sinon repart du template.
+        self._document, restored_path = _load_startup_document()
         self._active_text_widget: TextBlockWidget | None = None
         self._current_file: Path | None = None
 
         self._setup_ui()
+        if restored_path is not None:
+            self._set_current_file(restored_path)
+        # PATCH 52 — référence servant à détecter des modifications non
+        # sauvegardées à la fermeture (voir closeEvent).
+        self._last_saved_snapshot = self._document_snapshot()
 
     def _setup_ui(self) -> None:
         """Prépare la toolbar, la zone de contenu et affiche le document."""
@@ -495,6 +531,34 @@ class MainWindow(QMainWindow):
                 return True
         return super().eventFilter(obj, event)
 
+    def closeEvent(self, event) -> None:  # noqa: N802
+        """PATCH 52 — À la fermeture, propose de sauvegarder si des
+        modifications n'ont pas été enregistrées depuis la dernière
+        sauvegarde/ouverture (comparaison de snapshots, même mécanisme
+        que l'undo). Annuler la boîte de dialogue annule la fermeture."""
+        if self._document_snapshot() == self._last_saved_snapshot:
+            event.accept()
+            return
+
+        response = QMessageBox.question(
+            self,
+            "Modifications non sauvegardées",
+            "Voulez-vous sauvegarder les modifications avant de quitter ?",
+            QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel,
+            QMessageBox.Save,
+        )
+        if response == QMessageBox.Cancel:
+            event.ignore()
+            return
+        if response == QMessageBox.Save:
+            self._save_document()
+            # "Sauvegarder sous" peut avoir été annulé par l'utilisateur :
+            # dans ce cas rien n'a été écrit, on n'autorise pas la fermeture.
+            if self._document_snapshot() != self._last_saved_snapshot:
+                event.ignore()
+                return
+        event.accept()
+
     # -- Rendu générique des blocs / drag & drop (PATCH 8, 13) ------------
 
     def _create_content_widget_for_block(self, block) -> QWidget:
@@ -507,6 +571,8 @@ class MainWindow(QMainWindow):
             return ChecklistBlockWidget(block)
         if isinstance(block, LinkedChecklistBlock):
             return LinkedChecklistBlockWidget(block)
+        if isinstance(block, PeopleListBlock):
+            return PeopleListBlockWidget(block, self._document)
         if isinstance(block, TableBlock):
             return TableBlockWidget(block, self._document)
         if isinstance(block, SimpleTableBlock):
@@ -757,18 +823,27 @@ class MainWindow(QMainWindow):
         self._current_file = path
         title = f"Notion Lite {__version__}"
         self.setWindowTitle(title + (f" — {path.name}" if path else ""))
+        # PATCH 52 — mémorise (ou oublie) le fichier courant pour la
+        # reprise de session au prochain lancement.
+        settings = QSettings(_SETTINGS_ORG, _SETTINGS_APP)
+        if path is not None:
+            settings.setValue(_SETTINGS_LAST_FILE_KEY, str(path))
+        else:
+            settings.remove(_SETTINGS_LAST_FILE_KEY)
 
     def _new_document(self) -> None:
         """PATCH 48 — Nouveau : repart du template par défaut "Méthodo Momo"."""
         self._document = build_momo_template()
         self._set_current_file(None)
         self._render_document()
+        self._last_saved_snapshot = self._document_snapshot()
 
     def _new_blank_document(self) -> None:
         """PATCH 8 — Nouveau document vide (sans template)."""
         self._document = Document()
         self._set_current_file(None)
         self._render_document()
+        self._last_saved_snapshot = self._document_snapshot()
 
     def _open_document(self) -> None:
         """PATCH 8 — Ouvrir : charge un document depuis un fichier JSON."""
@@ -790,6 +865,7 @@ class MainWindow(QMainWindow):
         self._document = document
         self._set_current_file(Path(path_str))
         self._render_document()
+        self._last_saved_snapshot = self._document_snapshot()
 
     def _import_markdown(self) -> None:
         """PATCH 39 — Importe un fichier Markdown, remplace le document
@@ -813,6 +889,7 @@ class MainWindow(QMainWindow):
         self._document = document
         self._set_current_file(None)
         self._render_document()
+        self._last_saved_snapshot = self._document_snapshot()
 
     def _import_html(self) -> None:
         """PATCH 40 — Importe un fichier HTML, remplace le document courant
@@ -835,6 +912,7 @@ class MainWindow(QMainWindow):
         self._document = document
         self._set_current_file(None)
         self._render_document()
+        self._last_saved_snapshot = self._document_snapshot()
 
     def _write_document(self, path: Path) -> None:
         try:
@@ -848,6 +926,7 @@ class MainWindow(QMainWindow):
             )
             return
         self._set_current_file(path)
+        self._last_saved_snapshot = self._document_snapshot()
 
     def _save_document(self) -> None:
         """PATCH 8 — Sauvegarder : réutilise le fichier courant, sinon demande où."""

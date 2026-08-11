@@ -20,6 +20,7 @@ from blocks.image_block import ImageBlock
 from blocks.line_chart_block import LineChartBlock
 from blocks.linked_checklist_block import LinkedChecklistBlock
 from blocks.list_block import ListBlock
+from blocks.people_list_block import PeopleListBlock
 from blocks.quote_block import QuoteBlock
 from blocks.separator_block import SeparatorBlock
 from blocks.simple_table_block import SimpleTableBlock
@@ -39,6 +40,7 @@ _ICON_RULES: list[tuple[type, str]] = [
     (TextBlock, "¶"),
     (ChecklistBlock, "☑"),
     (LinkedChecklistBlock, "⇄"),
+    (PeopleListBlock, "👥"),
     (ListBlock, "•"),
     (TableBlock, "▦"),
     (SimpleTableBlock, "▤"),
