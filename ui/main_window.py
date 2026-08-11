@@ -584,7 +584,7 @@ class MainWindow(QMainWindow):
         if isinstance(block, LineChartBlock):
             return LineChartBlockWidget(block, self._document)
         if isinstance(block, BarChartBlock):
-            return BarChartBlockWidget(block)
+            return BarChartBlockWidget(block, self._document)
         if isinstance(block, FormulaBlock):
             return FormulaBlockWidget(block, self._document)
         if isinstance(block, SeparatorBlock):

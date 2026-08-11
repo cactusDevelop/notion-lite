@@ -162,11 +162,11 @@ def build_momo_template() -> Document:
     )
     document.add_block(efficiency_chart)
 
-    # -- Graphique "Delta de budget" (une barre "Prévu" par phase, marqueur
-    # "Réel" en pointillés — contenu provisoire) -----------------------------
-    budget_chart = BarChartBlock(title="Delta de budget", y_axis_label="Prix")
-    budget_chart.add_bar(label="Phase 1", value=1000, actual=1150)
-    budget_chart.add_bar(label="Phase 2", value=1500, actual=1400)
+    # -- Graphique "Delta de budget" (une barre par phase, synchronisée en
+    # direct — PATCH 54 — avec les durées + écarts ("Ecarts") du planning
+    # par dépendances ci-dessus, regroupées par "Phases") -------------------
+    budget_chart = BarChartBlock(title="Delta de budget", y_axis_label="Jours")
+    budget_chart.set_source(gantt.id, phase_col["id"])
     document.add_block(budget_chart)
 
     return document

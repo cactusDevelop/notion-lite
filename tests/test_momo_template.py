@@ -118,12 +118,29 @@ def test_efficiency_chart_tracks_the_gantt_block():
     assert series_after_delay[2]["slope"] < 1.0
 
 
-def test_budget_chart_has_two_placeholder_bars():
+def test_budget_chart_is_synced_with_the_gantt_ecarts():
+    """PATCH 54 — le graphique 'Delta de budget' n'a plus de barres
+    figées : il est relié au planning et regroupé par 'Phases', donc
+    reflète en direct les durées + écarts saisis dans le tableau."""
     document = build_momo_template()
+    tasks_table = document.blocks[9]
+    gantt = document.blocks[10]
     chart = document.blocks[12]
     assert isinstance(chart, BarChartBlock)
-    assert [b["label"] for b in chart.bars] == ["Phase 1", "Phase 2"]
-    assert all(b["actual"] is not None for b in chart.bars)
+    assert chart.source_gantt_id == gantt.id
+
+    from blocks.bar_chart_block import sync_bars_from_gantt
+
+    bars = sync_bars_from_gantt(document, chart)
+    assert [b["label"] for b in bars] == ["Phase 1", "Phase 2"]
+    # Sans écart déclaré : "Réel" == "Prévu" pour chaque phase.
+    assert all(b["actual"] == b["value"] for b in bars)
+
+    # Un écart saisi dans le tableau se répercute aussitôt sur le graphique.
+    tasks_table.set_cell(tasks_table.rows[0]["id"], gantt.delta_column_id, "5")
+    bars_after = sync_bars_from_gantt(document, chart)
+    phase1 = next(b for b in bars_after if b["label"] == "Phase 1")
+    assert phase1["actual"] == phase1["value"] + 5
 
 
 def test_template_document_roundtrips_through_json():
