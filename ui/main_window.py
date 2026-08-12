@@ -13,13 +13,19 @@ from PySide6.QtGui import QAction, QActionGroup, QColor, QKeySequence, QTextCurs
 from PySide6.QtWidgets import (
     QApplication,
     QColorDialog,
+    QDockWidget,
     QFileDialog,
+    QFileSystemModel,
+    QHBoxLayout,
     QLineEdit,
     QMainWindow,
     QMenu,
     QMessageBox,
+    QPushButton,
     QScrollArea,
     QTextEdit,
+    QTreeView,
+    QVBoxLayout,
     QWidget,
 )
 
@@ -100,6 +106,9 @@ _INFO_ICON_PATH = str(_PROJECT_ROOT / "icon-info.svg")
 _SETTINGS_ORG = "NotionLite"
 _SETTINGS_APP = "NotionLite"
 _SETTINGS_LAST_FILE_KEY = "last_file"
+# PATCH 53 — dossier affiché dans l'explorateur de fichiers latéral,
+# mémorisé entre deux lancements comme _SETTINGS_LAST_FILE_KEY.
+_SETTINGS_LAST_FOLDER_KEY = "last_folder"
 
 
 def _load_startup_document() -> tuple[Document, Path | None]:
@@ -201,6 +210,7 @@ class MainWindow(QMainWindow):
         )
         self.addToolBar(toolbar)
         self._setup_file_menu()
+        self._setup_file_explorer_dock()
 
         central = BlocksArea(
             on_block_dropped=self._on_block_dropped,
@@ -318,6 +328,77 @@ class MainWindow(QMainWindow):
         self._autosave_action.setChecked(get_autosave_enabled())
         self._autosave_action.triggered.connect(self._toggle_autosave)
         view_menu.addAction(self._autosave_action)
+
+        view_menu.addSeparator()
+        self._explorer_action = QAction("Explorateur de fichiers", self)
+        self._explorer_action.setCheckable(True)
+        self._explorer_action.setChecked(True)
+        self._explorer_action.triggered.connect(self._explorer_dock.setVisible)
+        view_menu.addAction(self._explorer_action)
+
+    def _setup_file_explorer_dock(self) -> None:
+        """PATCH 53 — Panneau latéral façon IDE : arborescence d'un
+        dossier choisi par l'utilisateur, double-clic sur un ".json"
+        pour l'ouvrir comme document Notion Lite."""
+        self._explorer_dock = QDockWidget("Fichiers", self)
+        self._explorer_dock.setObjectName("file_explorer_dock")
+
+        container = QWidget(self._explorer_dock)
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(4, 4, 4, 4)
+
+        header = QHBoxLayout()
+        self._explorer_path_label = QLineEdit()
+        self._explorer_path_label.setReadOnly(True)
+        self._explorer_path_label.setPlaceholderText("Aucun dossier sélectionné")
+        header.addWidget(self._explorer_path_label)
+        choose_folder_button = QPushButton("Choisir un dossier...")
+        choose_folder_button.clicked.connect(self._choose_explorer_folder)
+        header.addWidget(choose_folder_button)
+        layout.addLayout(header)
+
+        self._explorer_model = QFileSystemModel(self)
+        self._explorer_model.setNameFilters(["*.json"])
+        self._explorer_model.setNameFilterDisables(False)
+
+        self._explorer_tree = QTreeView(container)
+        self._explorer_tree.setModel(self._explorer_model)
+        self._explorer_tree.setHeaderHidden(True)
+        for column in (1, 2, 3):
+            self._explorer_tree.hideColumn(column)
+        self._explorer_tree.doubleClicked.connect(self._on_explorer_item_activated)
+        layout.addWidget(self._explorer_tree)
+
+        self._explorer_dock.setWidget(container)
+        self.addDockWidget(Qt.LeftDockWidgetArea, self._explorer_dock)
+
+        settings = QSettings(_SETTINGS_ORG, _SETTINGS_APP)
+        last_folder = settings.value(_SETTINGS_LAST_FOLDER_KEY, "")
+        if last_folder and Path(last_folder).is_dir():
+            self._set_explorer_root(Path(last_folder))
+
+    def _choose_explorer_folder(self) -> None:
+        """PATCH 53 — Sélectionne le dossier affiché dans l'explorateur."""
+        folder = QFileDialog.getExistingDirectory(self, "Choisir un dossier")
+        if not folder:
+            return
+        self._set_explorer_root(Path(folder))
+
+    def _set_explorer_root(self, folder: Path) -> None:
+        self._explorer_model.setRootPath(str(folder))
+        self._explorer_tree.setRootIndex(self._explorer_model.index(str(folder)))
+        self._explorer_path_label.setText(str(folder))
+        settings = QSettings(_SETTINGS_ORG, _SETTINGS_APP)
+        settings.setValue(_SETTINGS_LAST_FOLDER_KEY, str(folder))
+
+    def _on_explorer_item_activated(self, index) -> None:
+        """PATCH 53 — Double-clic dans l'explorateur : ouvre le fichier
+        ".json" sélectionné comme document courant."""
+        path = Path(self._explorer_model.filePath(index))
+        if path.is_dir() or path.suffix != ".json":
+            return
+        self._load_document_from_path(path)
+
     # -- Mise en forme (PATCH 5 / 6) -------------------------------------
 
     def _with_active(self, method):
@@ -804,9 +885,13 @@ class MainWindow(QMainWindow):
         )
         if not path_str:
             return
+        self._load_document_from_path(Path(path_str))
 
+    def _load_document_from_path(self, path: Path) -> None:
+        """PATCH 53 — Charge un document JSON depuis un chemin donné,
+        que ce soit via "Ouvrir..." ou un double-clic dans l'explorateur."""
         try:
-            raw = json.loads(Path(path_str).read_text(encoding="utf-8"))
+            raw = json.loads(path.read_text(encoding="utf-8"))
             document = Document.from_dict(raw)
         except (OSError, ValueError, KeyError) as exc:
             QMessageBox.critical(
@@ -815,7 +900,7 @@ class MainWindow(QMainWindow):
             return
 
         self._document = document
-        self._set_current_file(Path(path_str))
+        self._set_current_file(path)
         self._render_document()
         self._last_saved_snapshot = self._document_snapshot()
 
