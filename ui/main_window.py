@@ -49,7 +49,7 @@ from core.document_markdown_export import document_to_markdown
 from core.document_markdown_import import markdown_to_document
 from core.document import Document
 from core.history import UndoHistory
-from core.momo_template import build_momo_template
+from core.project_template import build_project_template
 from core.version import __version__
 from ui.blocks.block_container import BlockContainer
 from ui.blocks.checklist_block_widget import ChecklistBlockWidget
@@ -122,7 +122,7 @@ def _load_startup_document() -> tuple[Document, Path | None]:
                 return Document.from_dict(raw), path
             except (OSError, ValueError, KeyError):
                 pass
-    return build_momo_template(), None
+    return build_project_template(), None
 
 
 # PATCH 27 — Intervalle (ms) du sondage qui regroupe les frappes rapides
@@ -221,7 +221,7 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(self._scroll_area)
 
         # PATCH 48 — le document initial vient désormais du template
-        # "Méthodo Momo" (voir __init__), plus besoin de contenu de démo ici.
+        # "Modèle Gestion de Projet" (voir __init__), plus besoin de contenu de démo ici.
         self._render_document(focus_last=True)
 
         # -- Undo/Redo (PATCH 27) ------------------------------------
@@ -238,7 +238,7 @@ class MainWindow(QMainWindow):
         """Menu Fichier : Nouveau / Ouvrir / Sauvegarder / Sauvegarder sous (PATCH 8)."""
         file_menu = self.menuBar().addMenu("&Fichier")
 
-        new_action = QAction("Nouveau (Méthodo Momo)", self)
+        new_action = QAction("Nouveau (Modèle Gestion de Projet)", self)
         new_action.setShortcut(QKeySequence.New)
         new_action.triggered.connect(self._new_document)
         file_menu.addAction(new_action)
@@ -832,8 +832,8 @@ class MainWindow(QMainWindow):
             settings.remove(_SETTINGS_LAST_FILE_KEY)
 
     def _new_document(self) -> None:
-        """PATCH 48 — Nouveau : repart du template par défaut "Méthodo Momo"."""
-        self._document = build_momo_template()
+        """PATCH 48 — Nouveau : repart du template par défaut "Modèle Gestion de Projet"."""
+        self._document = build_project_template()
         self._set_current_file(None)
         self._render_document()
         self._last_saved_snapshot = self._document_snapshot()

@@ -8,20 +8,20 @@ from blocks.line_chart_block import LineChartBlock, compute_line_series
 from blocks.linked_checklist_block import LinkedChecklistBlock
 from blocks.people_list_block import PeopleListBlock
 from blocks.table_block import TableBlock
-from core.momo_template import build_momo_template
+from core.momo_template import build_project_template
 
 
 def test_template_has_three_people():
-    document = build_momo_template()
+    document = build_project_template()
     assert len(document.people) == 3
     assert len(set(p["name"] for p in document.people)) == 3
 
 
 def test_template_block_order_and_types():
-    document = build_momo_template()
+    document = build_project_template()
     types = [type(b) for b in document.blocks]
     assert types == [
-        HeadingBlock,  # Méthodo Momo
+        HeadingBlock,  # Modèle Gestion de Projet
         HeadingBlock,  # Effectif
         PeopleListBlock,  # liste des personnes (éditable, PATCH 52)
         HeadingBlock,  # Checklist initiale
@@ -38,9 +38,9 @@ def test_template_block_order_and_types():
 
 
 def test_template_titles():
-    document = build_momo_template()
+    document = build_project_template()
     h1 = document.blocks[0]
-    assert isinstance(h1, HeadingBlock) and h1.level == 1 and h1.content == "Méthodo Momo"
+    assert isinstance(h1, HeadingBlock) and h1.level == 1 and h1.content == "Modèle Gestion de Projet"
     assert document.blocks[1].content == "Effectif"
     assert document.blocks[3].content == "Checklist initiale"
     assert document.blocks[5].content == "Critères"
@@ -48,7 +48,7 @@ def test_template_titles():
 
 
 def test_effectif_block_is_editable_people_list():
-    document = build_momo_template()
+    document = build_project_template()
     people_block = document.blocks[2]
     assert isinstance(people_block, PeopleListBlock)
     # PATCH 52 — l'effectif n'a pas de contenu propre : il reflète
@@ -58,7 +58,7 @@ def test_effectif_block_is_editable_people_list():
 
 
 def test_linked_checklist_has_abc_items_all_todo():
-    document = build_momo_template()
+    document = build_project_template()
     checklist = document.blocks[4]
     assert isinstance(checklist, LinkedChecklistBlock)
     assert [item["text"] for item in checklist.todo_items()] == ["A", "B", "C"]
@@ -66,7 +66,7 @@ def test_linked_checklist_has_abc_items_all_todo():
 
 
 def test_criteria_table_and_formula_are_consistent():
-    document = build_momo_template()
+    document = build_project_template()
     table = document.blocks[6]
     formula = document.blocks[7]
     assert isinstance(table, TableBlock)
@@ -80,7 +80,7 @@ def test_criteria_table_and_formula_are_consistent():
 
 
 def test_tasks_table_and_dependency_gantt_are_consistent():
-    document = build_momo_template()
+    document = build_project_template()
     tasks_table = document.blocks[9]
     gantt = document.blocks[10]
     assert isinstance(tasks_table, TableBlock)
@@ -97,7 +97,7 @@ def test_tasks_table_and_dependency_gantt_are_consistent():
 
 
 def test_efficiency_chart_tracks_the_gantt_block():
-    document = build_momo_template()
+    document = build_project_template()
     gantt = document.blocks[10]
     chart = document.blocks[11]
     assert isinstance(chart, LineChartBlock)
@@ -122,7 +122,7 @@ def test_budget_chart_is_synced_with_the_prices():
     """PATCH 59 — le graphique 'Delta de budget' est relié au planning et
     regroupé par 'Phases', et calculé à partir des colonnes "Prix
     estimé"/"Prix réel" du tableau (plutôt que durée + écart)."""
-    document = build_momo_template()
+    document = build_project_template()
     tasks_table = document.blocks[9]
     gantt = document.blocks[10]
     chart = document.blocks[12]
@@ -152,7 +152,7 @@ def test_budget_chart_is_synced_with_the_prices():
 
 
 def test_template_document_roundtrips_through_json():
-    document = build_momo_template()
+    document = build_project_template()
     restored = document.__class__.from_dict(document.to_dict())
     assert len(restored.blocks) == len(document.blocks)
     assert [type(b) for b in restored.blocks] == [type(b) for b in document.blocks]
