@@ -15,7 +15,7 @@ des barres reste disponible tant qu'aucune source n'est choisie.
 from __future__ import annotations
 
 from PySide6.QtCore import QTimer, Qt
-from PySide6.QtGui import QColor, QPainter, QPen
+from PySide6.QtGui import QColor, QPainter, QPalette, QPen
 from PySide6.QtWidgets import (
     QDoubleSpinBox,
     QGridLayout,
@@ -57,6 +57,12 @@ class _BarChartCanvas(QWidget):
 
         w, h = self.width(), self.height()
         plot_w, plot_h = w - 2 * _MARGIN, h - 2 * _MARGIN
+        # PATCH 58 — couleur de texte par défaut alignée sur le thème
+        # (blanc en mode sombre, noir en mode clair) plutôt qu'un noir
+        # figé : évite qu'un texte reste illisible une fois qu'un
+        # marqueur "Réel" a été dessiné (voir plus bas).
+        default_pen = QPen(self.palette().color(QPalette.WindowText))
+        painter.setPen(default_pen)
 
         if self._y_axis_label:
             painter.save()
@@ -84,6 +90,7 @@ class _BarChartCanvas(QWidget):
             y = h - _MARGIN - bar_h
             # Barre "Prévu" pleine, toujours bleue.
             painter.fillRect(int(x), int(y), int(bar_w), int(bar_h), QColor(bar["color"]))
+            painter.setPen(default_pen)
             painter.drawText(int(x - 10), h - _MARGIN + 2, int(bar_w + 20), 16, Qt.AlignCenter, bar["label"])
             painter.drawText(int(x - 10), int(y) - 16, int(bar_w + 20), 16, Qt.AlignCenter, str(bar["value"]))
 
@@ -98,7 +105,9 @@ class _BarChartCanvas(QWidget):
                 painter.drawText(
                     int(x - 10), int(actual_y) - 16, int(bar_w + 20), 16, Qt.AlignCenter, str(bar["actual"])
                 )
-                painter.setPen(QPen(QColor("#000000")))
+                # PATCH 58 — on restaure la couleur de texte du thème, pas
+                # un noir figé (voir `default_pen` ci-dessus).
+                painter.setPen(default_pen)
 
         painter.end()
 

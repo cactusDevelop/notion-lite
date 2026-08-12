@@ -1,5 +1,5 @@
 """
-Widget graphique du bloc "Courbes" (PATCH 47, révisé PATCH 52).
+Widget graphique du bloc "Courbes" (PATCH 47, révisé PATCH 52, PATCH 58).
 
 PATCH 52 :
     - Titre et noms d'axes éditables directement au clic (comme un
@@ -13,11 +13,19 @@ PATCH 52 :
     - Les étiquettes de série sont placées à droite de la fin de
       chaque droite (jamais au-dessus), avec un anti-chevauchement
       simple qui les décale verticalement si elles se recouvrent.
+
+PATCH 58 : noms d'axes repositionnés à l'instar du graphique "Delta de
+budget" (bâtonnets) — l'axe Y est dessiné à la verticale, le long de
+l'axe des ordonnées du graphique (au lieu d'un champ de texte
+horizontal au-dessus, qui ne ressemblait pas à un nom d'axe), et le
+nom de l'axe X est centré sous le graphique plutôt qu'aligné à gauche
+sur toute la largeur du bloc. Les deux restent éditables au clic,
+comme avant.
 """
 from __future__ import annotations
 
 from PySide6.QtCore import QRect, QTimer, Qt
-from PySide6.QtGui import QColor, QPainter, QPen
+from PySide6.QtGui import QColor, QPainter, QPalette, QPen
 from PySide6.QtWidgets import (
     QDoubleSpinBox,
     QGridLayout,
@@ -44,6 +52,11 @@ _PLOT_HEIGHT = 220
 _LABEL_GUTTER = 140
 _LABEL_WIDTH = 130
 _LABEL_HEIGHT = 16
+# PATCH 58 — place réservée à gauche pour le nom de l'axe Y vertical
+# (à l'instar de _MARGIN utilisée par le graphique "Delta de budget"),
+# et sous le graphique pour le nom de l'axe X centré.
+_Y_AXIS_GUTTER = 22
+_X_AXIS_GUTTER = 20
 
 _TITLE_STYLE = "QLineEdit { border: none; background: transparent; font-weight: bold; font-size: 15pt; }"
 _AXIS_STYLE = "QLineEdit { border: none; background: transparent; color: #666666; }"
@@ -53,6 +66,8 @@ class _LineChartCanvas(QWidget):
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self._series: list[dict] = []
+        self._x_axis_label = ""
+        self._y_axis_label = ""
         self.setFixedSize(_PLOT_HEIGHT + 2 * _MARGIN, _PLOT_HEIGHT + 2 * _MARGIN)
 
     def set_series(self, series: list[dict]) -> None:
@@ -67,6 +82,13 @@ class _LineChartCanvas(QWidget):
         self.setFixedSize(width, height)
         self.update()
 
+    def set_axis_labels(self, x_axis_label: str, y_axis_label: str) -> None:
+        """PATCH 58 — noms d'axes dessinés directement sur le graphique
+        (voir paintEvent), à l'instar du graphique "Delta de budget"."""
+        self._x_axis_label = x_axis_label
+        self._y_axis_label = y_axis_label
+        self.update()
+
     def paintEvent(self, event) -> None:  # noqa: N802
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
@@ -74,6 +96,9 @@ class _LineChartCanvas(QWidget):
         h = self.height()
         plot_w = self.width() - 2 * _MARGIN - _LABEL_GUTTER
         plot_h = _PLOT_HEIGHT
+        # PATCH 58 — couleur de texte alignée sur le thème (voir le même
+        # correctif sur le graphique "Delta de budget").
+        default_pen = QPen(self.palette().color(QPalette.WindowText))
 
         y_scale = max((s["y1"] for s in self._series), default=1.0) or 1.0
         max_x1 = max((s["x1"] for s in self._series), default=1.0) or 1.0
@@ -87,6 +112,26 @@ class _LineChartCanvas(QWidget):
         painter.setPen(QPen(QColor("#888888"), 1))
         painter.drawLine(_MARGIN, h - _MARGIN, _MARGIN + plot_w, h - _MARGIN)
         painter.drawLine(_MARGIN, h - _MARGIN, _MARGIN, _MARGIN)
+
+        # PATCH 58 — nom de l'axe Y à la verticale, le long de l'axe des
+        # ordonnées (même technique que le graphique "Delta de budget" :
+        # translation au centre de l'axe puis rotation de -90°).
+        if self._y_axis_label:
+            painter.save()
+            painter.setPen(default_pen)
+            painter.translate(_Y_AXIS_GUTTER, _MARGIN + plot_h / 2)
+            painter.rotate(-90)
+            painter.drawText(-plot_h / 2, 0, plot_h, 16, Qt.AlignCenter, self._y_axis_label)
+            painter.restore()
+
+        # PATCH 58 — nom de l'axe X centré sous le graphique (sous l'axe
+        # des abscisses, et non plus aligné à gauche sur toute la
+        # largeur du bloc).
+        if self._x_axis_label:
+            painter.setPen(default_pen)
+            painter.drawText(
+                _MARGIN, h - _X_AXIS_GUTTER, plot_w, 16, Qt.AlignCenter, self._x_axis_label
+            )
 
         placed_label_rects: list[QRect] = []
         for s in self._series:
@@ -145,6 +190,13 @@ class LineChartBlockWidget(QWidget):
         self._title_edit = _TitleLikeLineEdit(block.title, "Titre", _TITLE_STYLE, self)
         self._title_edit.textChanged.connect(self._on_title_changed)
         header.addWidget(self._title_edit, 1)
+        # PATCH 58 — nom de l'axe Y déplacé dans l'en-tête, à côté du
+        # titre (comme le graphique "Delta de budget") : le champ ici ne
+        # sert plus qu'à la saisie, l'affichage réel est désormais
+        # dessiné à la verticale sur le graphique (voir _LineChartCanvas).
+        self._y_axis_edit = _TitleLikeLineEdit(block.y_axis_label, "Axe Y", _AXIS_STYLE, self)
+        self._y_axis_edit.textChanged.connect(self._on_y_axis_changed)
+        header.addWidget(self._y_axis_edit, 1)
         header.addWidget(QLabel("Échelle :", self))
         self._x_max_spin = QDoubleSpinBox(self)
         self._x_max_spin.setRange(0.01, 100000)
@@ -153,16 +205,20 @@ class LineChartBlockWidget(QWidget):
         header.addWidget(self._x_max_spin)
         layout.addLayout(header)
 
-        self._y_axis_edit = _TitleLikeLineEdit(block.y_axis_label, "Axe Y", _AXIS_STYLE, self)
-        self._y_axis_edit.textChanged.connect(self._on_y_axis_changed)
-        layout.addWidget(self._y_axis_edit)
-
         self._canvas = _LineChartCanvas(self)
         layout.addWidget(self._canvas, 0, Qt.AlignLeft)
 
+        # PATCH 58 — nom de l'axe X : champ de saisie centré (pas étiré
+        # sur toute la largeur du bloc), l'affichage réel étant lui
+        # aussi désormais dessiné centré sous le graphique.
+        x_axis_row = QHBoxLayout()
+        x_axis_row.addStretch(1)
         self._x_axis_edit = _TitleLikeLineEdit(block.x_axis_label, "Axe X", _AXIS_STYLE, self)
+        self._x_axis_edit.setAlignment(Qt.AlignCenter)
         self._x_axis_edit.textChanged.connect(self._on_x_axis_changed)
-        layout.addWidget(self._x_axis_edit)
+        x_axis_row.addWidget(self._x_axis_edit)
+        x_axis_row.addStretch(1)
+        layout.addLayout(x_axis_row)
 
         self._series_area = QGridLayout()
         layout.addLayout(self._series_area)
@@ -243,9 +299,11 @@ class LineChartBlockWidget(QWidget):
 
     def _on_x_axis_changed(self, text: str) -> None:
         self._block.x_axis_label = text
+        self._canvas.set_axis_labels(self._block.x_axis_label, self._block.y_axis_label)
 
     def _on_y_axis_changed(self, text: str) -> None:
         self._block.y_axis_label = text
+        self._canvas.set_axis_labels(self._block.x_axis_label, self._block.y_axis_label)
 
     def _on_x_max_changed(self, value: float) -> None:
         self._block.x_max = value
@@ -292,4 +350,5 @@ class LineChartBlockWidget(QWidget):
     # -- Rafraîchissement -------------------------------------------------
 
     def refresh(self) -> None:
+        self._canvas.set_axis_labels(self._block.x_axis_label, self._block.y_axis_label)
         self._canvas.set_series(compute_line_series(self._document, self._block))

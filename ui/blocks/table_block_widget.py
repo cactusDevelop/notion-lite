@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 
 from PySide6.QtCore import QDate, Qt, QTimer
+from PySide6.QtGui import QFontMetrics
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QAbstractScrollArea,
@@ -140,6 +141,7 @@ class TableBlockWidget(QWidget):
                 self._set_cell_display(row_index, col_index, row, column)
 
         self._apply_merged_cells(columns, rows)
+        self._ensure_header_width()
         self._adjust_table_height()
         self._syncing = False
         # PATCH 56 — mémorise l'état affiché pour détecter, au prochain
@@ -177,6 +179,25 @@ class TableBlockWidget(QWidget):
         if column["type"] == COLUMN_TYPE_DATE and column.get("range"):
             return f"{name} (début/fin)"
         return name
+
+    def _ensure_header_width(self) -> None:
+        """PATCH 58 — une colonne doit toujours être assez large par défaut
+        pour afficher tout son en-tête, même si son contenu (valeurs des
+        cellules) est plus court (ex : une colonne "Nombre" à un
+        chiffre avec un nom de colonne long). Élargit uniquement les
+        colonnes trop étroites, sans jamais les rétrécir."""
+        header = self._table.horizontalHeader()
+        metrics = QFontMetrics(header.font())
+        # Marge : texte + un peu d'air de part et d'autre + la flèche de
+        # tri que Qt réserve dans l'en-tête.
+        padding = 28
+        for col in range(self._table.columnCount()):
+            item = self._table.horizontalHeaderItem(col)
+            if item is None:
+                continue
+            needed = metrics.horizontalAdvance(item.text()) + padding
+            if self._table.columnWidth(col) < needed:
+                self._table.setColumnWidth(col, needed)
 
     def _apply_merged_cells(self, columns: list[dict], rows: list[dict]) -> None:
         """PATCH 49 — fusionne visuellement les cellules consécutives d'une
