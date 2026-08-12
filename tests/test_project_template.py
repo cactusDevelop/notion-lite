@@ -8,7 +8,7 @@ from blocks.line_chart_block import LineChartBlock, compute_line_series
 from blocks.linked_checklist_block import LinkedChecklistBlock
 from blocks.people_list_block import PeopleListBlock
 from blocks.table_block import TableBlock
-from core.momo_template import build_project_template
+from core.project_template import build_project_template
 
 
 def test_template_has_three_people():

@@ -13,7 +13,7 @@ import html as html_module
 from blocks.checklist_block import ChecklistBlock
 from blocks.code_block import CodeBlock
 from blocks.formula_block import FormulaBlock, compute_formula_result, format_formula_text
-from blocks.bar_chart_block import BarChartBlock
+from blocks.bar_chart_block import BarChartBlock, sync_bars_from_gantt
 from blocks.dependency_gantt_block import DependencyGanttBlock, compute_schedule
 from blocks.line_chart_block import LineChartBlock, compute_line_series
 from blocks.gantt_block import GanttBlock, compute_gantt_rows
@@ -29,8 +29,21 @@ from blocks.text_block import TextBlock
 from core.duration import format_duration
 
 
-def _esc(text: str) -> str:
-    return html_module.escape(text or "")
+def _esc(text) -> str:
+    if text is None:
+        text = ""
+    elif not isinstance(text, str):
+        text = str(text)
+    return html_module.escape(text)
+
+
+def _format_day(value: float) -> str:
+    """Formate un décalage en jours (float) en texte lisible, ex.
+    3.0 -> "Jour 3", 2.5 -> "Jour 2.5" (PATCH 62 — correctif export PDF)."""
+    rounded = round(value, 2)
+    if rounded == int(rounded):
+        return f"Jour {int(rounded)}"
+    return f"Jour {rounded:g}"
 
 
 def _render_table_cell(document, column: dict, value) -> str:
@@ -94,7 +107,8 @@ def _render_dependency_gantt_block(document, block: DependencyGanttBlock) -> str
         return "<p><i>(Gantt par dépendances vide ou non configuré)</i></p>"
     rows_html = "".join(
         f"<tr><td>{_esc(t['label'])}</td><td>{_esc(', '.join(t['person_names']))}</td>"
-        f"<td>{_esc(t['start'])}</td><td>{_esc(t['end'])}</td><td>{_esc(t['resolution'])}</td></tr>"
+        f"<td>{_esc(_format_day(t['start']))}</td><td>{_esc(_format_day(t['end']))}</td>"
+        f"<td>{_esc(_format_day(t['resolution']))}</td></tr>"
         for t in schedule
     )
     return (
@@ -121,13 +135,14 @@ def _render_line_chart_block(document, block: LineChartBlock) -> str:
     )
 
 
-def _render_bar_chart_block(block: BarChartBlock) -> str:
-    if not block.bars:
+def _render_bar_chart_block(document, block: BarChartBlock) -> str:
+    bars = sync_bars_from_gantt(document, block)
+    if not bars:
         return f"<p><b>{_esc(block.title)}</b> (aucune barre)</p>"
     rows_html = "".join(
         f"<tr><td>{_esc(b['label'])}</td><td>{_esc(b['value'])}</td>"
         f"<td>{_esc(b['actual']) if b['actual'] is not None else '—'}</td></tr>"
-        for b in block.bars
+        for b in bars
     )
     return (
         f"<p><b>{_esc(block.title)}</b> ({_esc(block.y_axis_label)})</p>"
@@ -186,7 +201,7 @@ def _render_block(document, block) -> str:
     if isinstance(block, LineChartBlock):
         return _render_line_chart_block(document, block)
     if isinstance(block, BarChartBlock):
-        return _render_bar_chart_block(block)
+        return _render_bar_chart_block(document, block)
     if isinstance(block, ImageBlock):
         if not block.data.get("image_base64"):
             return "<p><i>(image vide)</i></p>"
