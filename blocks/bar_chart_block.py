@@ -1,5 +1,5 @@
 """
-Bloc "Graphique en bâtonnets" (PATCH 47, révisé PATCH 49, PATCH 54).
+Bloc "Graphique en bâtonnets" (PATCH 47, révisé PATCH 49, PATCH 54, PATCH 59).
 
 Barres "Prévu" (bleu) avec, pour chacune, une valeur "Réel"
 optionnelle affichée sous forme de marqueur en pointillés (rouge si
@@ -10,11 +10,18 @@ PATCH 54 : le graphique peut désormais être relié à un bloc "Planning
 par dépendances" (`source_gantt_id`), et regroupé par une colonne
 texte de son tableau source (`group_column_id`, ex : "Phases"). Une
 fois relié, les barres ne sont plus éditées manuellement : elles sont
-recalculées en direct à chaque lecture à partir des durées et des
-écarts ("Ecarts") des sous-tâches du planning, groupées par
-`group_column_id` (ou par sous-tâche si aucun regroupement choisi) —
-même principe de synchronisation, jamais stockée, que la droite
-"Vélocité réelle" du bloc Courbes (voir compute_efficiency_ratio).
+recalculées en direct à chaque lecture.
+
+PATCH 59 : l'édition manuelle des barres a été retirée (la ligne
+"Phase / Prévu / Réel" + bouton "Ajouter une barre" ne servait plus à
+rien une fois le graphique toujours relié à une source). Le calcul se
+base désormais, par défaut, sur deux colonnes "Nombre" du tableau
+source (`value_column_id`/`actual_column_id`, ex : "Prix estimé" /
+"Prix réel") plutôt que sur la durée/l'écart en jours des
+sous-tâches — utilisé notamment pour "Delta de budget", qui n'a
+jamais représenté un nombre de jours mais bien un montant. Si aucune
+colonne de prix n'est choisie, on retombe sur l'ancien calcul
+durée + écart (voir sync_bars_from_gantt).
 """
 from __future__ import annotations
 
@@ -31,48 +38,44 @@ UNDER_BUDGET_COLOR = "#43a047"
 
 
 class BarChartBlock(Block):
-    """Bloc graphique en bâtonnets.
+    """Bloc graphique en bâtonnets, toujours recalculé à partir d'un
+    planning par dépendances relié (PATCH 59 — plus d'édition manuelle).
 
     Données (data) :
         title: titre affiché au-dessus du graphique.
         y_axis_label: libellé de l'axe des ordonnées (ex : "Prix").
-        bars: liste de {id, label, value, actual, color} — ignorée
-            (contenu affiché en lecture seule car recalculé, voir
-            sync_bars_from_gantt) tant que `source_gantt_id` est défini.
-            value: montant "Prévu" (barre pleine bleue).
-            actual: montant "Réel" (marqueur en pointillés), ou None
-                si pas encore renseigné (aucun marqueur affiché).
-        source_gantt_id: id d'un DependencyGanttBlock (PATCH 54). Si
-            défini, les barres sont recalculées en direct à partir de
-            ses sous-tâches plutôt que lues depuis `bars`.
+        source_gantt_id: id d'un DependencyGanttBlock. Si None, aucune
+            barre n'est affichée (voir sync_bars_from_gantt).
         group_column_id: id d'une colonne texte du tableau source du
             Gantt relié, utilisée pour regrouper les sous-tâches en
-            barres (ex : "Phases"). Si None (mais source_gantt_id
-            défini), chaque sous-tâche forme sa propre barre.
+            barres (ex : "Phases"). Si None, chaque sous-tâche forme
+            sa propre barre.
+        value_column_id / actual_column_id (PATCH 59) : id de colonnes
+            "Nombre" du tableau source utilisées comme montant "Prévu"
+            / "Réel" (ex : "Prix estimé" / "Prix réel"). Si
+            value_column_id est None, repli sur l'ancien calcul
+            durée + écart ("Ecarts") des sous-tâches.
     """
 
     def __init__(
         self,
         title: str = "Graphique",
         y_axis_label: str = "",
-        bars: list[dict[str, Any]] | None = None,
         source_gantt_id: Optional[str] = None,
         group_column_id: Optional[str] = None,
+        value_column_id: Optional[str] = None,
+        actual_column_id: Optional[str] = None,
         id: str | None = None,
     ) -> None:
-        normalized_bars: list[dict[str, Any]] = []
-        for bar in bars or []:
-            normalized = {**bar, "id": bar.get("id") or str(uuid.uuid4())}
-            normalized.setdefault("actual", None)
-            normalized_bars.append(normalized)
         super().__init__(
             type=BAR_CHART_BLOCK_TYPE,
             data={
                 "title": title,
                 "y_axis_label": y_axis_label,
-                "bars": normalized_bars,
                 "source_gantt_id": source_gantt_id,
                 "group_column_id": group_column_id,
+                "value_column_id": value_column_id,
+                "actual_column_id": actual_column_id,
             },
             id=id or str(uuid.uuid4()),
         )
@@ -94,10 +97,6 @@ class BarChartBlock(Block):
         self.data["y_axis_label"] = value
 
     @property
-    def bars(self) -> list[dict[str, Any]]:
-        return self.data.setdefault("bars", [])
-
-    @property
     def source_gantt_id(self) -> Optional[str]:
         return self.data.get("source_gantt_id")
 
@@ -105,63 +104,30 @@ class BarChartBlock(Block):
     def group_column_id(self) -> Optional[str]:
         return self.data.get("group_column_id")
 
-    def set_source(self, source_gantt_id: Optional[str], group_column_id: Optional[str] = None) -> None:
-        """PATCH 54 — Relie (ou détache si None) ce graphique à un
-        DependencyGanttBlock ; group_column_id choisit le regroupement
-        des sous-tâches en barres."""
+    @property
+    def value_column_id(self) -> Optional[str]:
+        return self.data.get("value_column_id")
+
+    @property
+    def actual_column_id(self) -> Optional[str]:
+        return self.data.get("actual_column_id")
+
+    def set_source(
+        self,
+        source_gantt_id: Optional[str],
+        group_column_id: Optional[str] = None,
+        value_column_id: Optional[str] = None,
+        actual_column_id: Optional[str] = None,
+    ) -> None:
+        """PATCH 54, étendu PATCH 59 — Relie (ou détache si None) ce
+        graphique à un DependencyGanttBlock ; `group_column_id` choisit
+        le regroupement des sous-tâches en barres ; `value_column_id`/
+        `actual_column_id` choisissent les colonnes "Prévu"/"Réel"
+        (repli sur durée + écart si `value_column_id` est None)."""
         self.data["source_gantt_id"] = source_gantt_id
         self.data["group_column_id"] = group_column_id
-
-    def _find_bar(self, bar_id: str) -> Optional[dict[str, Any]]:
-        for bar in self.bars:
-            if bar["id"] == bar_id:
-                return bar
-        return None
-
-    def add_bar(
-        self,
-        label: str = "",
-        value: float = 0.0,
-        actual: Optional[float] = None,
-        color: str = PLANNED_BAR_COLOR,
-    ) -> dict[str, Any]:
-        bar = {
-            "id": str(uuid.uuid4()),
-            "label": label,
-            "value": float(value),
-            "actual": float(actual) if actual is not None else None,
-            "color": color,
-        }
-        self.bars.append(bar)
-        return bar
-
-    def remove_bar(self, bar_id: str) -> bool:
-        bar = self._find_bar(bar_id)
-        if bar is None:
-            return False
-        self.bars.remove(bar)
-        return True
-
-    def set_bar_label(self, bar_id: str, label: str) -> bool:
-        bar = self._find_bar(bar_id)
-        if bar is None:
-            return False
-        bar["label"] = label
-        return True
-
-    def set_bar_value(self, bar_id: str, value: float) -> bool:
-        bar = self._find_bar(bar_id)
-        if bar is None:
-            return False
-        bar["value"] = float(value)
-        return True
-
-    def set_bar_actual(self, bar_id: str, actual: Optional[float]) -> bool:
-        bar = self._find_bar(bar_id)
-        if bar is None:
-            return False
-        bar["actual"] = float(actual) if actual is not None else None
-        return True
+        self.data["value_column_id"] = value_column_id
+        self.data["actual_column_id"] = actual_column_id
 
 
 def budget_marker_color(bar: dict[str, Any]) -> Optional[str]:
@@ -172,17 +138,26 @@ def budget_marker_color(bar: dict[str, Any]) -> Optional[str]:
     return OVER_BUDGET_COLOR if bar["actual"] > bar["value"] else UNDER_BUDGET_COLOR
 
 
-def sync_bars_from_gantt(document, block: "BarChartBlock") -> list[dict[str, Any]]:
-    """PATCH 54 — Recalcule les barres en direct à partir d'un planning
-    par dépendances relié (`block.source_gantt_id`), jamais stockées
-    (même principe que compute_schedule/compute_efficiency_ratio).
+def _to_number(value: Any) -> float:
+    try:
+        return float(str(value).replace(",", ".").strip() or 0)
+    except (TypeError, ValueError):
+        return 0.0
 
-    Pour chaque sous-tâche du planning : "Prévu" = durée, "Réel" =
-    durée + écart ("Ecarts", qu'il vienne de la colonne du tableau ou
-    de l'ancien stockage propre au bloc — voir compute_schedule). Les
-    sous-tâches sont regroupées par `group_column_id` (une colonne
-    texte du tableau source, ex : "Phases") si définie, sinon chacune
-    forme sa propre barre. Liste vide si non relié ou planning vide.
+
+def sync_bars_from_gantt(document, block: "BarChartBlock") -> list[dict[str, Any]]:
+    """PATCH 54, étendu PATCH 59 — Recalcule les barres en direct à
+    partir d'un planning par dépendances relié (`block.source_gantt_id`),
+    jamais stockées (même principe que compute_schedule/
+    compute_efficiency_ratio).
+
+    Si `value_column_id` est configuré (ex : "Prix estimé"), "Prévu"/
+    "Réel" viennent de ces deux colonnes "Nombre" du tableau source
+    (PATCH 59). Sinon, repli sur l'ancien calcul : "Prévu" = durée,
+    "Réel" = durée + écart ("Ecarts"). Les sous-tâches sont regroupées
+    par `group_column_id` (une colonne texte du tableau source, ex :
+    "Phases") si définie, sinon chacune forme sa propre barre. Liste
+    vide si non relié ou planning vide.
     """
     # Import différé : évite un import circulaire (dependency_gantt_block
     # ne dépend pas de bar_chart_block, mais les deux modules de blocs
@@ -204,19 +179,38 @@ def sync_bars_from_gantt(document, block: "BarChartBlock") -> list[dict[str, Any
         group_column = table._find_column(block.group_column_id)
     rows_by_id = {row["id"]: row for row in table.rows} if table is not None else {}
 
+    value_column = None
+    actual_column = None
+    if table is not None and block.value_column_id:
+        value_column = table._find_column(block.value_column_id)
+    if table is not None and block.actual_column_id:
+        actual_column = table._find_column(block.actual_column_id)
+    use_price_columns = value_column is not None
+
     order: list[str] = []
-    totals: dict[str, dict[str, float]] = {}
+    totals: dict[str, dict[str, Any]] = {}
     for task in schedule:
+        row = rows_by_id.get(task["row_id"])
         if group_column is not None:
-            row = rows_by_id.get(task["row_id"])
             key = str(row["cells"].get(group_column["id"], "")) if row is not None else task["label"]
         else:
             key = task["label"]
         if key not in totals:
-            totals[key] = {"value": 0.0, "actual": 0.0}
+            totals[key] = {
+                "value": 0.0,
+                # PATCH 59 — sans colonne "Réel" configurée, aucun
+                # marqueur n'est affiché (None), plutôt qu'un 0 trompeur.
+                "actual": 0.0 if (not use_price_columns or actual_column is not None) else None,
+            }
             order.append(key)
-        totals[key]["value"] += task["duration"]
-        totals[key]["actual"] += task["duration"] + task["delta"]
+
+        if use_price_columns:
+            totals[key]["value"] += _to_number(row["cells"].get(value_column["id"])) if row is not None else 0.0
+            if actual_column is not None:
+                totals[key]["actual"] += _to_number(row["cells"].get(actual_column["id"])) if row is not None else 0.0
+        else:
+            totals[key]["value"] += task["duration"]
+            totals[key]["actual"] += task["duration"] + task["delta"]
 
     return [
         {

@@ -117,9 +117,10 @@ def block_from_dict(raw: dict[str, Any]) -> Block:
         return BarChartBlock(
             title=data.get("title", "Graphique"),
             y_axis_label=data.get("y_axis_label", ""),
-            bars=data.get("bars", []),
             source_gantt_id=data.get("source_gantt_id"),
             group_column_id=data.get("group_column_id"),
+            value_column_id=data.get("value_column_id"),
+            actual_column_id=data.get("actual_column_id"),
             id=block_id,
         )
 

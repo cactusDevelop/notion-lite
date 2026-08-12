@@ -112,17 +112,22 @@ def build_momo_template() -> Document:
     risk_col = tasks_table.add_column("Risques", col_type=COLUMN_TYPE_SELECT, options=list(_RISK_OPTIONS))
     dependency_col = tasks_table.add_column("Dépendances", col_type=COLUMN_TYPE_MULTI_SELECT)
     delta_col = tasks_table.add_column("Ecarts", col_type=COLUMN_TYPE_NUMBER)
+    # PATCH 59 — colonnes "Prix" utilisées par le graphique "Delta de
+    # budget" (voir plus bas) à la place de la durée/l'écart en jours.
+    price_estimated_col = tasks_table.add_column("Prix estimé", col_type=COLUMN_TYPE_NUMBER, unit="€")
+    price_actual_col = tasks_table.add_column("Prix réel", col_type=COLUMN_TYPE_NUMBER, unit="€")
 
     example_tasks = [
-        ("Phase 1", "Conception", [people[0]["id"]], "3", "vert", [], "0"),
-        ("Phase 1", "Maquettes", [people[1]["id"]], "2", "orange", ["Conception"], "0"),
-        ("Phase 2", "Développement", [people[1]["id"], people[2]["id"]], "5", "orange", ["Maquettes"], "0"),
-        ("Phase 2", "Tests", [people[2]["id"]], "2.5", "rouge", ["Développement"], "0"),
+        # (phase, sous-tâche, assignés, durée, risque, dépendances, écart, prix estimé, prix réel)
+        ("Phase 1", "Conception", [people[0]["id"]], "3", "vert", [], "0", "900", "900"),
+        ("Phase 1", "Maquettes", [people[1]["id"]], "2", "orange", ["Conception"], "0", "600", "650"),
+        ("Phase 2", "Développement", [people[1]["id"], people[2]["id"]], "5", "orange", ["Maquettes"], "0", "1500", "1500"),
+        ("Phase 2", "Tests", [people[2]["id"]], "2.5", "rouge", ["Développement"], "0", "750", "700"),
     ]
     subtask_labels = [row[1] for row in example_tasks]
     tasks_table.set_column_options(dependency_col["id"], subtask_labels)
 
-    for phase, subtask, assignees, duration, risk, dependencies, ecart in example_tasks:
+    for phase, subtask, assignees, duration, risk, dependencies, ecart, price_estimated, price_actual in example_tasks:
         tasks_table.add_row(
             values={
                 phase_col["id"]: phase,
@@ -132,6 +137,8 @@ def build_momo_template() -> Document:
                 risk_col["id"]: risk,
                 dependency_col["id"]: dependencies,
                 delta_col["id"]: ecart,
+                price_estimated_col["id"]: price_estimated,
+                price_actual_col["id"]: price_actual,
             }
         )
     document.add_block(tasks_table)
@@ -163,10 +170,11 @@ def build_momo_template() -> Document:
     document.add_block(efficiency_chart)
 
     # -- Graphique "Delta de budget" (une barre par phase, synchronisée en
-    # direct — PATCH 54 — avec les durées + écarts ("Ecarts") du planning
-    # par dépendances ci-dessus, regroupées par "Phases") -------------------
-    budget_chart = BarChartBlock(title="Delta de budget", y_axis_label="Jours")
-    budget_chart.set_source(gantt.id, phase_col["id"])
+    # direct — PATCH 54, PATCH 59 — avec les colonnes "Prix estimé"/"Prix
+    # réel" du planning par dépendances ci-dessus, regroupées par
+    # "Phases") -------------------------------------------------------------
+    budget_chart = BarChartBlock(title="Delta de budget", y_axis_label="Prix")
+    budget_chart.set_source(gantt.id, phase_col["id"], price_estimated_col["id"], price_actual_col["id"])
     document.add_block(budget_chart)
 
     return document

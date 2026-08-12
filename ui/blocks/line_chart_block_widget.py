@@ -55,7 +55,7 @@ _LABEL_HEIGHT = 16
 # PATCH 58 — place réservée à gauche pour le nom de l'axe Y vertical
 # (à l'instar de _MARGIN utilisée par le graphique "Delta de budget"),
 # et sous le graphique pour le nom de l'axe X centré.
-_Y_AXIS_GUTTER = 22
+_Y_AXIS_GUTTER = 12
 _X_AXIS_GUTTER = 20
 
 _TITLE_STYLE = "QLineEdit { border: none; background: transparent; font-weight: bold; font-size: 15pt; }"

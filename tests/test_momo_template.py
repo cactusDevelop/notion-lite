@@ -118,29 +118,37 @@ def test_efficiency_chart_tracks_the_gantt_block():
     assert series_after_delay[2]["slope"] < 1.0
 
 
-def test_budget_chart_is_synced_with_the_gantt_ecarts():
-    """PATCH 54 — le graphique 'Delta de budget' n'a plus de barres
-    figées : il est relié au planning et regroupé par 'Phases', donc
-    reflète en direct les durées + écarts saisis dans le tableau."""
+def test_budget_chart_is_synced_with_the_prices():
+    """PATCH 59 — le graphique 'Delta de budget' est relié au planning et
+    regroupé par 'Phases', et calculé à partir des colonnes "Prix
+    estimé"/"Prix réel" du tableau (plutôt que durée + écart)."""
     document = build_momo_template()
     tasks_table = document.blocks[9]
     gantt = document.blocks[10]
     chart = document.blocks[12]
     assert isinstance(chart, BarChartBlock)
     assert chart.source_gantt_id == gantt.id
+    assert chart.value_column_id is not None
+    assert chart.actual_column_id is not None
+    assert chart.y_axis_label == "Prix"
 
     from blocks.bar_chart_block import sync_bars_from_gantt
 
     bars = sync_bars_from_gantt(document, chart)
     assert [b["label"] for b in bars] == ["Phase 1", "Phase 2"]
-    # Sans écart déclaré : "Réel" == "Prévu" pour chaque phase.
-    assert all(b["actual"] == b["value"] for b in bars)
+    phase1 = next(b for b in bars if b["label"] == "Phase 1")
+    phase2 = next(b for b in bars if b["label"] == "Phase 2")
+    assert phase1["value"] == 1500.0  # 900 (Conception) + 600 (Maquettes)
+    assert phase1["actual"] == 1550.0  # 900 + 650 : léger dépassement
+    assert phase2["value"] == 2250.0  # 1500 (Développement) + 750 (Tests)
+    assert phase2["actual"] == 2200.0  # 1500 + 700 : sous le budget
 
-    # Un écart saisi dans le tableau se répercute aussitôt sur le graphique.
-    tasks_table.set_cell(tasks_table.rows[0]["id"], gantt.delta_column_id, "5")
+    # Une modification du prix réel dans le tableau se répercute aussitôt.
+    price_actual_col = next(c for c in tasks_table.columns if c["name"] == "Prix réel")
+    tasks_table.set_cell(tasks_table.rows[0]["id"], price_actual_col["id"], "1000")
     bars_after = sync_bars_from_gantt(document, chart)
-    phase1 = next(b for b in bars_after if b["label"] == "Phase 1")
-    assert phase1["actual"] == phase1["value"] + 5
+    phase1_after = next(b for b in bars_after if b["label"] == "Phase 1")
+    assert phase1_after["actual"] == 1650.0  # 1000 + 650
 
 
 def test_template_document_roundtrips_through_json():
