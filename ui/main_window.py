@@ -195,6 +195,9 @@ class MainWindow(QMainWindow):
         # principale, avec un raccourci vers les projets récents.
         self._document, restored_path = self._run_welcome_dialog()
         self._active_text_widget: TextBlockWidget | None = None
+        # PATCH 67 — Dernier bloc "actif" (cliqué ou édité), quel que soit
+        # son type ; sert à insérer un nouveau bloc juste après lui.
+        self._active_block_id: str | None = None
         self._current_file: Path | None = None
         # PATCH 65 — Dossier projet imposé pour cette session (choisi à
         # l'écran d'accueil ou déduit du fichier ouvert), qui devient la
@@ -517,6 +520,13 @@ class MainWindow(QMainWindow):
 
     def _on_text_widget_focused(self, widget: TextBlockWidget) -> None:
         self._active_text_widget = widget
+        self._active_block_id = widget.block.id
+
+    def _on_block_activated(self, block_id: str) -> None:
+        """PATCH 67 — Un bloc (de n'importe quel type) vient d'être
+        cliqué : il devient le point d'insertion pour le prochain bloc
+        créé via la toolbar ou le menu contextuel."""
+        self._active_block_id = block_id
 
     def _apply_color(self) -> None:
         if self._active_text_widget is None:
@@ -766,6 +776,7 @@ class MainWindow(QMainWindow):
             content,
             block_id,
             on_context_menu_requested=self._show_block_context_menu,
+            on_activated=self._on_block_activated,
             icon=icon_for_block(block) if block is not None else "",
             extra_top_margin=extra_top_margin,
         )
@@ -787,9 +798,45 @@ class MainWindow(QMainWindow):
         widget = item.widget() if item else None
         return widget.content if isinstance(widget, BlockContainer) else None
 
+    def _layout_index_of_block(self, block_id: str) -> int:
+        """PATCH 67 — Position dans le layout du BlockContainer portant
+        cet identifiant de bloc (-1 si introuvable)."""
+        for i in range(self._blocks_layout.count()):
+            item = self._blocks_layout.itemAt(i)
+            widget = item.widget() if item else None
+            if isinstance(widget, BlockContainer) and widget.block_id == block_id:
+                return i
+        return -1
+
+    def _insertion_point(self) -> tuple[int, int]:
+        """PATCH 67 — Où insérer un nouveau bloc créé depuis la toolbar,
+        le menu "/" en zone vide ou le menu contextuel "zone vide" :
+        juste après le bloc actif (dernier bloc cliqué/édité), quel que
+        soit son type — ou en fin de document si aucun bloc n'est actif."""
+        if self._active_block_id is not None:
+            doc_index = next(
+                (i for i, b in enumerate(self._document.blocks) if b.id == self._active_block_id),
+                None,
+            )
+            layout_index = self._layout_index_of_block(self._active_block_id)
+            if doc_index is not None and layout_index != -1:
+                return doc_index + 1, layout_index + 1
+        return len(self._document.blocks), self._blocks_layout.count()
+
+    def _insert_new_block(self, block, widget: QWidget) -> None:
+        """PATCH 67 — Insère un bloc + son widget au point d'insertion
+        courant, et en fait le nouveau bloc actif (pour que des créations
+        successives s'enchaînent dans l'ordre, plutôt que de toutes se
+        replacer juste après l'ancien bloc actif)."""
+        doc_index, layout_index = self._insertion_point()
+        self._document.add_block(block, index=doc_index)
+        self._blocks_layout.insertWidget(layout_index, self._wrap(widget, block.id))
+        self._active_block_id = block.id
+
     def _render_document(self, focus_last: bool = False) -> None:
         """(Re)construit entièrement l'affichage à partir de self._document."""
         self._active_text_widget = None
+        self._active_block_id = None
         while self._blocks_layout.count():
             item = self._blocks_layout.takeAt(0)
             widget = item.widget()
@@ -1068,85 +1115,77 @@ class MainWindow(QMainWindow):
         return widget
 
     def _add_text_block(self, content: str = "") -> None:
-        """Ajoute un nouveau bloc texte au document et à l'affichage."""
+        """Ajoute un nouveau bloc texte au document et à l'affichage,
+        juste après le bloc actif (PATCH 67)."""
         block = TextBlock(content=content)
-        self._document.add_block(block)
-
         widget = self._create_text_widget(block)
-        self._blocks_layout.addWidget(self._wrap(widget, block.id))
+        self._insert_new_block(block, widget)
         widget.setFocus()
 
     def _add_checklist_block(self) -> None:
-        """Ajoute un nouveau bloc checklist (PATCH 10), avec un premier élément vide."""
+        """Ajoute un nouveau bloc checklist (PATCH 10), avec un premier
+        élément vide, juste après le bloc actif (PATCH 67)."""
         block = ChecklistBlock()
         block.add_item()
-        self._document.add_block(block)
-
         widget = ChecklistBlockWidget(block)
-        self._blocks_layout.addWidget(self._wrap(widget, block.id))
+        self._insert_new_block(block, widget)
 
     def _add_simple_table_block(self) -> None:
-        """PATCH 24 — Ajoute un tableau simple (grille de texte 2×2)."""
+        """PATCH 24 — Ajoute un tableau simple (grille de texte 2×2),
+        juste après le bloc actif (PATCH 67)."""
         block = SimpleTableBlock()
-        self._document.add_block(block)
-
         widget = SimpleTableBlockWidget(block)
-        self._blocks_layout.addWidget(self._wrap(widget, block.id))
+        self._insert_new_block(block, widget)
 
     def _add_table_block(self) -> None:
-        """PATCH 14 — Ajoute un nouveau bloc tableau (2 colonnes, 1 ligne)."""
+        """PATCH 14 — Ajoute un nouveau bloc tableau (2 colonnes, 1 ligne),
+        juste après le bloc actif (PATCH 67)."""
         block = TableBlock()
         block.add_column(name="Colonne 1")
         block.add_column(name="Colonne 2")
         block.add_row()
-        self._document.add_block(block)
-
         widget = TableBlockWidget(block, self._document)
-        self._blocks_layout.addWidget(self._wrap(widget, block.id))
+        self._insert_new_block(block, widget)
 
     def _add_list_block(self) -> None:
-        """PATCH 23 — Ajoute un bloc liste (une puce vide)."""
+        """PATCH 23 — Ajoute un bloc liste (une puce vide), juste après
+        le bloc actif (PATCH 67)."""
         block = ListBlock()
         block.add_item("")
-        self._document.add_block(block)
-
         widget = ListBlockWidget(block)
-        self._blocks_layout.addWidget(self._wrap(widget, block.id))
+        self._insert_new_block(block, widget)
 
     def _add_code_block(self) -> None:
-        """PATCH 22 — Ajoute un bloc de code (police monospace)."""
+        """PATCH 22 — Ajoute un bloc de code (police monospace), juste
+        après le bloc actif (PATCH 67)."""
         block = CodeBlock()
-        self._document.add_block(block)
-
         widget = CodeBlockWidget(block)
-        self._blocks_layout.addWidget(self._wrap(widget, block.id))
+        self._insert_new_block(block, widget)
 
     def _add_quote_block(self) -> None:
-        """PATCH 21 — Ajoute un bloc citation."""
+        """PATCH 21 — Ajoute un bloc citation, juste après le bloc actif
+        (PATCH 67)."""
         block = QuoteBlock()
-        self._document.add_block(block)
-
         widget = QuoteBlockWidget(block)
-        self._blocks_layout.addWidget(self._wrap(widget, block.id))
+        self._insert_new_block(block, widget)
 
     def _add_separator_block(self) -> None:
-        """PATCH 20 — Ajoute un séparateur (ligne horizontale)."""
+        """PATCH 20 — Ajoute un séparateur (ligne horizontale), juste
+        après le bloc actif (PATCH 67)."""
         block = SeparatorBlock()
-        self._document.add_block(block)
-
         widget = SeparatorBlockWidget(block)
-        self._blocks_layout.addWidget(self._wrap(widget, block.id))
+        self._insert_new_block(block, widget)
 
     def _add_gantt_block(self) -> None:
-        """PATCH 19 — Ajoute un bloc Gantt vide (à configurer via ses sélecteurs)."""
+        """PATCH 19 — Ajoute un bloc Gantt vide (à configurer via ses
+        sélecteurs), juste après le bloc actif (PATCH 67)."""
         block = GanttBlock()
-        self._document.add_block(block)
-
         widget = GanttBlockWidget(block, self._document)
-        self._blocks_layout.addWidget(self._wrap(widget, block.id))
+        self._insert_new_block(block, widget)
 
     def _add_image_block(self) -> None:
-        """PATCH 12 — Insère une image choisie sur le disque, en fin de document."""
+        """PATCH 12 — Insère une image choisie sur le disque, juste après
+        le bloc actif (PATCH 67)."""
         path_str, _ = QFileDialog.getOpenFileName(
             self,
             "Insérer une image",
@@ -1169,9 +1208,8 @@ class MainWindow(QMainWindow):
             image_base64=base64.b64encode(raw_bytes).decode("ascii"),
             image_format=path.suffix.lstrip(".").lower() or "png",
         )
-        self._document.add_block(block)
         content = self._create_content_widget_for_block(block)
-        self._blocks_layout.addWidget(self._wrap(content, block.id))
+        self._insert_new_block(block, content)
 
     def _move_block(self, block_id: str, delta: int) -> None:
         """PATCH 12 — Déplace un bloc (image, checklist, ...) d'une position."""

@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from typing import Callable, Optional
 
-from PySide6.QtCore import QMimeData, QPoint, Qt
+from PySide6.QtCore import QEvent, QMimeData, QPoint, Qt
 from PySide6.QtGui import QContextMenuEvent, QDrag, QMouseEvent
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QWidget
 
@@ -66,6 +66,7 @@ class BlockContainer(QWidget):
         content: QWidget,
         block_id: str,
         on_context_menu_requested: Optional[Callable[[str, QPoint], None]] = None,
+        on_activated: Optional[Callable[[str], None]] = None,
         icon: str = "",
         extra_top_margin: int = 0,
         parent: QWidget | None = None,
@@ -74,6 +75,7 @@ class BlockContainer(QWidget):
         self.content = content
         self.block_id = block_id
         self._on_context_menu_requested = on_context_menu_requested
+        self._on_activated = on_activated
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, extra_top_margin, 0, 0)
@@ -84,6 +86,22 @@ class BlockContainer(QWidget):
             icon_label.setAlignment(Qt.AlignCenter)
             layout.addWidget(icon_label)
         layout.addWidget(content, stretch=1)
+
+        # PATCH 67 — Repère le bloc "actif" (dernier cliqué), quel que
+        # soit son type (texte, Gantt, tableau, image...), afin qu'un
+        # nouveau bloc créé depuis la toolbar ou le menu contextuel
+        # s'insère juste après lui plutôt qu'en fin de document. On
+        # observe les clics sur le conteneur et tous ses descendants
+        # sans intercepter l'événement (juste une notification).
+        if self._on_activated is not None:
+            self.installEventFilter(self)
+            for child in self.findChildren(QWidget):
+                child.installEventFilter(self)
+
+    def eventFilter(self, obj, event) -> bool:  # noqa: N802 (nom imposé par Qt)
+        if event.type() == QEvent.MouseButtonPress and self._on_activated is not None:
+            self._on_activated(self.block_id)
+        return super().eventFilter(obj, event)
 
     def contextMenuEvent(self, event: QContextMenuEvent) -> None:
         """PATCH 26 — Clic droit complet : délégué à la fenêtre principale."""
