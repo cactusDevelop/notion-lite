@@ -13,6 +13,7 @@ from PySide6.QtGui import QAction, QActionGroup, QColor, QKeySequence, QTextCurs
 from PySide6.QtWidgets import (
     QApplication,
     QColorDialog,
+    QDialog,
     QDockWidget,
     QFileDialog,
     QFileSystemModel,
@@ -94,6 +95,7 @@ from ui.settings import (
     set_block_spacing,
 )
 from ui.toolbar import MainToolBar
+from ui.welcome_dialog import WelcomeDialog
 
 # Racine du projet (deux niveaux au-dessus de ce fichier : ui/main_window.py).
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -109,6 +111,29 @@ _SETTINGS_LAST_FILE_KEY = "last_file"
 # PATCH 53 — dossier affiché dans l'explorateur de fichiers latéral,
 # mémorisé entre deux lancements comme _SETTINGS_LAST_FILE_KEY.
 _SETTINGS_LAST_FOLDER_KEY = "last_folder"
+# PATCH 63 — liste des derniers projets ouverts/sauvegardés, affichée
+# dans l'écran d'accueil (voir WelcomeDialog).
+_SETTINGS_RECENT_FILES_KEY = "recent_files"
+_MAX_RECENT_FILES = 8
+
+
+def _get_recent_files() -> list[Path]:
+    """PATCH 63 — Liste des projets récents encore présents sur le
+    disque, du plus récent au plus ancien."""
+    settings = QSettings(_SETTINGS_ORG, _SETTINGS_APP)
+    raw = settings.value(_SETTINGS_RECENT_FILES_KEY, [])
+    if isinstance(raw, str):
+        raw = [raw] if raw else []
+    return [path for path in (Path(p) for p in raw) if path.is_file()]
+
+
+def _add_recent_file(path: Path) -> None:
+    """PATCH 63 — Place `path` en tête des projets récents (sans doublon),
+    en conservant au plus _MAX_RECENT_FILES entrées."""
+    settings = QSettings(_SETTINGS_ORG, _SETTINGS_APP)
+    existing = [str(p) for p in _get_recent_files() if p != path]
+    updated = [str(path)] + existing
+    settings.setValue(_SETTINGS_RECENT_FILES_KEY, updated[:_MAX_RECENT_FILES])
 
 
 def _load_startup_document() -> tuple[Document, Path | None]:
@@ -161,9 +186,10 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(f"Notion Lite {__version__}")
         self.resize(1000, 700)
 
-        # PATCH 52 — reprend la dernière session (dernier fichier
-        # sauvegardé/ouvert) si elle existe, sinon repart du template.
-        self._document, restored_path = _load_startup_document()
+        # PATCH 63 — écran d'accueil (façon VS Code / JetBrains) : demande
+        # de créer ou d'ouvrir un projet avant d'afficher la fenêtre
+        # principale, avec un raccourci vers les projets récents.
+        self._document, restored_path = self._run_welcome_dialog()
         self._active_text_widget: TextBlockWidget | None = None
         self._current_file: Path | None = None
 
@@ -173,6 +199,40 @@ class MainWindow(QMainWindow):
         # PATCH 52 — référence servant à détecter des modifications non
         # sauvegardées à la fermeture (voir closeEvent).
         self._last_saved_snapshot = self._document_snapshot()
+
+    def _run_welcome_dialog(self) -> tuple[Document, Path | None]:
+        """PATCH 63 — Affiche l'écran d'accueil et traduit le choix de
+        l'utilisateur en document initial + chemin associé."""
+        app = QApplication.instance()
+        if app is not None and app.platformName() == "offscreen":
+            # Plateforme "offscreen" (tests automatisés / CI) : personne
+            # ne peut cliquer sur une popup modale, on saute donc
+            # directement à la reprise de session habituelle (PATCH 52)
+            # pour ne jamais bloquer l'exécution des tests.
+            return _load_startup_document()
+
+        dialog = WelcomeDialog(_get_recent_files(), self)
+        if dialog.exec() != QDialog.Accepted:
+            # Fenêtre fermée sans choix (croix / Échap) : on ne bloque
+            # jamais le lancement, on reprend l'ancien comportement
+            # (reprise de la dernière session, PATCH 52).
+            return _load_startup_document()
+
+        if dialog.result_action == WelcomeDialog.ACTION_NEW_BLANK:
+            return Document(), None
+
+        if dialog.result_action == WelcomeDialog.ACTION_OPEN and dialog.result_path is not None:
+            try:
+                raw = json.loads(dialog.result_path.read_text(encoding="utf-8"))
+                return Document.from_dict(raw), dialog.result_path
+            except (OSError, ValueError, KeyError) as exc:
+                QMessageBox.critical(
+                    self, "Erreur d'ouverture", f"Impossible d'ouvrir le fichier :\n{exc}"
+                )
+                return build_project_template(), None
+
+        # ACTION_NEW_TEMPLATE, ou repli par défaut.
+        return build_project_template(), None
 
     def _setup_ui(self) -> None:
         """Prépare la toolbar, la zone de contenu et affiche le document."""
@@ -209,8 +269,8 @@ class MainWindow(QMainWindow):
             info_icon_path=_INFO_ICON_PATH,
         )
         self.addToolBar(toolbar)
-        self._setup_file_menu()
         self._setup_file_explorer_dock()
+        self._setup_file_menu()
 
         central = BlocksArea(
             on_block_dropped=self._on_block_dropped,
@@ -861,6 +921,9 @@ class MainWindow(QMainWindow):
         settings = QSettings(_SETTINGS_ORG, _SETTINGS_APP)
         if path is not None:
             settings.setValue(_SETTINGS_LAST_FILE_KEY, str(path))
+            # PATCH 63 — alimente la liste "Projets récents" de l'écran
+            # d'accueil.
+            _add_recent_file(path)
         else:
             settings.remove(_SETTINGS_LAST_FILE_KEY)
 
