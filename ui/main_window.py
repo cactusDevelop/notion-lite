@@ -136,6 +136,14 @@ def _add_recent_file(path: Path) -> None:
     settings.setValue(_SETTINGS_RECENT_FILES_KEY, updated[:_MAX_RECENT_FILES])
 
 
+def _remove_recent_file(path: Path) -> None:
+    """PATCH 68 — Retire `path` de la liste des projets récents (croix
+    dans l'écran d'accueil), sans toucher au fichier sur le disque."""
+    settings = QSettings(_SETTINGS_ORG, _SETTINGS_APP)
+    existing = [str(p) for p in _get_recent_files() if p != path]
+    settings.setValue(_SETTINGS_RECENT_FILES_KEY, existing)
+
+
 def _load_startup_document() -> tuple[Document, Path | None]:
     """PATCH 52 — Reprend automatiquement la dernière session : recharge
     le dernier fichier sauvegardé/ouvert mémorisé (QSettings), si le
@@ -198,6 +206,9 @@ class MainWindow(QMainWindow):
         # PATCH 67 — Dernier bloc "actif" (cliqué ou édité), quel que soit
         # son type ; sert à insérer un nouveau bloc juste après lui.
         self._active_block_id: str | None = None
+        # PATCH 68 — Ensemble des id de titres/sous-titres actuellement
+        # réduits (flèche ▸), voir _toggle_heading_collapse.
+        self._collapsed_headings: set[str] = set()
         self._current_file: Path | None = None
         # PATCH 65 — Dossier projet imposé pour cette session (choisi à
         # l'écran d'accueil ou déduit du fichier ouvert), qui devient la
@@ -223,7 +234,7 @@ class MainWindow(QMainWindow):
             # pour ne jamais bloquer l'exécution des tests.
             return _load_startup_document()
 
-        dialog = WelcomeDialog(_get_recent_files(), self)
+        dialog = WelcomeDialog(_get_recent_files(), self, on_remove_recent=_remove_recent_file)
         if dialog.exec() != QDialog.Accepted:
             # Fenêtre fermée sans choix (croix / Échap) : on ne bloque
             # jamais le lancement, on reprend l'ancien comportement
@@ -772,6 +783,12 @@ class MainWindow(QMainWindow):
         extra_top_margin = 0
         if get_block_spacing() and isinstance(block, self._SPACED_BLOCK_TYPES):
             extra_top_margin = self._EXTRA_TOP_MARGIN_PX
+        # PATCH 68 — Titres/sous-titres : flèche de repli/dépli.
+        on_toggle_collapse = None
+        collapsed = False
+        if isinstance(block, HeadingBlock):
+            on_toggle_collapse = self._toggle_heading_collapse
+            collapsed = block.id in self._collapsed_headings
         return BlockContainer(
             content,
             block_id,
@@ -779,7 +796,41 @@ class MainWindow(QMainWindow):
             on_activated=self._on_block_activated,
             icon=icon_for_block(block) if block is not None else "",
             extra_top_margin=extra_top_margin,
+            on_toggle_collapse=on_toggle_collapse,
+            collapsed=collapsed,
         )
+
+    def _toggle_heading_collapse(self, block_id: str) -> None:
+        """PATCH 68 — Réduit/développe (façon plan Word) tous les blocs
+        situés après ce titre/sous-titre, jusqu'au prochain titre/
+        sous-titre (quel que soit son niveau) ou la fin du document."""
+        if block_id in self._collapsed_headings:
+            self._collapsed_headings.discard(block_id)
+        else:
+            self._collapsed_headings.add(block_id)
+        layout_index = self._layout_index_of_block(block_id)
+        if layout_index != -1:
+            item = self._blocks_layout.itemAt(layout_index)
+            container = item.widget() if item else None
+            if isinstance(container, BlockContainer):
+                container.set_collapsed(block_id in self._collapsed_headings)
+        self._apply_collapse_state()
+
+    def _apply_collapse_state(self) -> None:
+        """PATCH 68 — Applique l'état de repli courant : cache tous les
+        blocs qui suivent un titre/sous-titre réduit, jusqu'au prochain
+        titre/sous-titre (quel que soit son niveau)."""
+        hidden = False
+        for i, block in enumerate(self._document.blocks):
+            item = self._blocks_layout.itemAt(i)
+            container = item.widget() if item else None
+            if container is None:
+                continue
+            if isinstance(block, HeadingBlock):
+                hidden = block.id in self._collapsed_headings
+                container.setVisible(True)
+                continue
+            container.setVisible(not hidden)
 
     def _find_container(self, content_widget: QWidget) -> tuple[int, BlockContainer | None]:
         """Retrouve (index dans le layout, BlockContainer) d'un widget de contenu."""
@@ -847,6 +898,8 @@ class MainWindow(QMainWindow):
         for block in self._document.blocks:
             last_content = self._create_content_widget_for_block(block)
             self._blocks_layout.addWidget(self._wrap(last_content, block.id))
+
+        self._apply_collapse_state()
 
         if focus_last and last_content is not None:
             last_content.setFocus()

@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QMessageBox,
     QPushButton,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -126,11 +127,20 @@ class WelcomeDialog(QDialog):
     ACTION_NEW_BLANK = "new_blank"
     ACTION_OPEN = "open"
 
-    def __init__(self, recent_files: list[Path], parent: Optional[QWidget] = None) -> None:
+    def __init__(
+        self,
+        recent_files: list[Path],
+        parent: Optional[QWidget] = None,
+        on_remove_recent: Optional[callable] = None,
+    ) -> None:
         super().__init__(parent)
         self.setWindowTitle("Bienvenue dans Notion Lite")
         self.setModal(True)
         self.setMinimumSize(640, 420)
+        # PATCH 68 — Callback appelé avec le chemin du fichier quand
+        # l'utilisateur clique sur la croix d'un projet récent, pour que
+        # la fenêtre principale l'oublie côté QSettings.
+        self._on_remove_recent = on_remove_recent
 
         self.result_action: Optional[str] = None
         self.result_path: Optional[Path] = None
@@ -181,23 +191,59 @@ class WelcomeDialog(QDialog):
         self._recent_list.setAlternatingRowColors(True)
         if recent_files:
             for path in recent_files:
-                # PATCH 66 — Un "projet" est un dossier (celui qui contient
-                # le fichier .json) : c'est ce dossier qu'on affiche et
-                # qu'on rouvrira en racine de l'explorateur, pas le nom
-                # interne du fichier.
-                project_folder = path.parent
-                item = QListWidgetItem(project_folder.name)
-                item.setToolTip(str(project_folder))
-                item.setData(Qt.UserRole, str(path))
-                self._recent_list.addItem(item)
+                self._add_recent_item(path)
         else:
-            placeholder = QListWidgetItem("(aucun projet récent)")
-            placeholder.setFlags(Qt.ItemIsEnabled)
-            self._recent_list.addItem(placeholder)
+            self._show_empty_placeholder()
         self._recent_list.itemDoubleClicked.connect(self._activate_recent_item)
         right.addWidget(self._recent_list)
 
         root.addLayout(right)
+
+    # -- Projets récents (PATCH 68 : croix de suppression) ----------------
+
+    def _add_recent_item(self, path: Path) -> None:
+        """PATCH 66 — Un "projet" est un dossier (celui qui contient le
+        fichier .json) : c'est ce dossier qu'on affiche et qu'on
+        rouvrira en racine de l'explorateur, pas le nom interne du
+        fichier. PATCH 68 — Ajoute une petite croix pour retirer ce
+        projet de la liste sans y toucher sur le disque."""
+        project_folder = path.parent
+        item = QListWidgetItem()
+        item.setToolTip(str(project_folder))
+        item.setData(Qt.UserRole, str(path))
+        self._recent_list.addItem(item)
+
+        row = QWidget()
+        row_layout = QHBoxLayout(row)
+        row_layout.setContentsMargins(6, 2, 6, 2)
+        row_layout.addWidget(QLabel(project_folder.name), stretch=1)
+        remove_button = QToolButton()
+        remove_button.setText("✕")
+        remove_button.setAutoRaise(True)
+        remove_button.setCursor(Qt.PointingHandCursor)
+        remove_button.setToolTip("Retirer de la liste des projets récents")
+        remove_button.clicked.connect(lambda: self._remove_recent_item(item))
+        row_layout.addWidget(remove_button)
+        item.setSizeHint(row.sizeHint())
+        self._recent_list.setItemWidget(item, row)
+
+    def _show_empty_placeholder(self) -> None:
+        placeholder = QListWidgetItem("(aucun projet récent)")
+        placeholder.setFlags(Qt.ItemIsEnabled)
+        self._recent_list.addItem(placeholder)
+
+    def _remove_recent_item(self, item: QListWidgetItem) -> None:
+        """PATCH 68 — Retire un projet de la liste (clic sur sa croix),
+        et prévient la fenêtre principale pour qu'elle l'oublie
+        définitivement (QSettings)."""
+        path_str = item.data(Qt.UserRole)
+        row = self._recent_list.row(item)
+        if row != -1:
+            self._recent_list.takeItem(row)
+        if path_str and self._on_remove_recent is not None:
+            self._on_remove_recent(Path(path_str))
+        if self._recent_list.count() == 0:
+            self._show_empty_placeholder()
 
     # -- Choix de l'utilisateur -------------------------------------------
 

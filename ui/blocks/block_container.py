@@ -16,7 +16,7 @@ from typing import Callable, Optional
 
 from PySide6.QtCore import QEvent, QMimeData, QPoint, Qt
 from PySide6.QtGui import QContextMenuEvent, QDrag, QMouseEvent
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QWidget
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QToolButton, QWidget
 
 # Type MIME privé transportant l'ID du bloc glissé.
 BLOCK_MIME_TYPE = "application/x-notion-lite-block-id"
@@ -69,6 +69,12 @@ class BlockContainer(QWidget):
         on_activated: Optional[Callable[[str], None]] = None,
         icon: str = "",
         extra_top_margin: int = 0,
+        # PATCH 68 — Titres/sous-titres : petite flèche de repli/dépli
+        # (façon plan Word), qui réduit/développe tous les blocs suivants
+        # jusqu'au prochain titre. `on_toggle_collapse` est appelé avec
+        # `block_id` au clic ; `collapsed` donne l'état initial de la flèche.
+        on_toggle_collapse: Optional[Callable[[str], None]] = None,
+        collapsed: bool = False,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -76,6 +82,7 @@ class BlockContainer(QWidget):
         self.block_id = block_id
         self._on_context_menu_requested = on_context_menu_requested
         self._on_activated = on_activated
+        self._toggle_button: Optional[QToolButton] = None
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, extra_top_margin, 0, 0)
@@ -85,6 +92,19 @@ class BlockContainer(QWidget):
             icon_label.setFixedWidth(22)
             icon_label.setAlignment(Qt.AlignCenter)
             layout.addWidget(icon_label)
+        if on_toggle_collapse is not None:
+            self._toggle_button = QToolButton(self)
+            self._toggle_button.setAutoRaise(True)
+            self._toggle_button.setFixedWidth(18)
+            self._toggle_button.setCursor(Qt.PointingHandCursor)
+            self._toggle_button.setToolTip(
+                "Réduire/développer jusqu'au prochain titre ou sous-titre"
+            )
+            self._toggle_button.clicked.connect(
+                lambda: on_toggle_collapse(block_id)
+            )
+            self.set_collapsed(collapsed)
+            layout.addWidget(self._toggle_button)
         layout.addWidget(content, stretch=1)
 
         # PATCH 67 — Repère le bloc "actif" (dernier cliqué), quel que
@@ -97,6 +117,12 @@ class BlockContainer(QWidget):
             self.installEventFilter(self)
             for child in self.findChildren(QWidget):
                 child.installEventFilter(self)
+
+    def set_collapsed(self, collapsed: bool) -> None:
+        """PATCH 68 — Met à jour l'apparence de la flèche (▾ développé,
+        ▸ réduit), sans reconstruire le widget."""
+        if self._toggle_button is not None:
+            self._toggle_button.setText("▸" if collapsed else "▾")
 
     def eventFilter(self, obj, event) -> bool:  # noqa: N802 (nom imposé par Qt)
         if event.type() == QEvent.MouseButtonPress and self._on_activated is not None:
