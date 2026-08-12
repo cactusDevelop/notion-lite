@@ -229,7 +229,8 @@ class MainWindow(QMainWindow):
 
         if dialog.result_action == WelcomeDialog.ACTION_NEW_BLANK:
             self._explorer_startup_folder = dialog.result_folder
-            return Document(), None
+            document = Document()
+            return document, self._create_initial_project_file(dialog.result_folder, document)
 
         if dialog.result_action == WelcomeDialog.ACTION_OPEN and dialog.result_path is not None:
             try:
@@ -243,7 +244,27 @@ class MainWindow(QMainWindow):
 
         # ACTION_NEW_TEMPLATE, ou repli par défaut.
         self._explorer_startup_folder = dialog.result_folder
-        return build_project_template(), None
+        document = build_project_template()
+        return document, self._create_initial_project_file(dialog.result_folder, document)
+
+    def _create_initial_project_file(self, folder: Path | None, document: Document) -> Path | None:
+        """PATCH 66 — Écrit tout de suite le document initial dans le
+        dossier projet fraîchement créé (nommé d'après le dossier), afin
+        qu'il apparaisse immédiatement dans l'explorateur et les projets
+        récents, comme le ferait un IDE à la création d'un projet."""
+        if folder is None:
+            return None
+        path = folder / f"{folder.name}.json"
+        try:
+            path.write_text(
+                json.dumps(document.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+        except OSError as exc:
+            QMessageBox.critical(
+                self, "Erreur", f"Impossible de créer le fichier du projet :\n{exc}"
+            )
+            return None
+        return path
 
     def _setup_ui(self) -> None:
         """Prépare la toolbar, la zone de contenu et affiche le document."""
