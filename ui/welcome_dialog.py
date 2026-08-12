@@ -45,6 +45,9 @@ class WelcomeDialog(QDialog):
 
         self.result_action: Optional[str] = None
         self.result_path: Optional[Path] = None
+        # PATCH 65 — Dossier de sauvegarde choisi pour un nouveau projet ;
+        # sert ensuite de racine à l'explorateur de fichiers (façon IDE).
+        self.result_folder: Optional[Path] = None
 
         root = QHBoxLayout(self)
 
@@ -105,12 +108,28 @@ class WelcomeDialog(QDialog):
     # -- Choix de l'utilisateur -------------------------------------------
 
     def _choose_new_template(self) -> None:
+        folder = self._pick_project_folder()
+        if folder is None:
+            return
         self.result_action = self.ACTION_NEW_TEMPLATE
+        self.result_folder = folder
         self.accept()
 
     def _choose_new_blank(self) -> None:
+        folder = self._pick_project_folder()
+        if folder is None:
+            return
         self.result_action = self.ACTION_NEW_BLANK
+        self.result_folder = folder
         self.accept()
+
+    def _pick_project_folder(self) -> Optional[Path]:
+        """PATCH 65 — Demande l'endroit de sauvegarde du nouveau projet.
+        Retourne None si l'utilisateur annule (la popup reste ouverte)."""
+        folder_str = QFileDialog.getExistingDirectory(self, "Où enregistrer le nouveau projet ?")
+        if not folder_str:
+            return None
+        return Path(folder_str)
 
     def _choose_open(self) -> None:
         path_str, _ = QFileDialog.getOpenFileName(self, "Ouvrir un projet", "", "Notion Lite (*.json)")

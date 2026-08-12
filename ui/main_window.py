@@ -186,12 +186,21 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(f"Notion Lite {__version__}")
         self.resize(1000, 700)
 
+        # PATCH 65 — voir plus bas ; initialisé avant _run_welcome_dialog
+        # car celle-ci peut le renseigner (nouveau projet).
+        self._explorer_startup_folder: Path | None = None
+
         # PATCH 63 — écran d'accueil (façon VS Code / JetBrains) : demande
         # de créer ou d'ouvrir un projet avant d'afficher la fenêtre
         # principale, avec un raccourci vers les projets récents.
         self._document, restored_path = self._run_welcome_dialog()
         self._active_text_widget: TextBlockWidget | None = None
         self._current_file: Path | None = None
+        # PATCH 65 — Dossier projet imposé pour cette session (choisi à
+        # l'écran d'accueil ou déduit du fichier ouvert), qui devient la
+        # racine verrouillée de l'explorateur de fichiers.
+        if self._explorer_startup_folder is None and restored_path is not None:
+            self._explorer_startup_folder = restored_path.parent
 
         self._setup_ui()
         if restored_path is not None:
@@ -219,6 +228,7 @@ class MainWindow(QMainWindow):
             return _load_startup_document()
 
         if dialog.result_action == WelcomeDialog.ACTION_NEW_BLANK:
+            self._explorer_startup_folder = dialog.result_folder
             return Document(), None
 
         if dialog.result_action == WelcomeDialog.ACTION_OPEN and dialog.result_path is not None:
@@ -232,6 +242,7 @@ class MainWindow(QMainWindow):
                 return build_project_template(), None
 
         # ACTION_NEW_TEMPLATE, ou repli par défaut.
+        self._explorer_startup_folder = dialog.result_folder
         return build_project_template(), None
 
     def _setup_ui(self) -> None:
@@ -433,9 +444,21 @@ class MainWindow(QMainWindow):
         self.addDockWidget(Qt.LeftDockWidgetArea, self._explorer_dock)
 
         settings = QSettings(_SETTINGS_ORG, _SETTINGS_APP)
+        if self._explorer_startup_folder is not None:
+            # PATCH 65 — Dossier du projet choisi à l'écran d'accueil (ou
+            # déduit du fichier ouvert) : prioritaire, il devient la
+            # racine verrouillée de l'explorateur pour cette session.
+            self._set_explorer_root(self._explorer_startup_folder)
+            return
+
         last_folder = settings.value(_SETTINGS_LAST_FOLDER_KEY, "")
         if last_folder and Path(last_folder).is_dir():
             self._set_explorer_root(Path(last_folder))
+        else:
+            # PATCH 54 — Sans dossier mémorisé, on n'affiche jamais tout
+            # le poste : on se replie sur le dossier utilisateur, comme
+            # le ferait un IDE tant qu'aucun projet n'est ouvert.
+            self._set_explorer_root(Path.home())
 
     def _choose_explorer_folder(self) -> None:
         """PATCH 53 — Sélectionne le dossier affiché dans l'explorateur."""
