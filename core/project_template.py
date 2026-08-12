@@ -1,5 +1,5 @@
 """
-Template par défaut "Modèle Gestion de Projet" (PATCH 48).
+Template par défaut "Modèle OG" (Opportunity Governance, PATCH 48).
 
 Construit un Document complet illustrant l'ensemble des blocs du
 projet : titres, effectif, checklists liées, tableau de critères
@@ -51,11 +51,11 @@ _RISK_OPTIONS = ["vert", "orange", "rouge"]
 
 
 def build_project_template() -> Document:
-    """Construit un nouveau Document à partir du template "Modèle Gestion de Projet"."""
+    """Construit un nouveau Document à partir du template "Modèle OG" (Opportunity Governance)."""
     document = Document()
 
     # -- Titre + Effectif -------------------------------------------------
-    document.add_block(HeadingBlock(level=1, content="Modèle Gestion de Projet"))
+    document.add_block(HeadingBlock(level=1, content="Modèle OG"))
     document.add_block(HeadingBlock(level=2, content="Effectif"))
 
     names = random.sample(_SAMPLE_NAMES, 3)

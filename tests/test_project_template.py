@@ -21,7 +21,7 @@ def test_template_block_order_and_types():
     document = build_project_template()
     types = [type(b) for b in document.blocks]
     assert types == [
-        HeadingBlock,  # Modèle Gestion de Projet
+        HeadingBlock,  # Modèle OG
         HeadingBlock,  # Effectif
         PeopleListBlock,  # liste des personnes (éditable, PATCH 52)
         HeadingBlock,  # Checklist initiale
@@ -40,7 +40,7 @@ def test_template_block_order_and_types():
 def test_template_titles():
     document = build_project_template()
     h1 = document.blocks[0]
-    assert isinstance(h1, HeadingBlock) and h1.level == 1 and h1.content == "Modèle Gestion de Projet"
+    assert isinstance(h1, HeadingBlock) and h1.level == 1 and h1.content == "Modèle OG"
     assert document.blocks[1].content == "Effectif"
     assert document.blocks[3].content == "Checklist initiale"
     assert document.blocks[5].content == "Critères"

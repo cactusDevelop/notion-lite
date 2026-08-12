@@ -43,10 +43,6 @@ from blocks.registry import block_from_dict
 from blocks.text_block import TextBlock
 from core.block_icons import icon_for_block
 from core.block_preview import preview_for_block
-from core.document_html_export import document_to_full_html
-from core.document_html_import import html_to_document
-from core.document_markdown_export import document_to_markdown
-from core.document_markdown_import import markdown_to_document
 from core.document import Document
 from core.history import UndoHistory
 from core.project_template import build_project_template
@@ -76,7 +72,6 @@ from ui.command_registry import COMMANDS
 from ui.emoji_picker import EmojiPicker
 from ui.export_pdf import export_document_to_pdf
 from ui.info_dialog import InfoDialog
-from ui.people_manager_dialog import PeopleManagerDialog
 from ui.search_dialog import SearchDialog
 from ui.themes.theme import (
     THEME_DARK,
@@ -221,7 +216,7 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(self._scroll_area)
 
         # PATCH 48 — le document initial vient désormais du template
-        # "Modèle Gestion de Projet" (voir __init__), plus besoin de contenu de démo ici.
+        # "Modèle OG" (Opportunity Governance, voir __init__), plus besoin de contenu de démo ici.
         self._render_document(focus_last=True)
 
         # -- Undo/Redo (PATCH 27) ------------------------------------
@@ -238,10 +233,11 @@ class MainWindow(QMainWindow):
         """Menu Fichier : Nouveau / Ouvrir / Sauvegarder / Sauvegarder sous (PATCH 8)."""
         file_menu = self.menuBar().addMenu("&Fichier")
 
-        new_action = QAction("Nouveau (Modèle Gestion de Projet)", self)
-        new_action.setShortcut(QKeySequence.New)
-        new_action.triggered.connect(self._new_document)
-        file_menu.addAction(new_action)
+        templates_menu = file_menu.addMenu("Templates")
+        og_template_action = QAction("Modèle OG", self)
+        og_template_action.setShortcut(QKeySequence.New)
+        og_template_action.triggered.connect(self._new_document)
+        templates_menu.addAction(og_template_action)
 
         new_blank_action = QAction("Nouveau document vide", self)
         new_blank_action.triggered.connect(self._new_blank_document)
@@ -266,22 +262,6 @@ class MainWindow(QMainWindow):
         export_pdf_action.triggered.connect(self._export_pdf)
         file_menu.addAction(export_pdf_action)
 
-        export_md_action = QAction("Exporter en Markdown...", self)
-        export_md_action.triggered.connect(self._export_markdown)
-        file_menu.addAction(export_md_action)
-
-        export_html_action = QAction("Exporter en HTML...", self)
-        export_html_action.triggered.connect(self._export_html)
-        file_menu.addAction(export_html_action)
-
-        import_md_action = QAction("Importer un Markdown...", self)
-        import_md_action.triggered.connect(self._import_markdown)
-        file_menu.addAction(import_md_action)
-
-        import_html_action = QAction("Importer un HTML...", self)
-        import_html_action.triggered.connect(self._import_html)
-        file_menu.addAction(import_html_action)
-
         edit_menu = self.menuBar().addMenu("&Édition")
 
         undo_action = QAction("Annuler", self)
@@ -295,10 +275,6 @@ class MainWindow(QMainWindow):
         edit_menu.addAction(redo_action)
 
         edit_menu.addSeparator()
-        people_action = QAction("Gestionnaire de personnes...", self)
-        people_action.triggered.connect(self._show_people_manager)
-        edit_menu.addAction(people_action)
-
         search_action = QAction("Rechercher...", self)
         search_action.setShortcut(QKeySequence("Ctrl+F"))
         search_action.triggered.connect(self._show_search_dialog)
@@ -308,9 +284,6 @@ class MainWindow(QMainWindow):
         replace_action.setShortcut(QKeySequence("Ctrl+H"))
         replace_action.triggered.connect(self._show_search_dialog)
         edit_menu.addAction(replace_action)
-
-        self._favorites_menu = self.menuBar().addMenu("&Favoris")
-        self._favorites_menu.aboutToShow.connect(self._populate_favorites_menu)
 
         view_menu = self.menuBar().addMenu("&Affichage")
         self._dark_mode_action = QAction("Mode sombre", self)
@@ -407,11 +380,6 @@ class MainWindow(QMainWindow):
         """Ouvre la popup listant les explications et choix de design."""
         InfoDialog(self).exec()
 
-    def _show_people_manager(self) -> None:
-        """PATCH 16 — Ouvre le gestionnaire du registre partagé de personnes."""
-        PeopleManagerDialog(self._document, self).exec()
-        self._render_document()
-
     # -- Recherche globale (PATCH 28) --------------------------------------
 
     def _show_search_dialog(self) -> None:
@@ -432,22 +400,6 @@ class MainWindow(QMainWindow):
                 self._scroll_area.ensureWidgetVisible(widget)
                 widget.content.setFocus()
                 return
-
-    # -- Favoris (PATCH 31) ------------------------------------------------
-
-    def _populate_favorites_menu(self) -> None:
-        """Reconstruit le menu "Favoris" juste avant son ouverture, pour
-        toujours refléter l'état courant du document."""
-        self._favorites_menu.clear()
-        favorites = self._document.favorite_blocks()
-        if not favorites:
-            empty_action = self._favorites_menu.addAction("(aucun favori)")
-            empty_action.setEnabled(False)
-            return
-        for block in favorites:
-            label = preview_for_block(block)
-            action = self._favorites_menu.addAction(label)
-            action.triggered.connect(lambda _, bid=block.id: self._scroll_to_block(bid))
 
     # -- Mode sombre (PATCH 32) ---------------------------------------------
 
@@ -832,7 +784,7 @@ class MainWindow(QMainWindow):
             settings.remove(_SETTINGS_LAST_FILE_KEY)
 
     def _new_document(self) -> None:
-        """PATCH 48 — Nouveau : repart du template par défaut "Modèle Gestion de Projet"."""
+        """PATCH 48 — Nouveau : repart du template "Modèle OG" (Opportunity Governance)."""
         self._document = build_project_template()
         self._set_current_file(None)
         self._render_document()
@@ -864,53 +816,6 @@ class MainWindow(QMainWindow):
 
         self._document = document
         self._set_current_file(Path(path_str))
-        self._render_document()
-        self._last_saved_snapshot = self._document_snapshot()
-
-    def _import_markdown(self) -> None:
-        """PATCH 39 — Importe un fichier Markdown, remplace le document
-        courant (comme "Ouvrir", mais sans fichier de sauvegarde associé
-        : un import Markdown n'a pas de round-trip garanti vers .json)."""
-        path_str, _ = QFileDialog.getOpenFileName(
-            self, "Importer un Markdown", "", "Markdown (*.md)"
-        )
-        if not path_str:
-            return
-
-        try:
-            text = Path(path_str).read_text(encoding="utf-8")
-            document = markdown_to_document(text)
-        except OSError as exc:
-            QMessageBox.critical(
-                self, "Erreur d'import", f"Impossible de lire le fichier :\n{exc}"
-            )
-            return
-
-        self._document = document
-        self._set_current_file(None)
-        self._render_document()
-        self._last_saved_snapshot = self._document_snapshot()
-
-    def _import_html(self) -> None:
-        """PATCH 40 — Importe un fichier HTML, remplace le document courant
-        (comme l'import Markdown : pas de fichier de sauvegarde associé)."""
-        path_str, _ = QFileDialog.getOpenFileName(
-            self, "Importer un HTML", "", "HTML (*.html *.htm)"
-        )
-        if not path_str:
-            return
-
-        try:
-            text = Path(path_str).read_text(encoding="utf-8")
-            document = html_to_document(text)
-        except OSError as exc:
-            QMessageBox.critical(
-                self, "Erreur d'import", f"Impossible de lire le fichier :\n{exc}"
-            )
-            return
-
-        self._document = document
-        self._set_current_file(None)
         self._render_document()
         self._last_saved_snapshot = self._document_snapshot()
 
@@ -956,27 +861,6 @@ class MainWindow(QMainWindow):
         if path.suffix != ".pdf":
             path = path.with_suffix(".pdf")
         export_document_to_pdf(self._document, str(path))
-
-    def _export_markdown(self) -> None:
-        """PATCH 37 — Exporte le document courant en Markdown."""
-        path_str, _ = QFileDialog.getSaveFileName(self, "Exporter en Markdown", "", "Markdown (*.md)")
-        if not path_str:
-            return
-        path = Path(path_str)
-        if path.suffix != ".md":
-            path = path.with_suffix(".md")
-        path.write_text(document_to_markdown(self._document), encoding="utf-8")
-
-    def _export_html(self) -> None:
-        """PATCH 38 — Exporte le document courant en HTML autonome."""
-        path_str, _ = QFileDialog.getSaveFileName(self, "Exporter en HTML", "", "HTML (*.html)")
-        if not path_str:
-            return
-        path = Path(path_str)
-        if path.suffix != ".html":
-            path = path.with_suffix(".html")
-        title = path.stem
-        path.write_text(document_to_full_html(self._document, title=title), encoding="utf-8")
 
     # -- Gestion des blocs texte -----------------------------------------
 
