@@ -27,6 +27,14 @@ PATCH 57 :
       `on_bar_drag_moved`/`on_bar_drag_finished`). Un simple clic
       (sans glissement notable) ouvre toujours la pop-up de saisie
       précise (`_DeltaDialog`), pour une valeur exacte.
+
+PATCH 70 :
+    - Le graphique est placé dans une zone de défilement horizontale
+      (QScrollArea) : à l'échelle 100 %, il continue de s'ajuster à la
+      largeur disponible comme avant, au-delà une barre de défilement
+      apparaît pour se déplacer sur l'axe temporel sans écraser les
+      barres. Un curseur "Échelle" (50 % à 400 %) contrôle le nombre
+      de pixels par jour affiché.
 """
 from __future__ import annotations
 
@@ -35,11 +43,15 @@ import math
 from PySide6.QtCore import QRect, QTimer, Qt
 from PySide6.QtGui import QColor, QPainter, QPalette, QPen
 from PySide6.QtWidgets import (
+    QAbstractScrollArea,
     QDialog,
     QDialogButtonBox,
     QDoubleSpinBox,
     QHBoxLayout,
     QLabel,
+    QScrollArea,
+    QSlider,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -74,6 +86,14 @@ _DRAG_THRESHOLD_PX = 4
 _DELTA_RANGE_DAYS = 999.0
 
 _UNIT_LABELS = {UNIT_DAYS: "Jours", UNIT_MONTHS: "Mois"}
+
+# PATCH 70 — nombre de pixels par jour à l'échelle 100 %, multiplié par
+# le zoom courant pour obtenir la largeur totale du graphique.
+_BASE_PX_PER_DAY = 4
+_ZOOM_MIN = 50
+_ZOOM_MAX = 400
+_ZOOM_STEP = 25
+_ZOOM_DEFAULT = 100
 
 
 def _nice_axis_step(max_value: float) -> float:
@@ -117,8 +137,19 @@ class _DependencyGanttCanvas(QWidget):
         self._drag_start_delta = 0.0
         self._drag_moved = False
         self._days_per_pixel = 0.0
+        # PATCH 70 — zoom courant (%) et étendue en jours mémorisée à
+        # chaque `set_schedule`, pour calculer la largeur "idéale" du
+        # graphique (voir `_update_width`) indépendamment de la largeur
+        # de la zone de défilement qui le contient.
+        self._zoom_percent = _ZOOM_DEFAULT
+        self._max_x_days = 1.0
         self.setMinimumHeight(_ROW_HEIGHT + _AXIS_HEIGHT)
         self.setCursor(Qt.PointingHandCursor)
+
+    def set_zoom(self, zoom_percent: int) -> None:
+        self._zoom_percent = zoom_percent
+        self._update_width()
+        self.update()
 
     def set_time_unit(self, unit: str) -> None:
         self._time_unit = unit
@@ -135,8 +166,17 @@ class _DependencyGanttCanvas(QWidget):
                 tasks_by_person[name].append(task)
         self._people = people
         self._tasks_by_person = tasks_by_person
+        self._max_x_days = max(
+            (max(t["resolution"], t["end"]) for tasks in tasks_by_person.values() for t in tasks),
+            default=1.0,
+        ) or 1.0
         self.setMinimumHeight(max(_ROW_HEIGHT, _ROW_HEIGHT * len(people)) + _AXIS_HEIGHT)
+        self._update_width()
         self.update()
+
+    def _update_width(self) -> None:
+        chart_width = int(self._max_x_days * _BASE_PX_PER_DAY * self._zoom_percent / 100)
+        self.setMinimumWidth(_LABEL_WIDTH + max(chart_width, 20) + 10)
 
     def _bar_at(self, pos) -> dict | None:
         for rect, task in reversed(self._bar_rects):
@@ -331,12 +371,50 @@ class DependencyGanttBlockWidget(QWidget):
         unit_row.addStretch(1)
         layout.addLayout(unit_row)
 
+        # PATCH 70 — curseur d'échelle (zoom) : agrandit/réduit le
+        # nombre de pixels par jour, indépendamment de la largeur du bloc.
+        zoom_row = QHBoxLayout()
+        zoom_row.addWidget(QLabel("Échelle :", self))
+        zoom_out_button = QToolButton(self)
+        zoom_out_button.setText("－")
+        zoom_out_button.setAutoRaise(True)
+        zoom_out_button.clicked.connect(lambda: self._nudge_zoom(-_ZOOM_STEP))
+        zoom_row.addWidget(zoom_out_button)
+        self._zoom_slider = QSlider(Qt.Horizontal, self)
+        self._zoom_slider.setRange(_ZOOM_MIN, _ZOOM_MAX)
+        self._zoom_slider.setSingleStep(_ZOOM_STEP)
+        self._zoom_slider.setPageStep(_ZOOM_STEP)
+        self._zoom_slider.setValue(_ZOOM_DEFAULT)
+        self._zoom_slider.setFixedWidth(120)
+        self._zoom_slider.valueChanged.connect(self._on_zoom_changed)
+        zoom_row.addWidget(self._zoom_slider)
+        zoom_in_button = QToolButton(self)
+        zoom_in_button.setText("＋")
+        zoom_in_button.setAutoRaise(True)
+        zoom_in_button.clicked.connect(lambda: self._nudge_zoom(_ZOOM_STEP))
+        zoom_row.addWidget(zoom_in_button)
+        self._zoom_label = QLabel(f"{_ZOOM_DEFAULT} %", self)
+        self._zoom_label.setFixedWidth(42)
+        zoom_row.addWidget(self._zoom_label)
+        zoom_row.addStretch(1)
+        layout.addLayout(zoom_row)
+
         self._canvas = _DependencyGanttCanvas(self)
         self._canvas.on_bar_clicked = self._on_bar_clicked
         self._canvas.on_bar_drag_moved = self._on_bar_drag_moved
         self._canvas.on_bar_drag_finished = self._on_bar_drag_finished
         self._canvas.set_time_unit(self._block.time_unit)
-        layout.addWidget(self._canvas)
+        # PATCH 70 — zone de défilement horizontale : à zoom ≤ 100 % le
+        # graphique continue de s'ajuster à la largeur du bloc (comme
+        # avant), au-delà une barre de défilement apparaît.
+        self._scroll_area = QScrollArea(self)
+        self._scroll_area.setWidgetResizable(True)
+        self._scroll_area.setFrameShape(QScrollArea.NoFrame)
+        self._scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self._scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self._scroll_area.setSizeAdjustPolicy(QAbstractScrollArea.AdjustToContents)
+        self._scroll_area.setWidget(self._canvas)
+        layout.addWidget(self._scroll_area)
 
         self._populate_table_combo()
 
@@ -414,6 +492,15 @@ class DependencyGanttBlockWidget(QWidget):
         self._block.time_unit = self._unit_combo.currentData()
         self._canvas.set_time_unit(self._block.time_unit)
         self.refresh()
+
+    # -- Zoom (PATCH 70) --------------------------------------------------
+
+    def _nudge_zoom(self, delta: int) -> None:
+        self._zoom_slider.setValue(self._zoom_slider.value() + delta)
+
+    def _on_zoom_changed(self, value: int) -> None:
+        self._zoom_label.setText(f"{value} %")
+        self._canvas.set_zoom(value)
 
     # -- Édition de l'écart : clic-glissé direct (PATCH 57) ou pop-up
     # de saisie précise pour un simple clic (PATCH 49) -------------------
