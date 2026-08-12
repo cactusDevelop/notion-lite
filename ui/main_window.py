@@ -801,9 +801,10 @@ class MainWindow(QMainWindow):
         )
 
     def _toggle_heading_collapse(self, block_id: str) -> None:
-        """PATCH 68 — Réduit/développe (façon plan Word) tous les blocs
-        situés après ce titre/sous-titre, jusqu'au prochain titre/
-        sous-titre (quel que soit son niveau) ou la fin du document."""
+        """PATCH 69 — Réduit/développe (façon plan Word) tous les blocs
+        situés après ce titre/sous-titre, jusqu'au prochain titre de
+        même niveau ou plus prioritaire (ex. Titre 1 s'arrête au
+        prochain Titre 1, en cachant au passage les Titre 2/3 imbriqués)."""
         if block_id in self._collapsed_headings:
             self._collapsed_headings.discard(block_id)
         else:
@@ -817,20 +818,28 @@ class MainWindow(QMainWindow):
         self._apply_collapse_state()
 
     def _apply_collapse_state(self) -> None:
-        """PATCH 68 — Applique l'état de repli courant : cache tous les
-        blocs qui suivent un titre/sous-titre réduit, jusqu'au prochain
-        titre/sous-titre (quel que soit son niveau)."""
-        hidden = False
+        """PATCH 69 — Applique l'état de repli courant, façon plan Word :
+        réduire un titre de niveau N cache tout ce qui suit (y compris
+        les sous-titres de niveau > N) jusqu'au prochain titre de niveau
+        <= N (même priorité ou supérieure), pas juste "le prochain
+        titre". `hide_levels` est une pile croissante des niveaux des
+        titres réduits pas encore "refermés" par un titre de priorité
+        égale ou supérieure ; le contenu est caché tant qu'elle n'est
+        pas vide."""
+        hide_levels: list[int] = []
         for i, block in enumerate(self._document.blocks):
             item = self._blocks_layout.itemAt(i)
             container = item.widget() if item else None
             if container is None:
                 continue
             if isinstance(block, HeadingBlock):
-                hidden = block.id in self._collapsed_headings
-                container.setVisible(True)
+                while hide_levels and block.level <= hide_levels[-1]:
+                    hide_levels.pop()
+                container.setVisible(not hide_levels)
+                if block.id in self._collapsed_headings:
+                    hide_levels.append(block.level)
                 continue
-            container.setVisible(not hidden)
+            container.setVisible(not hide_levels)
 
     def _find_container(self, content_widget: QWidget) -> tuple[int, BlockContainer | None]:
         """Retrouve (index dans le layout, BlockContainer) d'un widget de contenu."""
