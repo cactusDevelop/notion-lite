@@ -79,6 +79,7 @@ from ui.command_menu import CommandMenu
 from ui.command_registry import COMMANDS
 from ui.emoji_picker import EmojiPicker
 from ui.export_pdf import export_document_to_pdf
+from ui.i18n import LANGUAGES, get_language, set_language, tr
 from ui.info_dialog import InfoDialog
 from ui.search_dialog import SearchDialog
 from ui.themes.theme import (
@@ -363,70 +364,77 @@ class MainWindow(QMainWindow):
         QApplication.instance().installEventFilter(self)
 
     def _setup_file_menu(self) -> None:
-        """Menu Fichier : Nouveau / Ouvrir / Sauvegarder / Sauvegarder sous (PATCH 8)."""
-        file_menu = self.menuBar().addMenu("&Fichier")
+        """Menu Fichier : Nouveau / Ouvrir / Sauvegarder / Sauvegarder sous (PATCH 8).
 
-        templates_menu = file_menu.addMenu("Templates")
-        og_template_action = QAction("Modèle OG", self)
-        og_template_action.setShortcut(QKeySequence.New)
-        og_template_action.triggered.connect(self._new_document)
-        templates_menu.addAction(og_template_action)
+        PATCH 79 — chaque libellé de la barre de menu passe par `tr()`
+        (voir ui.i18n) ; les objets QMenu/QAction concernés sont gardés
+        en attribut pour être retraduits par `_retranslate_menu()` si
+        la langue change en cours de session (voir le sous-menu
+        "Langue" ajouté au menu Affichage).
+        """
+        self._file_menu = self.menuBar().addMenu(tr("menu.file"))
 
-        new_blank_action = QAction("Nouveau document vide", self)
-        new_blank_action.triggered.connect(self._new_blank_document)
-        file_menu.addAction(new_blank_action)
+        self._templates_menu = self._file_menu.addMenu(tr("menu.file.templates"))
+        self._og_template_action = QAction(tr("menu.file.template_og"), self)
+        self._og_template_action.setShortcut(QKeySequence.New)
+        self._og_template_action.triggered.connect(self._new_document)
+        self._templates_menu.addAction(self._og_template_action)
 
-        open_action = QAction("Ouvrir...", self)
-        open_action.setShortcut(QKeySequence.Open)
-        open_action.triggered.connect(self._open_document)
-        file_menu.addAction(open_action)
+        self._new_blank_action = QAction(tr("menu.file.new_blank"), self)
+        self._new_blank_action.triggered.connect(self._new_blank_document)
+        self._file_menu.addAction(self._new_blank_action)
 
-        save_action = QAction("Sauvegarder", self)
-        save_action.setShortcut(QKeySequence.Save)
-        save_action.triggered.connect(self._save_document)
-        file_menu.addAction(save_action)
+        self._open_action = QAction(tr("menu.file.open"), self)
+        self._open_action.setShortcut(QKeySequence.Open)
+        self._open_action.triggered.connect(self._open_document)
+        self._file_menu.addAction(self._open_action)
 
-        save_as_action = QAction("Sauvegarder sous...", self)
-        save_as_action.setShortcut(QKeySequence.SaveAs)
-        save_as_action.triggered.connect(self._save_document_as)
-        file_menu.addAction(save_as_action)
+        self._save_action = QAction(tr("menu.file.save"), self)
+        self._save_action.setShortcut(QKeySequence.Save)
+        self._save_action.triggered.connect(self._save_document)
+        self._file_menu.addAction(self._save_action)
 
-        export_pdf_action = QAction("Exporter en PDF...", self)
-        export_pdf_action.triggered.connect(self._export_pdf)
-        file_menu.addAction(export_pdf_action)
+        self._save_as_action = QAction(tr("menu.file.save_as"), self)
+        self._save_as_action.setShortcut(QKeySequence.SaveAs)
+        self._save_as_action.triggered.connect(self._save_document_as)
+        self._file_menu.addAction(self._save_as_action)
 
-        edit_menu = self.menuBar().addMenu("&Édition")
+        self._export_pdf_action = QAction(tr("menu.file.export_pdf"), self)
+        self._export_pdf_action.triggered.connect(self._export_pdf)
+        self._file_menu.addAction(self._export_pdf_action)
 
-        undo_action = QAction("Annuler", self)
-        undo_action.setShortcut(QKeySequence("Ctrl+Z"))
-        undo_action.triggered.connect(self._undo)
-        edit_menu.addAction(undo_action)
+        self._edit_menu = self.menuBar().addMenu(tr("menu.edit"))
 
-        redo_action = QAction("Rétablir", self)
-        redo_action.setShortcut(QKeySequence("Ctrl+Y"))
-        redo_action.triggered.connect(self._redo)
-        edit_menu.addAction(redo_action)
+        self._undo_action = QAction(tr("menu.edit.undo"), self)
+        self._undo_action.setShortcut(QKeySequence("Ctrl+Z"))
+        self._undo_action.triggered.connect(self._undo)
+        self._edit_menu.addAction(self._undo_action)
 
-        edit_menu.addSeparator()
-        search_action = QAction("Rechercher...", self)
-        search_action.setShortcut(QKeySequence("Ctrl+F"))
-        search_action.triggered.connect(self._show_search_dialog)
-        edit_menu.addAction(search_action)
+        self._redo_action = QAction(tr("menu.edit.redo"), self)
+        self._redo_action.setShortcut(QKeySequence("Ctrl+Y"))
+        self._redo_action.triggered.connect(self._redo)
+        self._edit_menu.addAction(self._redo_action)
 
-        replace_action = QAction("Remplacer...", self)
-        replace_action.setShortcut(QKeySequence("Ctrl+H"))
-        replace_action.triggered.connect(self._show_search_dialog)
-        edit_menu.addAction(replace_action)
+        self._edit_menu.addSeparator()
+        self._search_action = QAction(tr("menu.edit.search"), self)
+        self._search_action.setShortcut(QKeySequence("Ctrl+F"))
+        self._search_action.triggered.connect(self._show_search_dialog)
+        self._edit_menu.addAction(self._search_action)
 
-        view_menu = self.menuBar().addMenu("&Affichage")
-        self._dark_mode_action = QAction("Mode sombre", self)
+        self._replace_action = QAction(tr("menu.edit.replace"), self)
+        self._replace_action.setShortcut(QKeySequence("Ctrl+H"))
+        self._replace_action.triggered.connect(self._show_search_dialog)
+        self._edit_menu.addAction(self._replace_action)
+
+        self._view_menu = self.menuBar().addMenu(tr("menu.view"))
+        self._dark_mode_action = QAction(tr("menu.view.dark_mode"), self)
         self._dark_mode_action.setCheckable(True)
         self._dark_mode_action.setChecked(current_theme(QApplication.instance()) == THEME_DARK)
         self._dark_mode_action.setShortcut(QKeySequence("Ctrl+Shift+D"))
         self._dark_mode_action.triggered.connect(self._toggle_dark_mode)
-        view_menu.addAction(self._dark_mode_action)
+        self._view_menu.addAction(self._dark_mode_action)
 
-        theme_menu = view_menu.addMenu("Thème")
+        self._theme_menu = self._view_menu.addMenu(tr("menu.view.theme"))
         theme_group = QActionGroup(self)
         theme_group.setExclusive(True)
         self._theme_actions: dict[str, QAction] = {}
@@ -436,33 +444,84 @@ class MainWindow(QMainWindow):
             action.setChecked(current_theme(QApplication.instance()) == theme_name)
             action.triggered.connect(lambda _, t=theme_name: self._set_theme(t))
             theme_group.addAction(action)
-            theme_menu.addAction(action)
+            self._theme_menu.addAction(action)
             self._theme_actions[theme_name] = action
 
-        view_menu.addSeparator()
-        self._block_spacing_action = QAction("Espacer les titres, tableaux et graphiques", self)
+        # PATCH 79 — sous-menu "Langue" : pour l'instant Français (défaut
+        # historique de l'app) et English seulement (voir ui.i18n).
+        self._language_menu = self._view_menu.addMenu(tr("menu.view.language"))
+        language_group = QActionGroup(self)
+        language_group.setExclusive(True)
+        self._language_actions: dict[str, QAction] = {}
+        for language_code, language_label in LANGUAGES.items():
+            action = QAction(language_label, self)
+            action.setCheckable(True)
+            action.setChecked(get_language() == language_code)
+            action.triggered.connect(lambda _, lang=language_code: self._set_language(lang))
+            language_group.addAction(action)
+            self._language_menu.addAction(action)
+            self._language_actions[language_code] = action
+
+        self._view_menu.addSeparator()
+        self._block_spacing_action = QAction(tr("menu.view.block_spacing"), self)
         self._block_spacing_action.setCheckable(True)
         self._block_spacing_action.setChecked(get_block_spacing())
         self._block_spacing_action.triggered.connect(self._toggle_block_spacing)
-        view_menu.addAction(self._block_spacing_action)
+        self._view_menu.addAction(self._block_spacing_action)
 
-        self._autosave_action = QAction("Sauvegarde automatique", self)
+        self._autosave_action = QAction(tr("menu.view.autosave"), self)
         self._autosave_action.setCheckable(True)
         self._autosave_action.setChecked(get_autosave_enabled())
         self._autosave_action.triggered.connect(self._toggle_autosave)
-        view_menu.addAction(self._autosave_action)
+        self._view_menu.addAction(self._autosave_action)
 
-        view_menu.addSeparator()
-        self._explorer_action = QAction("Explorateur de fichiers", self)
+        self._view_menu.addSeparator()
+        self._explorer_action = QAction(tr("menu.view.explorer"), self)
         self._explorer_action.setCheckable(True)
         self._explorer_action.setChecked(True)
         self._explorer_action.triggered.connect(self._toggle_explorer_dock)
-        view_menu.addAction(self._explorer_action)
+        self._view_menu.addAction(self._explorer_action)
         # PATCH 67 — Le dock a aussi sa propre croix de fermeture (titlebar),
         # qui ne passe pas par _toggle_explorer_dock : on resynchronise la
         # case cochée du menu sur l'état réel de visibilité du dock, quelle
         # que soit la façon dont il a été fermé/rouvert.
         self._explorer_dock.visibilityChanged.connect(self._explorer_action.setChecked)
+
+    def _set_language(self, language: str) -> None:
+        """PATCH 79 — change la langue de l'interface et retraduit
+        immédiatement la barre de menu (voir `_retranslate_menu`)."""
+        set_language(language)
+        for language_code, action in self._language_actions.items():
+            action.setChecked(language_code == language)
+        self._retranslate_menu()
+
+    def _retranslate_menu(self) -> None:
+        """PATCH 79 — réapplique `tr()` à tous les libellés de la barre
+        de menu (voir `_setup_file_menu`) après un changement de
+        langue. Le reste de l'interface (barre d'outils, blocs,
+        dialogues) n'est pas encore traduit."""
+        self._file_menu.setTitle(tr("menu.file"))
+        self._templates_menu.setTitle(tr("menu.file.templates"))
+        self._og_template_action.setText(tr("menu.file.template_og"))
+        self._new_blank_action.setText(tr("menu.file.new_blank"))
+        self._open_action.setText(tr("menu.file.open"))
+        self._save_action.setText(tr("menu.file.save"))
+        self._save_as_action.setText(tr("menu.file.save_as"))
+        self._export_pdf_action.setText(tr("menu.file.export_pdf"))
+
+        self._edit_menu.setTitle(tr("menu.edit"))
+        self._undo_action.setText(tr("menu.edit.undo"))
+        self._redo_action.setText(tr("menu.edit.redo"))
+        self._search_action.setText(tr("menu.edit.search"))
+        self._replace_action.setText(tr("menu.edit.replace"))
+
+        self._view_menu.setTitle(tr("menu.view"))
+        self._dark_mode_action.setText(tr("menu.view.dark_mode"))
+        self._theme_menu.setTitle(tr("menu.view.theme"))
+        self._language_menu.setTitle(tr("menu.view.language"))
+        self._block_spacing_action.setText(tr("menu.view.block_spacing"))
+        self._autosave_action.setText(tr("menu.view.autosave"))
+        self._explorer_action.setText(tr("menu.view.explorer"))
 
     def _toggle_explorer_dock(self, visible: bool) -> None:
         """PATCH 66 — Affiche/masque le panneau "Fichiers". La zone de
