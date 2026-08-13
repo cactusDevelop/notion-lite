@@ -152,6 +152,11 @@ class _DependencyGanttCanvas(QWidget):
         # zone de défilement qui le contient.
         self._zoom_percent = _ZOOM_DEFAULT
         self._max_x_days = 1.0
+        # PATCH 72 — notifié à chaque changement de taille du canvas,
+        # pour que la QScrollArea parente puisse copier sa hauteur
+        # (elle ne le fait pas toute seule quand `widgetResizable` est
+        # à False, voir DependencyGanttBlockWidget._sync_scroll_height).
+        self.on_geometry_changed = None
         self._update_geometry()
         self.setCursor(Qt.PointingHandCursor)
 
@@ -190,6 +195,8 @@ class _DependencyGanttCanvas(QWidget):
         chart_width = int(self._max_x_days * _BASE_PX_PER_DAY * self._zoom_percent / 100)
         self.setFixedWidth(_LABEL_WIDTH + max(chart_width, 20) + 10)
         self.setFixedHeight(max(_ROW_HEIGHT, _ROW_HEIGHT * len(self._people)) + _AXIS_HEIGHT)
+        if self.on_geometry_changed is not None:
+            self.on_geometry_changed()
 
     def _bar_at(self, pos) -> dict | None:
         for rect, task in reversed(self._bar_rects):
@@ -440,6 +447,14 @@ class DependencyGanttBlockWidget(QWidget):
         self._scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self._scroll_area.setWidget(self._canvas)
         layout.addWidget(self._scroll_area)
+        # PATCH 72 — `widgetResizable=False` ne fait pas suivre à la
+        # QScrollArea la hauteur de son contenu toute seule : sans ce
+        # câblage elle gardait sa hauteur par défaut (~192 px), ce qui
+        # tronquait le graphique et affichait un ascenseur vertical dès
+        # qu'il y avait beaucoup de personnes. On force sa hauteur à
+        # toujours correspondre exactement à celle du canvas.
+        self._canvas.on_geometry_changed = self._sync_scroll_height
+        self._sync_scroll_height()
 
         self._populate_table_combo()
 
@@ -554,6 +569,14 @@ class DependencyGanttBlockWidget(QWidget):
         # mise à jour du canvas pour rester exact.
         self._zoom_label.setText(f"{target} %")
         self._canvas.set_zoom(target)
+
+    def _sync_scroll_height(self) -> None:
+        """PATCH 72 — Aligne la hauteur de la zone de défilement sur
+        celle du canvas (voir le commentaire au niveau de sa création),
+        pour qu'elle prenne toujours toute la place verticale
+        nécessaire, sans jamais tronquer ni faire défiler le contenu."""
+        reserve = self._scroll_area.horizontalScrollBar().sizeHint().height()
+        self._scroll_area.setFixedHeight(self._canvas.height() + reserve)
 
     def resizeEvent(self, event) -> None:  # noqa: N802 (nom imposé par Qt)
         super().resizeEvent(event)
