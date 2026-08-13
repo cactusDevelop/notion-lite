@@ -26,7 +26,7 @@ class InfoDialog(QDialog):
 
     @staticmethod
     def _build_html() -> str:
-        parts = [f"<h3>Notion Lite {__version__}</h3>", "<h4>Explications et choix de design</h4>"]
+        parts = [f"<h3>Méthodo OG {__version__}</h3>", "<h4>Explications et choix de design</h4>"]
         for title, text in DESIGN_NOTES:
             parts.append(f"<p><b>{title}</b><br>{text}</p>")
         return "".join(parts)

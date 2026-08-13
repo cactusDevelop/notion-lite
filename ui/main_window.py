@@ -1,5 +1,5 @@
 """
-Fenêtre principale de Notion Lite.
+Fenêtre principale de Méthodo OG.
 """
 from __future__ import annotations
 
@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QScrollArea,
+    QSizePolicy,
     QTextEdit,
     QTreeView,
     QVBoxLayout,
@@ -105,8 +106,8 @@ _INFO_ICON_PATH = str(_PROJECT_ROOT / "icon-info.svg")
 # lancements de l'application, le chemin du dernier document sauvegardé
 # ou ouvert (voir _load_startup_document / _set_current_file), afin de
 # rouvrir automatiquement la dernière session au démarrage.
-_SETTINGS_ORG = "NotionLite"
-_SETTINGS_APP = "NotionLite"
+_SETTINGS_ORG = "MethodoOG"
+_SETTINGS_APP = "MethodoOG"
 _SETTINGS_LAST_FILE_KEY = "last_file"
 # PATCH 53 — dossier affiché dans l'explorateur de fichiers latéral,
 # mémorisé entre deux lancements comme _SETTINGS_LAST_FILE_KEY.
@@ -188,10 +189,13 @@ class MainWindow(QMainWindow):
     n'importe quel bloc par glisser-déposer (PATCH 13).
     """
 
+    # PATCH 66 — Largeur du panneau "Fichiers" (QDockWidget).
+    _EXPLORER_PANEL_WIDTH = 260
+
     def __init__(self) -> None:
         super().__init__()
 
-        self.setWindowTitle(f"Notion Lite {__version__}")
+        self.setWindowTitle(f"Méthodo OG {__version__}")
         self.resize(1000, 700)
 
         # PATCH 65 — voir plus bas ; initialisé avant _run_welcome_dialog
@@ -323,6 +327,19 @@ class MainWindow(QMainWindow):
             on_empty_context_menu=self._show_empty_context_menu,
         )
         self._blocks_layout = central.blocks_layout
+        # PATCH 66 — La fenêtre est lancée en showMaximized() (main.py) :
+        # resize() n'a donc AUCUN effet visible une fois maximisée (une
+        # fenêtre maximisée ignore les appels resize()). La largeur totale
+        # est donc toujours celle de l'écran, panneau "Fichiers" ouvert ou
+        # non ; il ne faut PAS essayer d'agrandir la fenêtre. Il faut plutôt
+        # empêcher la zone de blocs de réclamer plus de largeur que ce que
+        # le dock lui laisse : Ignored sur l'axe horizontal indique à la
+        # QScrollArea de ne jamais tenir compte de la largeur minimale
+        # réclamée par les blocs (tableaux, Gantt...) pour dimensionner le
+        # widget, qui est alors toujours exactement casé dans la largeur
+        # visible (viewport) → plus jamais de scrollbar horizontale, quel
+        # que soit l'état du panneau.
+        central.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
 
         # PATCH 28 : zone de défilement, nécessaire pour pouvoir amener
         # un résultat de recherche à l'écran (`_scroll_to_block`).
@@ -439,13 +456,26 @@ class MainWindow(QMainWindow):
         self._explorer_action = QAction("Explorateur de fichiers", self)
         self._explorer_action.setCheckable(True)
         self._explorer_action.setChecked(True)
-        self._explorer_action.triggered.connect(self._explorer_dock.setVisible)
+        self._explorer_action.triggered.connect(self._toggle_explorer_dock)
         view_menu.addAction(self._explorer_action)
+        # PATCH 67 — Le dock a aussi sa propre croix de fermeture (titlebar),
+        # qui ne passe pas par _toggle_explorer_dock : on resynchronise la
+        # case cochée du menu sur l'état réel de visibilité du dock, quelle
+        # que soit la façon dont il a été fermé/rouvert.
+        self._explorer_dock.visibilityChanged.connect(self._explorer_action.setChecked)
+
+    def _toggle_explorer_dock(self, visible: bool) -> None:
+        """PATCH 66 — Affiche/masque le panneau "Fichiers". La zone de
+        blocs (policy Ignored, voir _setup_ui) s'adapte toute seule à la
+        largeur restante : pas besoin de toucher à la taille de la
+        fenêtre (et un resize() serait de toute façon sans effet, la
+        fenêtre étant lancée maximisée — voir main.py)."""
+        self._explorer_dock.setVisible(visible)
 
     def _setup_file_explorer_dock(self) -> None:
         """PATCH 53 — Panneau latéral façon IDE : arborescence d'un
         dossier choisi par l'utilisateur, double-clic sur un ".json"
-        pour l'ouvrir comme document Notion Lite."""
+        pour l'ouvrir comme document Méthodo OG."""
         self._explorer_dock = QDockWidget("Fichiers", self)
         self._explorer_dock.setObjectName("file_explorer_dock")
 
@@ -477,6 +507,8 @@ class MainWindow(QMainWindow):
 
         self._explorer_dock.setWidget(container)
         self.addDockWidget(Qt.LeftDockWidgetArea, self._explorer_dock)
+        # PATCH 66 — Largeur confortable et stable pour le panneau.
+        self.resizeDocks([self._explorer_dock], [self._EXPLORER_PANEL_WIDTH], Qt.Horizontal)
 
         settings = QSettings(_SETTINGS_ORG, _SETTINGS_APP)
         if self._explorer_startup_folder is not None:
@@ -1067,7 +1099,7 @@ class MainWindow(QMainWindow):
 
     def _set_current_file(self, path: Path | None) -> None:
         self._current_file = path
-        title = f"Notion Lite {__version__}"
+        title = f"Méthodo OG {__version__}"
         self.setWindowTitle(title + (f" — {path.name}" if path else ""))
         # PATCH 52 — mémorise (ou oublie) le fichier courant pour la
         # reprise de session au prochain lancement.
@@ -1097,7 +1129,7 @@ class MainWindow(QMainWindow):
     def _open_document(self) -> None:
         """PATCH 8 — Ouvrir : charge un document depuis un fichier JSON."""
         path_str, _ = QFileDialog.getOpenFileName(
-            self, "Ouvrir un document", "", "Notion Lite (*.json)"
+            self, "Ouvrir un document", "", "Méthodo OG (*.json)"
         )
         if not path_str:
             return
@@ -1144,7 +1176,7 @@ class MainWindow(QMainWindow):
     def _save_document_as(self) -> None:
         """PATCH 8 — Sauvegarder sous : demande toujours un nouveau fichier."""
         path_str, _ = QFileDialog.getSaveFileName(
-            self, "Sauvegarder sous", "", "Notion Lite (*.json)"
+            self, "Sauvegarder sous", "", "Méthodo OG (*.json)"
         )
         if not path_str:
             return

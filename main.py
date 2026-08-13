@@ -50,7 +50,7 @@ from ui.themes.theme import apply_theme, detect_system_theme
 
 def main() -> None:
     app = QApplication(sys.argv)
-    app.setApplicationName("Notion Lite")
+    app.setApplicationName("Méthodo OG")
     apply_theme(app, detect_system_theme())
 
     window = MainWindow()

@@ -134,7 +134,7 @@ class WelcomeDialog(QDialog):
         on_remove_recent: Optional[callable] = None,
     ) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Bienvenue dans Notion Lite")
+        self.setWindowTitle("Bienvenue dans Méthodo OG")
         self.setModal(True)
         self.setMinimumSize(640, 420)
         # PATCH 68 — Callback appelé avec le chemin du fichier quand
@@ -152,7 +152,7 @@ class WelcomeDialog(QDialog):
 
         # -- Colonne gauche : identité + actions rapides -----------------
         left = QVBoxLayout()
-        title = QLabel("Notion Lite")
+        title = QLabel("Méthodo OG")
         title.setStyleSheet("font-size: 22px; font-weight: 600;")
         left.addWidget(title)
         subtitle = QLabel(f"version {__version__}")
@@ -280,7 +280,7 @@ class WelcomeDialog(QDialog):
         return dialog.project_path
 
     def _choose_open(self) -> None:
-        path_str, _ = QFileDialog.getOpenFileName(self, "Ouvrir un projet", "", "Notion Lite (*.json)")
+        path_str, _ = QFileDialog.getOpenFileName(self, "Ouvrir un projet", "", "Méthodo OG (*.json)")
         if not path_str:
             return
         self.result_action = self.ACTION_OPEN

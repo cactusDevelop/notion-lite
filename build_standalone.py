@@ -76,7 +76,7 @@ def main() -> None:
     with open(OUTPUT, "w", encoding="utf-8") as out:
         out.write(
             '"""\n'
-            "Notion Lite - build autonome (fichier unique).\n"
+            "Méthodo OG - build autonome (fichier unique).\n"
             "Généré automatiquement par build_standalone.py, ne pas éditer à la main.\n"
             "Dépendance externe requise: PySide6.\n"
             '"""\n'

@@ -1,4 +1,4 @@
-# Notion Lite
+# Méthodo OG
 
 Éditeur de documents façon Notion, en blocs, construit avec Python et
 PySide6 (Qt). Application de bureau locale : les documents sont des

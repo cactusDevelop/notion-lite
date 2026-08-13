@@ -19,7 +19,7 @@ from PySide6.QtGui import QContextMenuEvent, QDrag, QMouseEvent
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QToolButton, QWidget
 
 # Type MIME privé transportant l'ID du bloc glissé.
-BLOCK_MIME_TYPE = "application/x-notion-lite-block-id"
+BLOCK_MIME_TYPE = "application/x-methodo-og-block-id"
 
 
 class _DragHandle(QLabel):
