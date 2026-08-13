@@ -11,12 +11,15 @@ from __future__ import annotations
 from PySide6.QtGui import QPageLayout, QPageSize, QTextDocument
 from PySide6.QtPrintSupport import QPrinter
 
-from core.document_html_export import document_to_html
+from core.document_html_export import document_to_full_html
 
 
 def export_document_to_pdf(document, filepath: str) -> None:
     """Génère un PDF du document courant à `filepath`."""
-    html = document_to_html(document)
+    # PATCH 63 — utilise le HTML complet (avec le CSS de mise en forme :
+    # espacements, bordures de tableaux, ...) au lieu du seul fragment,
+    # sinon QTextDocument affiche tout sans aucune de ces règles.
+    html = document_to_full_html(document)
 
     text_document = QTextDocument()
     text_document.setHtml(html)

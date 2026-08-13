@@ -24,7 +24,7 @@ from blocks.list_block import LIST_TYPE_NUMBERED, ListBlock
 from blocks.quote_block import QuoteBlock
 from blocks.separator_block import SeparatorBlock
 from blocks.simple_table_block import SimpleTableBlock
-from blocks.table_block import COLUMN_TYPE_BOOLEAN, COLUMN_TYPE_CHECKLIST, COLUMN_TYPE_DATE, COLUMN_TYPE_DURATION, COLUMN_TYPE_MULTI_SELECT, COLUMN_TYPE_PERSON, TableBlock
+from blocks.table_block import COLUMN_TYPE_BOOLEAN, COLUMN_TYPE_CHECKLIST, COLUMN_TYPE_DATE, COLUMN_TYPE_DURATION, COLUMN_TYPE_MULTI_SELECT, COLUMN_TYPE_PERSON, COLUMN_TYPE_TEXT, TableBlock
 from blocks.text_block import TextBlock
 from core.duration import format_duration
 
@@ -67,14 +67,63 @@ def _render_table_cell(document, column: dict, value) -> str:
     return _esc(str(value))
 
 
+def _compute_column_spans(block: TableBlock, column: dict) -> list[int]:
+    """Pour une colonne donnée, calcule le rowspan à appliquer à chaque
+    ligne (par index) : N si la ligne démarre une fusion de N lignes,
+    1 si elle n'est pas fusionnée, 0 si elle est absorbée par la fusion
+    d'une ligne précédente (ne doit alors pas être rendue). Reproduit
+    exactement la logique de `TableBlockWidget._apply_merged_cells`
+    (PATCH 63 — correctif export PDF) : fusion manuelle (clic droit)
+    en priorité, sinon fusion automatique des valeurs identiques
+    consécutives d'une colonne "Texte".
+    """
+    rows = block.rows
+    spans = [1] * len(rows)
+    row_index_by_id = {row["id"]: i for i, row in enumerate(rows)}
+
+    manual_groups = block.manual_merge_groups(column["id"])
+    if manual_groups:
+        for group in manual_groups:
+            indices = sorted(row_index_by_id[rid] for rid in group if rid in row_index_by_id)
+            if len(indices) < 2:
+                continue
+            if indices == list(range(indices[0], indices[0] + len(indices))):
+                spans[indices[0]] = len(indices)
+                for i in indices[1:]:
+                    spans[i] = 0
+        return spans
+
+    if column["type"] != COLUMN_TYPE_TEXT:
+        return spans
+
+    run_start = 0
+    while run_start < len(rows):
+        value = rows[run_start]["cells"].get(column["id"])
+        run_end = run_start + 1
+        while run_end < len(rows) and rows[run_end]["cells"].get(column["id"]) == value and value:
+            run_end += 1
+        run_length = run_end - run_start
+        if run_length > 1:
+            spans[run_start] = run_length
+            for i in range(run_start + 1, run_end):
+                spans[i] = 0
+        run_start = run_end
+    return spans
+
+
 def _render_table_block(document, block: TableBlock) -> str:
     header = "".join(f"<th>{_esc(c['name'])}</th>" for c in block.columns)
+    column_spans = [_compute_column_spans(block, column) for column in block.columns]
     rows_html = ""
-    for row in block.rows:
-        cells = "".join(
-            f"<td>{_render_table_cell(document, column, row['cells'].get(column['id']))}</td>"
-            for column in block.columns
-        )
+    for row_index, row in enumerate(block.rows):
+        cells = ""
+        for col_index, column in enumerate(block.columns):
+            span = column_spans[col_index][row_index]
+            if span == 0:
+                continue  # absorbée par la fusion d'une ligne précédente
+            rowspan_attr = f' rowspan="{span}"' if span > 1 else ""
+            value_html = _render_table_cell(document, column, row["cells"].get(column["id"]))
+            cells += f"<td{rowspan_attr}>{value_html}</td>"
         rows_html += f"<tr>{cells}</tr>"
     return f'<table border="1" cellspacing="0" cellpadding="4"><tr>{header}</tr>{rows_html}</table>'
 
@@ -234,11 +283,13 @@ _PAGE_TEMPLATE = """<!DOCTYPE html>
 <style>
   body {{ font-family: -apple-system, "Segoe UI", Arial, sans-serif; max-width: 800px;
           margin: 40px auto; padding: 0 16px; line-height: 1.5; color: #222; }}
-  table {{ border-collapse: collapse; width: 100%; margin: 12px 0; }}
-  th, td {{ border: 1px solid #ccc; padding: 6px 10px; text-align: left; }}
+  h1, h2, h3 {{ margin-top: 28px; margin-bottom: 10px; }}
+  p {{ margin: 8px 0; }}
+  table {{ border-collapse: collapse; width: 100%; margin: 18px 0; }}
+  th, td {{ border: 1px solid #ccc; padding: 6px 10px; text-align: left; vertical-align: top; }}
   blockquote {{ border-left: 3px solid #999; margin: 12px 0; padding-left: 12px; color: #555; }}
-  pre {{ background: #f5f5f5; border: 1px solid #ddd; padding: 10px; overflow-x: auto; }}
-  img {{ max-width: 100%; }}
+  pre {{ background: #f5f5f5; border: 1px solid #ddd; padding: 10px; overflow-x: auto; margin: 12px 0; }}
+  img {{ max-width: 100%; margin: 18px 0; }}
   hr {{ border: none; border-top: 1px solid #ccc; margin: 20px 0; }}
 </style>
 </head>
