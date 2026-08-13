@@ -39,6 +39,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QSlider,
+    QStyle,
     QToolButton,
     QVBoxLayout,
     QWidget,
@@ -354,11 +355,18 @@ class GanttBlockWidget(QWidget):
         self._canvas.set_zoom(target)
 
     def _sync_scroll_height(self) -> None:
-        """PATCH 72 — Aligne la hauteur de la zone de défilement sur
+        """PATCH 73 — Aligne la hauteur de la zone de défilement sur
         celle du canvas (voir le commentaire au niveau de sa création),
         pour qu'elle prenne toujours toute la place verticale
-        nécessaire, sans jamais tronquer ni faire défiler le contenu."""
-        reserve = self._scroll_area.horizontalScrollBar().sizeHint().height()
+        nécessaire, sans jamais tronquer ni faire défiler le contenu.
+        La réserve pour la barre horizontale est lue via une métrique
+        de style (PM_ScrollBarExtent, toujours disponible et non
+        nulle) plutôt que `QScrollBar.sizeHint()`, qui peut renvoyer 0
+        sur certains styles tant que la barre n'a encore jamais été
+        affichée — ce qui, PATCH 72, ne lui laissait alors plus aucune
+        place et la faisait purement disparaître, même quand le canvas
+        dépassait bien la largeur visible."""
+        reserve = self.style().pixelMetric(QStyle.PM_ScrollBarExtent) + 2
         self._scroll_area.setFixedHeight(self._canvas.height() + reserve)
 
     def resizeEvent(self, event) -> None:  # noqa: N802 (nom imposé par Qt)
