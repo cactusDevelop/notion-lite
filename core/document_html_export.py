@@ -184,7 +184,16 @@ def _render_line_chart_block(document, block: LineChartBlock) -> str:
     )
 
 
-def _render_bar_chart_block(document, block: BarChartBlock) -> str:
+def _render_bar_chart_block(document, block: BarChartBlock, chart_renderer=None) -> str:
+    # PATCH 78 — si un `chart_renderer` (callback fourni par l'export PDF,
+    # voir ui/export_pdf.py) sait produire une image du graphique tel
+    # qu'affiché dans l'app, on l'utilise à la place du tableau de
+    # données ci-dessous (conservé comme repli, ex. export HTML pur
+    # sans Qt disponible, ou graphique vide).
+    if chart_renderer is not None:
+        image_html = chart_renderer(document, block)
+        if image_html is not None:
+            return image_html
     bars = sync_bars_from_gantt(document, block)
     if not bars:
         return f"<p><b>{_esc(block.title)}</b> (aucune barre)</p>"
@@ -225,7 +234,7 @@ def _render_list_block(block: ListBlock) -> str:
     return f"<{tag}>{items}</{tag}>"
 
 
-def _render_block(document, block) -> str:
+def _render_block(document, block, chart_renderer=None) -> str:
     if isinstance(block, HeadingBlock):
         level = block.data.get("level", 1)
         return f"<h{level}>{_esc(block.content)}</h{level}>"
@@ -250,7 +259,7 @@ def _render_block(document, block) -> str:
     if isinstance(block, LineChartBlock):
         return _render_line_chart_block(document, block)
     if isinstance(block, BarChartBlock):
-        return _render_bar_chart_block(document, block)
+        return _render_bar_chart_block(document, block, chart_renderer)
     if isinstance(block, ImageBlock):
         if not block.data.get("image_base64"):
             return "<p><i>(image vide)</i></p>"
@@ -266,12 +275,20 @@ def _render_block(document, block) -> str:
     return ""
 
 
-def document_to_html(document) -> str:
+def document_to_html(document, chart_renderer=None) -> str:
     """Convertit tout le document en un unique fragment HTML, dans
     l'ordre des blocs. Chaque bloc est rendu de façon indépendante ;
     un bloc au rendu inconnu (nouveau type non géré ici) est ignoré
-    plutôt que de faire échouer tout l'export."""
-    parts = [_render_block(document, block) for block in document.blocks]
+    plutôt que de faire échouer tout l'export.
+
+    PATCH 78 — `chart_renderer(document, block) -> str | None` est un
+    callback optionnel (fourni par `ui/export_pdf.py`, qui a accès à
+    Qt) capable de rendre un bloc graphique en véritable image
+    (identique à l'app) plutôt qu'en tableau de données. Ce module
+    reste volontairement sans dépendance Qt : sans callback (export
+    HTML, tests), le repli en tableau est utilisé.
+    """
+    parts = [_render_block(document, block, chart_renderer) for block in document.blocks]
     return "\n".join(part for part in parts if part)
 
 
@@ -300,9 +317,10 @@ _PAGE_TEMPLATE = """<!DOCTYPE html>
 """
 
 
-def document_to_full_html(document, title: str = "Document") -> str:
+def document_to_full_html(document, title: str = "Document", chart_renderer=None) -> str:
     """PATCH 38 — Document HTML autonome et lisible dans un navigateur
     (doctype, head avec charset + CSS minimal, body). Réutilise
     `document_to_html` pour le contenu, sans dupliquer la logique de
-    rendu par bloc — un seul moteur pour les exports PDF et HTML."""
-    return _PAGE_TEMPLATE.format(title=_esc(title), body=document_to_html(document))
+    rendu par bloc — un seul moteur pour les exports PDF et HTML.
+    PATCH 78 — voir `document_to_html` pour `chart_renderer`."""
+    return _PAGE_TEMPLATE.format(title=_esc(title), body=document_to_html(document, chart_renderer))
