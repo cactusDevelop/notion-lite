@@ -580,4 +580,12 @@ class TableBlockWidget(QWidget):
         column_id = self._block.columns[col_index]["id"]
         self._block.set_cell(row_id, column_id, item.text())
         # PATCH 56 — voir _refresh_cell : évite un _rebuild() superflu.
+        # PATCH 76 — un _rebuild() complet est superflu mais la fusion
+        # visuelle (setSpan), elle, doit être réactualisée immédiatement :
+        # sans ça, une cellule éditée pour matcher (ou ne plus matcher)
+        # sa voisine ne se fusionne (ou ne se sépare) qu'au prochain
+        # sondage externe, jamais déclenché puisque la signature est
+        # mise à jour ci-dessous avant que _poll_external_changes ne
+        # tourne.
+        self._apply_merged_cells(self._block.columns, self._block.rows)
         self._last_signature = self._data_signature()
