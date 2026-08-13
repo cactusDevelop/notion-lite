@@ -1,5 +1,5 @@
 """
-Widget graphique du bloc Gantt (PATCH 19, PATCH 70 : zoom + défilement).
+Widget graphique du bloc Gantt (PATCH 19, PATCH 71 : zoom + défilement).
 
 Le widget ne conserve aucune copie des données du tableau : à chaque
 rafraîchissement (changement de sélection, ou minuterie périodique),
@@ -8,25 +8,35 @@ référencé dans le document. Toute modification du tableau (cellule,
 ajout/suppression de ligne...) apparaît donc automatiquement, sans
 action de synchronisation explicite.
 
-PATCH 70 :
-    - Le graphique est désormais placé dans une zone de défilement
-      horizontale (QScrollArea) : à l'échelle 100 %, il continue de
-      s'ajuster à la largeur disponible comme avant, mais dès qu'on
-      zoome au-delà, une barre de défilement apparaît pour se déplacer
-      sur la période sans écraser les barres.
-    - Un curseur "Échelle" (50 % à 400 %) permet d'agrandir/réduire le
-      nombre de pixels par jour affiché.
+PATCH 71 (remplace PATCH 70, dont le zoom n'avait aucun effet tant que
+le canvas était étiré pour remplir la zone visible) :
+    - Le canvas a désormais une largeur FIXE, déterminée uniquement par
+      le curseur "Échelle" (nombre de jours × pixels/jour à 100 % ×
+      zoom). Il n'est plus jamais étiré par la zone de défilement, donc
+      bouger le curseur a toujours un effet visible, immédiatement.
+    - La zone de défilement (QScrollArea) ne défile qu'à l'horizontale
+      (`_LABEL_WIDTH`/axe temporel) ; verticalement le canvas garde
+      toujours sa hauteur complète (une ligne par tâche), sans
+      découpage ni barre de défilement verticale.
+    - Un bouton "Auto" recalcule le zoom nécessaire pour que tout
+      l'intervalle de dates tienne exactement dans la largeur visible
+      (comportement historique), et resynchronise le curseur. Tant que
+      ce mode est actif, il se réajuste automatiquement quand le bloc
+      est redimensionné ou que les données changent ; il se désactive
+      dès que l'utilisateur bouge le curseur ou les boutons ±
+      manuellement.
 """
 from __future__ import annotations
 
+import math
 from datetime import date
 
 from PySide6.QtCore import QTimer, Qt
 from PySide6.QtGui import QPainter, QColor
 from PySide6.QtWidgets import (
-    QAbstractScrollArea,
     QHBoxLayout,
     QLabel,
+    QPushButton,
     QScrollArea,
     QSlider,
     QToolButton,
@@ -46,11 +56,12 @@ from ui.no_scroll_combo_box import NoScrollComboBox
 _REFRESH_INTERVAL_MS = 500
 _ROW_HEIGHT = 28
 _BAR_COLOR = QColor("#4db6ac")
-# PATCH 70 — nombre de pixels par jour à l'échelle 100 %, multiplié par
+_LABEL_WIDTH = 140
+# PATCH 71 — nombre de pixels par jour à l'échelle 100 %, multiplié par
 # le zoom courant pour obtenir la largeur totale du graphique.
 _BASE_PX_PER_DAY = 4
-_ZOOM_MIN = 50
-_ZOOM_MAX = 400
+_ZOOM_MIN = 10
+_ZOOM_MAX = 800
 _ZOOM_STEP = 25
 _ZOOM_DEFAULT = 100
 
@@ -67,10 +78,9 @@ def _parse_iso(value: str | None) -> date | None:
 class _GanttCanvas(QWidget):
     """Zone de dessin : une ligne par tâche, une barre proportionnelle aux dates.
 
-    PATCH 70 — Sa largeur "idéale" (`_update_width`) dépend désormais du
-    nombre de jours à représenter et du zoom courant, pas seulement de
-    la largeur disponible : au-delà de la largeur de la zone de
-    défilement qui la contient, une barre horizontale apparaît.
+    PATCH 71 — Sa taille (`_update_geometry`) est désormais FIXE : la
+    largeur dépend du nombre de jours à représenter et du zoom courant
+    (jamais de la largeur disponible), la hauteur du nombre de lignes.
     """
 
     def __init__(self, parent=None) -> None:
@@ -78,11 +88,15 @@ class _GanttCanvas(QWidget):
         self._rows: list[dict] = []
         self._span_days = 1
         self._zoom_percent = _ZOOM_DEFAULT
-        self.setMinimumHeight(_ROW_HEIGHT)
+        self._update_geometry()
+
+    @property
+    def span_days(self) -> int:
+        return self._span_days
 
     def set_zoom(self, zoom_percent: int) -> None:
         self._zoom_percent = zoom_percent
-        self._update_width()
+        self._update_geometry()
         self.update()
 
     def set_rows(self, rows: list[dict]) -> None:
@@ -92,13 +106,13 @@ class _GanttCanvas(QWidget):
         min_date = min(valid_dates) if valid_dates else None
         max_date = max(valid_dates) if valid_dates else None
         self._span_days = max((max_date - min_date).days, 1) if min_date and max_date else 1
-        self.setMinimumHeight(max(_ROW_HEIGHT, _ROW_HEIGHT * len(rows)))
-        self._update_width()
+        self._update_geometry()
         self.update()
 
-    def _update_width(self) -> None:
+    def _update_geometry(self) -> None:
         chart_width = int(self._span_days * _BASE_PX_PER_DAY * self._zoom_percent / 100)
-        self.setMinimumWidth(140 + max(chart_width, 20) + 10)
+        self.setFixedWidth(_LABEL_WIDTH + max(chart_width, 20) + 10)
+        self.setFixedHeight(max(_ROW_HEIGHT, _ROW_HEIGHT * len(self._rows)))
 
     def paintEvent(self, event) -> None:  # noqa: N802 (nom imposé par Qt)
         painter = QPainter(self)
@@ -118,18 +132,17 @@ class _GanttCanvas(QWidget):
         max_date = max(valid_dates) if valid_dates else None
         span_days = max((max_date - min_date).days, 1) if min_date and max_date else 1
 
-        label_width = 140
-        chart_width = max(self.width() - label_width - 10, 20)
+        chart_width = max(self.width() - _LABEL_WIDTH - 10, 20)
 
         for i, (row, start, end) in enumerate(dated):
             y = i * _ROW_HEIGHT
-            painter.drawText(0, y, label_width, _ROW_HEIGHT, Qt.AlignVCenter, row["label"] or "(sans titre)")
+            painter.drawText(0, y, _LABEL_WIDTH, _ROW_HEIGHT, Qt.AlignVCenter, row["label"] or "(sans titre)")
 
             if start is None:
                 continue
             end = end or start
-            x_start = label_width + int((start - min_date).days / span_days * chart_width)
-            x_end = label_width + int(max((end - min_date).days, 0) / span_days * chart_width) + 6
+            x_start = _LABEL_WIDTH + int((start - min_date).days / span_days * chart_width)
+            x_end = _LABEL_WIDTH + int(max((end - min_date).days, 0) / span_days * chart_width) + 6
             painter.fillRect(x_start, y + 4, max(x_end - x_start, 6), _ROW_HEIGHT - 8, _BAR_COLOR)
 
         painter.end()
@@ -143,6 +156,12 @@ class GanttBlockWidget(QWidget):
         self._block = block
         self._document = document
         self._syncing = False
+        # PATCH 71 — tant que True, le zoom suit automatiquement la
+        # largeur visible (comportement historique "tout voir") ; se
+        # désactive dès que l'utilisateur touche au curseur/boutons ±,
+        # se réactive via le bouton "Auto".
+        self._zoom_auto = True
+        self._syncing_zoom = False
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -164,8 +183,9 @@ class GanttBlockWidget(QWidget):
         selectors.addWidget(self._date_combo, 1)
         layout.addLayout(selectors)
 
-        # PATCH 70 — curseur d'échelle (zoom) : agrandit/réduit le
-        # nombre de pixels par jour, indépendamment de la largeur du bloc.
+        # PATCH 71 — curseur d'échelle (zoom) : agrandit/réduit le
+        # nombre de pixels par jour, plus bouton "Auto" pour ajuster
+        # exactement à la largeur visible et resynchroniser le curseur.
         zoom_row = QHBoxLayout()
         zoom_row.addWidget(QLabel("Échelle :", self))
         zoom_out_button = QToolButton(self)
@@ -189,19 +209,25 @@ class GanttBlockWidget(QWidget):
         self._zoom_label = QLabel(f"{_ZOOM_DEFAULT} %", self)
         self._zoom_label.setFixedWidth(42)
         zoom_row.addWidget(self._zoom_label)
+        self._auto_button = QPushButton("Auto", self)
+        self._auto_button.setToolTip("Ajuster l'échelle pour tout voir")
+        self._auto_button.setFixedWidth(56)
+        self._auto_button.clicked.connect(self._enable_auto_zoom)
+        zoom_row.addWidget(self._auto_button)
         zoom_row.addStretch(1)
         layout.addLayout(zoom_row)
 
         self._canvas = _GanttCanvas(self)
-        # PATCH 70 — zone de défilement horizontale : à zoom ≤ 100 % le
-        # graphique continue de s'ajuster à la largeur du bloc (comme
-        # avant), au-delà une barre de défilement apparaît.
+        # PATCH 71 — zone de défilement STRICTEMENT horizontale : le
+        # canvas garde toujours sa hauteur complète (jamais tronquée
+        # verticalement), `widgetResizable=False` pour que sa largeur
+        # ne soit jamais étirée par la zone de défilement (sinon le
+        # zoom n'a plus d'effet visible).
         self._scroll_area = QScrollArea(self)
-        self._scroll_area.setWidgetResizable(True)
+        self._scroll_area.setWidgetResizable(False)
         self._scroll_area.setFrameShape(QScrollArea.NoFrame)
         self._scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self._scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        self._scroll_area.setSizeAdjustPolicy(QAbstractScrollArea.AdjustToContents)
         self._scroll_area.setWidget(self._canvas)
         layout.addWidget(self._scroll_area)
 
@@ -275,7 +301,7 @@ class GanttBlockWidget(QWidget):
         )
         self.refresh()
 
-    # -- Zoom (PATCH 70) --------------------------------------------------
+    # -- Zoom (PATCH 71) --------------------------------------------------
 
     def _nudge_zoom(self, delta: int) -> None:
         self._zoom_slider.setValue(self._zoom_slider.value() + delta)
@@ -283,6 +309,47 @@ class GanttBlockWidget(QWidget):
     def _on_zoom_changed(self, value: int) -> None:
         self._zoom_label.setText(f"{value} %")
         self._canvas.set_zoom(value)
+        if not self._syncing_zoom:
+            # Ajustement manuel (curseur ou boutons ±) : on quitte le
+            # mode "Auto" jusqu'à ce que l'utilisateur y revienne.
+            self._zoom_auto = False
+
+    def _enable_auto_zoom(self) -> None:
+        self._zoom_auto = True
+        self._sync_auto_zoom()
+
+    def _sync_auto_zoom(self) -> None:
+        """Calcule le zoom nécessaire pour que tout l'intervalle de
+        dates tienne dans la largeur visible, et resynchronise le
+        curseur (sans repasser en mode manuel, voir `_syncing_zoom`)."""
+        if not self._zoom_auto:
+            return
+        viewport_width = self._scroll_area.viewport().width()
+        available = max(viewport_width - _LABEL_WIDTH - 10, 20)
+        span_days = max(self._canvas.span_days, 1)
+        ideal = available / (span_days * _BASE_PX_PER_DAY) * 100
+        target = max(_ZOOM_MIN, min(_ZOOM_MAX, math.floor(ideal)))
+        self._syncing_zoom = True
+        self._zoom_slider.setValue(target)
+        self._syncing_zoom = False
+        # setValue() n'émet pas valueChanged si la valeur ne change pas
+        # (ex. redimensionnement négligeable) : on force quand même la
+        # mise à jour du canvas pour rester exact.
+        self._zoom_label.setText(f"{target} %")
+        self._canvas.set_zoom(target)
+
+    def resizeEvent(self, event) -> None:  # noqa: N802 (nom imposé par Qt)
+        super().resizeEvent(event)
+        # PATCH 71 — différé au prochain passage de la boucle
+        # d'événements : au moment où `resizeEvent` se déclenche, la
+        # zone de défilement n'a pas toujours encore sa géométrie
+        # finale (ex. juste après `show()`), un calcul immédiat
+        # utiliserait alors une largeur de secours trop petite.
+        QTimer.singleShot(0, self._sync_auto_zoom)
+
+    def showEvent(self, event) -> None:  # noqa: N802 (nom imposé par Qt)
+        super().showEvent(event)
+        QTimer.singleShot(0, self._sync_auto_zoom)
 
     # -- Rafraîchissement -------------------------------------------------
 
@@ -291,3 +358,4 @@ class GanttBlockWidget(QWidget):
         propre au Gantt, tout est recalculé à partir du document)."""
         rows = compute_gantt_rows(self._document, self._block)
         self._canvas.set_rows(rows)
+        QTimer.singleShot(0, self._sync_auto_zoom)
