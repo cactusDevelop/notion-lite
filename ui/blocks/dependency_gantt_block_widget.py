@@ -50,7 +50,7 @@ from __future__ import annotations
 import math
 
 from PySide6.QtCore import QRect, QTimer, Qt
-from PySide6.QtGui import QColor, QPainter, QPalette, QPen
+from PySide6.QtGui import QColor, QFont, QPainter, QPalette, QPen
 from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
@@ -76,6 +76,7 @@ from blocks.dependency_gantt_block import (
     available_duration_columns,
     available_label_columns,
     available_person_columns,
+    available_phase_columns,
     available_risk_columns,
     compute_schedule,
     find_source_table,
@@ -87,6 +88,11 @@ _REFRESH_INTERVAL_MS = 500
 _ROW_HEIGHT = 30
 _AXIS_HEIGHT = 24
 _LABEL_WIDTH = 120
+# PATCH 74 — bandeau réservé aux séparateurs/étiquettes de phase, ajouté
+# entre l'axe temporel et les lignes UNIQUEMENT si une colonne "Phases"
+# est configurée (sinon le graphique garde sa hauteur habituelle).
+_PHASE_BAND_HEIGHT = 18
+_PHASE_LINE_COLOR = QColor("#7e57c2")
 _DELAY_COLOR = QColor("#1a1a1a")
 _ADVANCE_COLOR = QColor("#2196f3")
 # PATCH 57 — en-deçà de ce nombre de pixels de glissement, le geste est
@@ -121,6 +127,27 @@ def _nice_axis_step(max_value: float) -> float:
     return magnitude * 10
 
 
+def _compute_phase_groups(schedule: list[dict]) -> list[dict]:
+    """PATCH 74 — Regroupe les sous-tâches consécutives (dans l'ordre du
+    tableau source) partageant la même valeur non vide de colonne
+    "Phases", avec l'étendue temporelle (jours) couverte par le groupe.
+    Retourne une liste vide si aucune colonne "Phases" n'est configurée
+    (chaque tâche a alors "phase" == "")."""
+    groups: list[dict] = []
+    for task in schedule:
+        label = task.get("phase") or ""
+        if not label:
+            continue
+        span_start = task["start"]
+        span_end = max(task["end"], task["resolution"])
+        if groups and groups[-1]["label"] == label:
+            groups[-1]["start"] = min(groups[-1]["start"], span_start)
+            groups[-1]["end"] = max(groups[-1]["end"], span_end)
+        else:
+            groups.append({"label": label, "start": span_start, "end": span_end})
+    return groups
+
+
 class _DependencyGanttCanvas(QWidget):
     """Zone de dessin : axe temporel + une ligne par personne, une barre
     par sous-tâche assignée.
@@ -137,6 +164,9 @@ class _DependencyGanttCanvas(QWidget):
         self._people: list[str] = []
         self._tasks_by_person: dict[str, list[dict]] = {}
         self._bar_rects: list[tuple[QRect, dict]] = []
+        # PATCH 74 — séparateurs de phase (voir set_schedule/_update_geometry).
+        self._phase_groups: list[dict] = []
+        self._content_top = _AXIS_HEIGHT
         self._time_unit = UNIT_DAYS
         self.on_bar_clicked = None
         self.on_bar_drag_moved = None
@@ -189,13 +219,18 @@ class _DependencyGanttCanvas(QWidget):
             (max(t["resolution"], t["end"]) for tasks in tasks_by_person.values() for t in tasks),
             default=1.0,
         ) or 1.0
+        # PATCH 74 — regroupe les sous-tâches consécutives partageant la
+        # même valeur de colonne "Phases" (si configurée), pour tracer un
+        # séparateur vertical étiqueté entre chaque phase (voir paintEvent).
+        self._phase_groups = _compute_phase_groups(schedule)
         self._update_geometry()
         self.update()
 
     def _update_geometry(self) -> None:
         chart_width = int(self._max_x_days * _BASE_PX_PER_DAY * self._zoom_percent / 100)
+        self._content_top = _AXIS_HEIGHT + (_PHASE_BAND_HEIGHT if self._phase_groups else 0)
         self.setFixedWidth(_LABEL_WIDTH + max(chart_width, 20) + 10)
-        self.setFixedHeight(max(_ROW_HEIGHT, _ROW_HEIGHT * len(self._people)) + _AXIS_HEIGHT)
+        self.setFixedHeight(max(_ROW_HEIGHT, _ROW_HEIGHT * len(self._people)) + self._content_top)
         if self.on_geometry_changed is not None:
             self.on_geometry_changed()
 
@@ -286,8 +321,25 @@ class _DependencyGanttCanvas(QWidget):
             painter.drawText(x - 20, 0, 40, _AXIS_HEIGHT - 4, Qt.AlignCenter, f"{unit_suffix}{tick_display:g}")
             tick_display += step_display
 
+        # -- Séparateurs de phase (PATCH 74) : un trait vertical pointillé
+        # à chaque début de phase (sauf la toute première, en début d'axe),
+        # avec son libellé (ex. "Phase 2") dans le bandeau dédié.
+        if self._phase_groups:
+            painter.setFont(QFont(painter.font().family(), -1, QFont.Bold))
+            for i, group in enumerate(self._phase_groups):
+                x_start = to_x(group["start"])
+                if i > 0:
+                    painter.setPen(QPen(_PHASE_LINE_COLOR, 1, Qt.DashLine))
+                    painter.drawLine(x_start, _AXIS_HEIGHT, x_start, self.height())
+                label_rect = QRect(
+                    x_start + 4, _AXIS_HEIGHT, max(to_x(group["end"]) - x_start - 4, 10), _PHASE_BAND_HEIGHT
+                )
+                painter.setPen(QPen(_PHASE_LINE_COLOR, 1))
+                painter.drawText(label_rect, Qt.AlignVCenter | Qt.AlignLeft, group["label"])
+            painter.setFont(QFont(painter.font().family()))
+
         for i, name in enumerate(self._people):
-            y = _AXIS_HEIGHT + i * _ROW_HEIGHT
+            y = self._content_top + i * _ROW_HEIGHT
             painter.setPen(QPen(self.palette().color(QPalette.WindowText)))
             painter.drawText(0, y, _LABEL_WIDTH, _ROW_HEIGHT, Qt.AlignVCenter, name)
             for task in self._tasks_by_person[name]:
@@ -378,6 +430,7 @@ class DependencyGanttBlockWidget(QWidget):
             ("risk", "Risques"),
             ("dependency", "Dépendances"),
             ("delta", "Ecarts"),
+            ("phase", "Phases"),
         ):
             selectors.addWidget(QLabel(f"{label} :", self))
             combo = NoScrollComboBox(self)
@@ -497,6 +550,7 @@ class DependencyGanttBlockWidget(QWidget):
             ("risk", available_risk_columns, self._block.risk_column_id),
             ("dependency", available_dependency_columns, self._block.dependency_column_id),
             ("delta", available_delta_columns, self._block.delta_column_id),
+            ("phase", available_phase_columns, self._block.phase_column_id),
         )
         for key, getter, current_id in specs:
             combo = self._combos[key]
@@ -524,6 +578,7 @@ class DependencyGanttBlockWidget(QWidget):
                 self._combos["risk"].currentData(),
                 self._combos["dependency"].currentData(),
                 self._combos["delta"].currentData(),
+                self._combos["phase"].currentData(),
             )
         self.refresh()
 

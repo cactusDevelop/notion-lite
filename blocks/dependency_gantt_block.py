@@ -97,6 +97,7 @@ class DependencyGanttBlock(Block):
         delta_column_id: Optional[str] = None,
         deltas: dict[str, float] | None = None,
         time_unit: str = UNIT_DAYS,
+        phase_column_id: Optional[str] = None,
         id: str | None = None,
     ) -> None:
         super().__init__(
@@ -111,6 +112,11 @@ class DependencyGanttBlock(Block):
                 "delta_column_id": delta_column_id,
                 "deltas": dict(deltas or {}),
                 "time_unit": time_unit,
+                # PATCH 74 — colonne texte optionnelle (ex : "Phases") pour
+                # regrouper les sous-tâches et afficher des séparateurs
+                # verticaux étiquetés sur le graphique (voir compute_schedule
+                # et _DependencyGanttCanvas._update_phase_groups).
+                "phase_column_id": phase_column_id,
             },
             id=id or str(uuid.uuid4()),
         )
@@ -144,6 +150,10 @@ class DependencyGanttBlock(Block):
         return self.data.get("delta_column_id")
 
     @property
+    def phase_column_id(self) -> Optional[str]:
+        return self.data.get("phase_column_id")
+
+    @property
     def time_unit(self) -> str:
         """PATCH 49 — unité d'affichage de l'axe temporel et des valeurs
         chiffrées du planning ("jours" ou "mois"). Le stockage interne
@@ -163,6 +173,7 @@ class DependencyGanttBlock(Block):
         risk_column_id: Optional[str] = None,
         dependency_column_id: Optional[str] = None,
         delta_column_id: Optional[str] = None,
+        phase_column_id: Optional[str] = None,
     ) -> None:
         self.data["table_block_id"] = table_block_id
         self.data["label_column_id"] = label_column_id
@@ -171,6 +182,7 @@ class DependencyGanttBlock(Block):
         self.data["risk_column_id"] = risk_column_id
         self.data["dependency_column_id"] = dependency_column_id
         self.data["delta_column_id"] = delta_column_id
+        self.data["phase_column_id"] = phase_column_id
 
     @property
     def deltas(self) -> dict[str, float]:
@@ -219,6 +231,12 @@ def available_dependency_columns(table: TableBlock) -> list[dict[str, Any]]:
     return [c for c in table.columns if c["type"] == COLUMN_TYPE_MULTI_SELECT]
 
 
+def available_phase_columns(table: TableBlock) -> list[dict[str, Any]]:
+    """PATCH 74 — Colonnes texte utilisables pour regrouper les
+    sous-tâches par phase (mêmes candidates que les libellés)."""
+    return [c for c in table.columns if c["type"] == COLUMN_TYPE_TEXT]
+
+
 def _to_number(value: Any) -> float:
     try:
         return float(str(value).replace(",", ".").strip() or 0)
@@ -264,6 +282,7 @@ def compute_schedule(document, block: DependencyGanttBlock) -> list[dict[str, An
     risk_column = table._find_column(block.risk_column_id) if block.risk_column_id else None
     dependency_column = table._find_column(block.dependency_column_id) if block.dependency_column_id else None
     delta_column = table._find_column(block.delta_column_id) if block.delta_column_id else None
+    phase_column = table._find_column(block.phase_column_id) if block.phase_column_id else None
 
     if label_column is None or duration_column is None:
         return []
@@ -342,6 +361,8 @@ def compute_schedule(document, block: DependencyGanttBlock) -> list[dict[str, An
                 "end": computed["end"],
                 "resolution": computed["resolution"],
                 "delta": _get_delta(row, row["id"]),
+                # PATCH 74 — vide si aucune colonne "Phases" configurée.
+                "phase": str(row["cells"].get(phase_column["id"], "")) if phase_column else "",
             }
         )
     return schedule
