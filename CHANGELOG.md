@@ -2,6 +2,13 @@
 
 ## Post-1.0
 
+- **85** — Documentation : `CLAUDE.md` (nouveau), document de contexte
+  dédié à l'assistant IA pour les sessions de développement futures
+  (règles de session, checklist de patch, pièges Qt déjà rencontrés,
+  état courant de l'architecture). Mise à jour de `README.md`
+  (sections "Registre des personnes" et format JSON), restées
+  obsolètes depuis les PATCH 82/83 (registre système partagé,
+  `.methodo-project.json`).
 - **84** — Le Gantt du template "Modèle OG" a désormais sa colonne
   "Phases" pré-sélectionnée (regroupement par phase visible dès
   l'ouverture, sans configuration manuelle).

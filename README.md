@@ -147,12 +147,18 @@ doc.move_block(block_id, new_index) -> bool
 doc.find_block(block_id) -> Block | None
 doc.blocks -> list[Block]             # copie ordonnée
 
-# Registre des personnes (PATCH 16), partagé par les colonnes
-# "Personne" des tableaux :
-doc.add_person(name, color=None) -> dict
+# Registre des personnes (PATCH 16, revu PATCH 82/83), partagé entre
+# TOUS les projets (fichier système ~/.methodo-og/people.json) :
+doc.people_registry -> PeopleRegistry   # accès direct au registre partagé
+doc.add_person(name, color=None) -> dict   # crée/réutilise + associe à CE projet
+doc.link_person(person_id) -> bool         # associe une personne déjà connue
 doc.rename_person(person_id, name) -> bool
-doc.remove_person(person_id) -> bool  # purge aussi les tableaux
-doc.people -> list[dict]
+doc.set_person_color(person_id, color) -> bool
+doc.remove_person(person_id) -> bool  # détache de CE projet (purge les tableaux),
+                                       # ne supprime PAS des autres projets
+doc.people -> list[dict]              # personnes de CE projet uniquement
+doc.add_people_listener(callback)     # notifié à chaque changement (PATCH 83)
+doc.remove_people_listener(callback)
 
 # Favoris (PATCH 31) :
 doc.toggle_favorite(block_id) -> bool | None
@@ -249,10 +255,16 @@ Un fichier `.json` sauvegardé (PATCH 8/9) a la forme :
       }
     }
   ],
-  "people": [],
+  "person_ids": [],
   "favorite_ids": ["8bc9a813-7eaa-4041-b3ce-b91fcd15c38d"]
 }
 ```
+
+Un projet a aussi, à côté de son `.json`, un fichier système caché
+`.methodo-project.json` (PATCH 82, `core.project_meta.ProjectMeta`)
+portant son nom "métier" (`name`), un `id` stable et sa date de
+création — indépendant du nom du fichier `.json` lui-même (titre de
+fenêtre, projets récents).
 
 - **`version`** : entier. `Document.from_dict` refuse (`ValueError`)
   tout fichier dont la version est supérieure à celle supportée par
@@ -260,8 +272,14 @@ Un fichier `.json` sauvegardé (PATCH 8/9) a la forme :
   éviter de charger silencieusement un format plus récent.
 - **`blocks`** : liste ordonnée. Chaque bloc a `id` (UUID), `type`
   (voir table ci-dessous) et `data` (forme propre à chaque type).
-- **`people`** : registre partagé `{"id", "name", "color"}`
-  (PATCH 16), référencé par les colonnes de type `person`.
+- **`people`** *(obsolète depuis PATCH 82, encore lu en repli)* :
+  auparavant un registre complet `{"id", "name", "color"}` embarqué
+  dans chaque fichier. Migré automatiquement à l'ouverture vers le
+  registre système partagé (`~/.methodo-og/people.json`,
+  `core.people_registry.PeopleRegistry`).
+- **`person_ids`** *(PATCH 82)* : liste d'identifiants de personnes de
+  CE projet ; nom et couleur sont résolus depuis le registre partagé,
+  pas stockés ici.
 - **`favorite_ids`** : liste d'`id` de blocs (PATCH 31).
 
 ### Types de blocs (`data["type"]`)
