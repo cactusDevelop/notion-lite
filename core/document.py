@@ -7,7 +7,7 @@ suppression, déplacement, recherche par ID).
 """
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 from core.block import Block
 from core.people_registry import PERSON_COLOR_PALETTE, PeopleRegistry
@@ -37,11 +37,33 @@ class Document:
         self._people_registry = people_registry or PeopleRegistry()
         self._person_ids: list[str] = []
         self._favorite_ids: list[str] = []
+        # PATCH 83 — Abonnés notifiés à chaque changement du registre de
+        # personnes DE CE PROJET (ajout/retrait/renommage/couleur), pour
+        # que toutes les vues affichant les personnes (bloc "Effectif",
+        # popup "Personne" des tableaux...) restent synchronisées entre
+        # elles sans nécessiter un re-rendu complet du document.
+        self._people_listeners: list[Callable[[], None]] = []
 
     @property
     def people_registry(self) -> PeopleRegistry:
         """Le registre système partagé utilisé par ce document."""
         return self._people_registry
+
+    def add_people_listener(self, callback: Callable[[], None]) -> None:
+        """S'abonne aux changements de la liste des personnes de ce
+        projet. `callback` est appelé (sans argument) après chaque
+        ajout, retrait, renommage ou changement de couleur."""
+        self._people_listeners.append(callback)
+
+    def remove_people_listener(self, callback: Callable[[], None]) -> None:
+        """Se désabonne (à appeler quand la vue est détruite, sinon la
+        liste d'abonnés grandirait indéfiniment au fil des re-rendus)."""
+        if callback in self._people_listeners:
+            self._people_listeners.remove(callback)
+
+    def _notify_people_changed(self) -> None:
+        for callback in list(self._people_listeners):
+            callback()
 
     @property
     def blocks(self) -> list[Block]:
@@ -135,6 +157,7 @@ class Document:
         person = self._people_registry.add_person(name, color)
         if person["id"] not in self._person_ids:
             self._person_ids.append(person["id"])
+        self._notify_people_changed()
         return person
 
     def link_person(self, person_id: str) -> bool:
@@ -145,17 +168,24 @@ class Document:
             return False
         if person_id not in self._person_ids:
             self._person_ids.append(person_id)
+        self._notify_people_changed()
         return True
 
     def rename_person(self, person_id: str, name: str) -> bool:
         if person_id not in self._person_ids:
             return False
-        return self._people_registry.rename_person(person_id, name)
+        renamed = self._people_registry.rename_person(person_id, name)
+        if renamed:
+            self._notify_people_changed()
+        return renamed
 
     def set_person_color(self, person_id: str, color: str) -> bool:
         if person_id not in self._person_ids:
             return False
-        return self._people_registry.set_person_color(person_id, color)
+        changed = self._people_registry.set_person_color(person_id, color)
+        if changed:
+            self._notify_people_changed()
+        return changed
 
     def remove_person(self, person_id: str) -> bool:
         """Détache une personne de CE projet et purge ses références
@@ -183,6 +213,7 @@ class Document:
                     current = row["cells"].get(column["id"]) or []
                     if person_id in current:
                         block.set_cell(row["id"], column["id"], [p for p in current if p != person_id])
+        self._notify_people_changed()
         return True
 
     # -- Favoris (PATCH 31) ------------------------------------------------

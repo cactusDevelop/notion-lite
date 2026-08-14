@@ -1,13 +1,19 @@
 """
-Widget graphique du bloc "Effectif" (PATCH 52).
+Widget graphique du bloc "Effectif" (PATCH 52, revu PATCH 82/83).
 
-Affiche le registre partagé de personnes du document (Document.people)
-sous forme d'étiquettes colorées, avec un champ texte permettant d'en
-ajouter une nouvelle à chaque appui sur Entrée. Comme ce registre est
-le même que celui utilisé par le Gestionnaire de personnes (Édition >
-Gestionnaire de personnes), toute modification de part ou d'autre
-reste toujours synchronisée : il n'y a qu'une seule source de vérité
-(Document.people), ce widget n'en est qu'une vue.
+Affiche les personnes de ce projet (Document.people, résolues depuis
+le registre système partagé — voir core.people_registry) sous forme
+d'étiquettes colorées, avec un champ texte permettant d'en ajouter une
+nouvelle à chaque appui sur Entrée.
+
+PATCH 83 :
+- Corrige la croix de suppression des étiquettes, qui ne faisait rien
+  (le signal `clicked(bool checked)` de Qt passait ce booléen à la
+  place de l'identifiant attendu par le callback — voir _PersonChip).
+- Ce widget s'abonne désormais aux changements du document
+  (Document.add_people_listener) : toute personne ajoutée ailleurs
+  (Gestionnaire de personnes, popup "Personne" d'un tableau...) y
+  apparaît aussitôt, sans attendre un re-rendu complet du document.
 """
 from __future__ import annotations
 
@@ -47,8 +53,14 @@ class _PersonChip(QWidget):
         remove_button = QToolButton(self)
         remove_button.setText("×")
         remove_button.setToolTip(tr("people_list.remove_tooltip"))
+        remove_button.setCursor(Qt.PointingHandCursor)
         remove_button.setStyleSheet("border: none;")
-        remove_button.clicked.connect(on_remove)
+        # PATCH 83 — `clicked` émet un booléen `checked` : le premier
+        # paramètre de la lambda doit l'absorber explicitement, sinon
+        # Qt l'assigne à la place de `on_remove`, qui reçoit alors
+        # `False`/`True` au lieu d'être appelé sans argument (idiome
+        # déjà utilisé ailleurs dans l'app, ex. list_block_widget.py).
+        remove_button.clicked.connect(lambda _checked=False: on_remove())
         layout.addWidget(remove_button)
 
 
@@ -72,6 +84,14 @@ class PeopleListBlockWidget(QWidget):
         self._input.setPlaceholderText(tr("people_list.add_placeholder"))
         self._input.returnPressed.connect(self._on_return_pressed)
         self._layout.addWidget(self._input)
+
+        # PATCH 83 — Vue toujours synchronisée : se met à jour dès que
+        # le document notifie un changement de personnes, d'où qu'il
+        # vienne (Gestionnaire de personnes, popup "Personne" d'un
+        # tableau...), pas seulement via ce widget. Désabonnement à la
+        # destruction pour ne pas garder de référence morte.
+        self._document.add_people_listener(self._refresh)
+        self.destroyed.connect(lambda: document.remove_people_listener(self._refresh))
 
         self._refresh()
 
@@ -101,15 +121,17 @@ class PeopleListBlockWidget(QWidget):
         """PATCH 52 — Entrée dans le champ ajoute la personne au
         registre partagé du document, visible aussitôt ici et dans le
         Gestionnaire de personnes, et vide le champ pour un ajout
-        immédiat en chaîne."""
+        immédiat en chaîne. `_refresh` est déclenché automatiquement
+        par `Document.add_person` via `add_people_listener` (PATCH 83).
+        """
         name = self._input.text().strip()
         if not name:
             return
         self._document.add_person(name)
         self._input.clear()
-        self._refresh()
         self._input.setFocus(Qt.OtherFocusReason)
 
     def _on_remove(self, person_id: str) -> None:
+        """Détache la personne de ce projet. `_refresh` est déclenché
+        automatiquement par `Document.remove_person` (PATCH 83)."""
         self._document.remove_person(person_id)
-        self._refresh()

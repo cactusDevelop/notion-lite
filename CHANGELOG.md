@@ -2,6 +2,14 @@
 
 ## Post-1.0
 
+- **83** — Corrige la croix de suppression des étiquettes du bloc
+  "Effectif" : ne réagissait pas au clic (le signal Qt `clicked(bool)`
+  écrasait silencieusement l'identifiant de la personne attendu par le
+  callback). Synchronisation live des personnes : ajouter/retirer une
+  personne depuis la popup "Personne" d'un tableau (ou depuis le
+  Gestionnaire de personnes) met désormais à jour le bloc "Effectif"
+  immédiatement, sans re-rendu complet du document
+  (`Document.add_people_listener`).
 - **82** — Nom du projet indépendant du fichier JSON : fichier système
   `.methodo-project.json` (nom, id, date de création) posé à côté du
   document, qui devient la source du titre de fenêtre et des projets
