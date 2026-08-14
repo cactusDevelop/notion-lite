@@ -147,3 +147,34 @@ def test_target_dir_is_itself_for_a_folder(window, project_dir):
 
     index = window._explorer_model.index(str(folder))
     assert window._explorer_target_dir(index) == folder
+
+
+def test_explorer_tree_allows_multi_selection(window):
+    """PATCH 86 — Shift (plage) / Ctrl (un par un) nécessitent le mode
+    ExtendedSelection ; SingleSelection (défaut Qt) les désactiverait."""
+    from PySide6.QtWidgets import QAbstractItemView
+
+    assert window._explorer_tree.selectionMode() == QAbstractItemView.ExtendedSelection
+
+
+def test_new_project_template_creates_two_client_folders(window, project_dir):
+    """PATCH 86 — "Nouveau projet (Modèle OG)" crée "client 1" (avec le
+    gabarit dedans) et "client 2" (vide), au lieu d'un fichier gabarit
+    unique posé à la racine du projet."""
+    from core.document import Document
+    from core.project_template import build_project_template
+
+    document = build_project_template()
+    path = window._create_template_project_files(project_dir, document, "Mon projet")
+
+    client1 = project_dir / "client 1"
+    client2 = project_dir / "client 2"
+    assert client1.is_dir()
+    assert client2.is_dir()
+    assert path == client1 / "client 1.json"
+    assert path.exists()
+    assert not list(client2.iterdir())
+
+    data = json.loads(path.read_text(encoding="utf-8"))
+    loaded = Document.from_dict(data)
+    assert len(loaded.blocks) == len(document.blocks)

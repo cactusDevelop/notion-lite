@@ -2,6 +2,12 @@
 
 ## Post-1.0
 
+- **86** — "Nouveau projet (Modèle OG)" crée désormais deux dossiers
+  clients ("client 1", "client 2") dans le dossier projet, le gabarit
+  "Modèle OG" étant initialisé dans "client 1" (au lieu d'un unique
+  fichier gabarit à la racine). Explorateur de fichiers : sélection
+  multiple façon IDE (Shift = plage consécutive, Ctrl = ajout/retrait
+  un par un).
 - **85** — Documentation : `CLAUDE.md` (nouveau), document de contexte
   dédié à l'assistant IA pour les sessions de développement futures
   (règles de session, checklist de patch, pièges Qt déjà rencontrés,

@@ -275,7 +275,7 @@ class MainWindow(QMainWindow):
         # ACTION_NEW_TEMPLATE, ou repli par défaut.
         self._explorer_startup_folder = dialog.result_folder
         document = build_project_template()
-        return document, self._create_initial_project_file(
+        return document, self._create_template_project_files(
             dialog.result_folder, document, dialog.result_project_name
         )
 
@@ -296,6 +296,40 @@ class MainWindow(QMainWindow):
         if folder is None:
             return None
         path = folder / f"{folder.name}.json"
+        try:
+            path.write_text(
+                json.dumps(document.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+        except OSError as exc:
+            QMessageBox.critical(
+                self, tr("error.generic_title"), f"{tr('error.create_project_file')}\n{exc}"
+            )
+            return None
+        ProjectMeta.create(project_name or folder.name).save(path)
+        return path
+
+    def _create_template_project_files(
+        self, folder: Path | None, document: Document, project_name: str | None = None
+    ) -> Path | None:
+        """PATCH 85 — "Nouveau projet (Modèle OG)" ne doit pas se
+        limiter à un unique fichier gabarit posé à la racine : un
+        projet démarre toujours avec (au moins) deux dossiers clients.
+        Le gabarit "Modèle OG" est initialisé dans "client 1" ; "client
+        2" est créé vide, prêt à accueillir un second dossier client.
+        """
+        if folder is None:
+            return None
+        client1_dir = folder / "client 1"
+        client2_dir = folder / "client 2"
+        try:
+            client1_dir.mkdir(parents=True)
+            client2_dir.mkdir(parents=True)
+        except OSError as exc:
+            QMessageBox.critical(
+                self, tr("error.generic_title"), f"{tr('error.create_project_file')}\n{exc}"
+            )
+            return None
+        path = client1_dir / f"{client1_dir.name}.json"
         try:
             path.write_text(
                 json.dumps(document.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8"
@@ -606,6 +640,12 @@ class MainWindow(QMainWindow):
         self._explorer_tree = QTreeView(container)
         self._explorer_tree.setModel(self._explorer_model)
         self._explorer_tree.setHeaderHidden(True)
+        # PATCH 85 — Sélection multiple façon IDE : Shift étend la
+        # sélection à tous les éléments consécutifs entre l'ancre et le
+        # clic, Ctrl ajoute/retire un élément un par un (comportement
+        # natif de Qt en ExtendedSelection, SingleSelection par défaut
+        # ne le permettait pas).
+        self._explorer_tree.setSelectionMode(QAbstractItemView.ExtendedSelection)
         for column in (1, 2, 3):
             self._explorer_tree.hideColumn(column)
         self._explorer_tree.doubleClicked.connect(self._on_explorer_item_activated)
