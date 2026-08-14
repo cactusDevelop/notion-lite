@@ -1,5 +1,20 @@
 # Changelog
 
+## Post-1.0
+
+- **82** — Nom du projet indépendant du fichier JSON : fichier système
+  `.methodo-project.json` (nom, id, date de création) posé à côté du
+  document, qui devient la source du titre de fenêtre et des projets
+  récents (renommer/déplacer le `.json` ne change plus le nom du
+  projet). Refonte du registre des personnes : nom et couleur vivent
+  désormais dans un fichier système partagé par utilisateur
+  (`~/.methodo-og/people.json`, `core.people_registry.PeopleRegistry`),
+  réutilisable d'un projet à l'autre ; chaque document ne garde que les
+  identifiants des personnes qu'il référence et peut les détacher sans
+  les supprimer ailleurs (`Document.remove_person` / `link_person`).
+  Gestionnaire de personnes enfin accessible depuis le menu Édition,
+  avec un bouton "Lier une personne existante...".
+
 ## 1.0.0 — Première version stable
 
 Fonctionnalités gelées ; les correctifs post-1.0 seront listés

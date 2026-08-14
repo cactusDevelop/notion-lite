@@ -35,11 +35,13 @@ _STRINGS: dict[str, dict[str, str]] = {
     "menu.file.save": {"fr": "Sauvegarder", "en": "Save"},
     "menu.file.save_as": {"fr": "Sauvegarder sous...", "en": "Save as..."},
     "menu.file.export_pdf": {"fr": "Exporter en PDF...", "en": "Export as PDF..."},
+    "menu.file.rename_project": {"fr": "Renommer le projet...", "en": "Rename project..."},
     "menu.edit": {"fr": "&Édition", "en": "&Edit"},
     "menu.edit.undo": {"fr": "Annuler", "en": "Undo"},
     "menu.edit.redo": {"fr": "Rétablir", "en": "Redo"},
     "menu.edit.search": {"fr": "Rechercher...", "en": "Find..."},
     "menu.edit.replace": {"fr": "Remplacer...", "en": "Replace..."},
+    "menu.edit.people_manager": {"fr": "Gestionnaire de personnes...", "en": "People manager..."},
     "menu.view": {"fr": "&Affichage", "en": "&View"},
     "menu.view.dark_mode": {"fr": "Mode sombre", "en": "Dark mode"},
     "menu.view.theme": {"fr": "Thème", "en": "Theme"},
@@ -128,16 +130,36 @@ _STRINGS: dict[str, dict[str, str]] = {
     "people.add": {"fr": "Ajouter...", "en": "Add..."},
     "people.rename": {"fr": "Renommer...", "en": "Rename..."},
     "people.color": {"fr": "Couleur...", "en": "Color..."},
-    "people.remove": {"fr": "Supprimer", "en": "Remove"},
+    "people.remove": {"fr": "Retirer du projet", "en": "Remove from project"},
     "people.close": {"fr": "Fermer", "en": "Close"},
     "people.new_person": {"fr": "Nouvelle personne", "en": "New person"},
     "people.rename_person": {"fr": "Renommer la personne", "en": "Rename person"},
     "people.name_label": {"fr": "Nom :", "en": "Name:"},
     "people.pick_color": {"fr": "Choisir une couleur", "en": "Choose a color"},
-    "people.remove_title": {"fr": "Supprimer la personne", "en": "Remove person"},
+    "people.remove_title": {"fr": "Retirer du projet", "en": "Remove from project"},
     "people.remove_confirm": {
-        "fr": "Supprimer « {name} » et la retirer de toutes les cellules qui la référencent ?",
-        "en": "Remove \"{name}\" and clear it from every cell that references them?",
+        "fr": "Retirer « {name} » de ce projet et la retirer de toutes les cellules qui la référencent ? "
+        "Elle restera disponible dans vos autres projets.",
+        "en": "Remove \"{name}\" from this project and clear it from every cell that references them? "
+        "They will remain available in your other projects.",
+    },
+    "people.link_existing": {"fr": "Lier une personne existante...", "en": "Link existing person..."},
+    "people.link_existing_title": {"fr": "Lier une personne existante", "en": "Link existing person"},
+    "people.link_existing_empty": {
+        "fr": "Toutes les personnes du registre partagé sont déjà dans ce projet.",
+        "en": "Every person in the shared registry is already in this project.",
+    },
+    "people.shared_hint": {
+        "fr": "Ces personnes sont partagées entre tous vos projets (fichier système).",
+        "en": "These people are shared across all your projects (system file).",
+    },
+
+    # -- Métadonnées système du projet (PATCH 82) ------------------------------
+    "project.rename_title": {"fr": "Renommer le projet", "en": "Rename project"},
+    "project.rename_label": {"fr": "Nom du projet :", "en": "Project name:"},
+    "project.rename_no_project": {
+        "fr": "Aucun projet ouvert : sauvegardez d'abord ce document.",
+        "en": "No project open: save this document first.",
     },
 
     # -- Écran d'accueil (PATCH 80) -------------------------------------------

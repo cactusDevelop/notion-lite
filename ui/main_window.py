@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QFileSystemModel,
     QHBoxLayout,
+    QInputDialog,
     QLineEdit,
     QMainWindow,
     QMenu,
@@ -55,6 +56,7 @@ from core.block_icons import icon_for_block
 from core.block_preview import preview_for_block
 from core.document import Document
 from core.history import UndoHistory
+from core.project_meta import ProjectMeta
 from core.project_template import build_project_template
 from core.version import __version__
 from ui.blocks.block_container import BlockContainer
@@ -83,6 +85,7 @@ from ui.emoji_picker import EmojiPicker
 from ui.export_pdf import export_document_to_pdf
 from ui.i18n import LANGUAGES, get_language, set_language, tr
 from ui.info_dialog import InfoDialog
+from ui.people_manager_dialog import PeopleManagerDialog
 from ui.search_dialog import SearchDialog
 from ui.themes.theme import (
     THEME_DARK,
@@ -218,6 +221,9 @@ class MainWindow(QMainWindow):
         # réduits (flèche ▸), voir _toggle_heading_collapse.
         self._collapsed_headings: set[str] = set()
         self._current_file: Path | None = None
+        # PATCH 82 — métadonnées système du projet courant (nom "métier",
+        # indépendant du nom de fichier .json — voir core.project_meta).
+        self._current_project_meta: ProjectMeta | None = None
         # PATCH 65 — Dossier projet imposé pour cette session (choisi à
         # l'écran d'accueil ou déduit du fichier ouvert), qui devient la
         # racine verrouillée de l'explorateur de fichiers.
@@ -252,7 +258,9 @@ class MainWindow(QMainWindow):
         if dialog.result_action == WelcomeDialog.ACTION_NEW_BLANK:
             self._explorer_startup_folder = dialog.result_folder
             document = Document()
-            return document, self._create_initial_project_file(dialog.result_folder, document)
+            return document, self._create_initial_project_file(
+                dialog.result_folder, document, dialog.result_project_name
+            )
 
         if dialog.result_action == WelcomeDialog.ACTION_OPEN and dialog.result_path is not None:
             try:
@@ -267,13 +275,24 @@ class MainWindow(QMainWindow):
         # ACTION_NEW_TEMPLATE, ou repli par défaut.
         self._explorer_startup_folder = dialog.result_folder
         document = build_project_template()
-        return document, self._create_initial_project_file(dialog.result_folder, document)
+        return document, self._create_initial_project_file(
+            dialog.result_folder, document, dialog.result_project_name
+        )
 
-    def _create_initial_project_file(self, folder: Path | None, document: Document) -> Path | None:
+    def _create_initial_project_file(
+        self, folder: Path | None, document: Document, project_name: str | None = None
+    ) -> Path | None:
         """PATCH 66 — Écrit tout de suite le document initial dans le
-        dossier projet fraîchement créé (nommé d'après le dossier), afin
-        qu'il apparaisse immédiatement dans l'explorateur et les projets
-        récents, comme le ferait un IDE à la création d'un projet."""
+        dossier projet fraîchement créé, afin qu'il apparaisse
+        immédiatement dans l'explorateur et les projets récents, comme
+        le ferait un IDE à la création d'un projet.
+
+        PATCH 82 — Le nom "métier" du projet (`project_name`, tel que
+        saisi à l'écran d'accueil) n'est plus déduit du nom du fichier
+        .json : il est écrit dans le fichier système séparé
+        ".methodo-project.json" (voir core.project_meta), pour rester
+        indépendant si le fichier ou le dossier est renommé ensuite.
+        """
         if folder is None:
             return None
         path = folder / f"{folder.name}.json"
@@ -286,6 +305,7 @@ class MainWindow(QMainWindow):
                 self, tr("error.generic_title"), f"{tr('error.create_project_file')}\n{exc}"
             )
             return None
+        ProjectMeta.create(project_name or folder.name).save(path)
         return path
 
     def _setup_ui(self) -> None:
@@ -407,6 +427,11 @@ class MainWindow(QMainWindow):
         self._export_pdf_action.triggered.connect(self._export_pdf)
         self._file_menu.addAction(self._export_pdf_action)
 
+        self._file_menu.addSeparator()
+        self._rename_project_action = QAction(tr("menu.file.rename_project"), self)
+        self._rename_project_action.triggered.connect(self._rename_project)
+        self._file_menu.addAction(self._rename_project_action)
+
         self._edit_menu = self.menuBar().addMenu(tr("menu.edit"))
 
         self._undo_action = QAction(tr("menu.edit.undo"), self)
@@ -429,6 +454,11 @@ class MainWindow(QMainWindow):
         self._replace_action.setShortcut(QKeySequence("Ctrl+H"))
         self._replace_action.triggered.connect(self._show_search_dialog)
         self._edit_menu.addAction(self._replace_action)
+
+        self._edit_menu.addSeparator()
+        self._people_manager_action = QAction(tr("menu.edit.people_manager"), self)
+        self._people_manager_action.triggered.connect(self._show_people_manager_dialog)
+        self._edit_menu.addAction(self._people_manager_action)
 
         self._view_menu = self.menuBar().addMenu(tr("menu.view"))
         self._dark_mode_action = QAction(tr("menu.view.dark_mode"), self)
@@ -512,12 +542,14 @@ class MainWindow(QMainWindow):
         self._save_action.setText(tr("menu.file.save"))
         self._save_as_action.setText(tr("menu.file.save_as"))
         self._export_pdf_action.setText(tr("menu.file.export_pdf"))
+        self._rename_project_action.setText(tr("menu.file.rename_project"))
 
         self._edit_menu.setTitle(tr("menu.edit"))
         self._undo_action.setText(tr("menu.edit.undo"))
         self._redo_action.setText(tr("menu.edit.redo"))
         self._search_action.setText(tr("menu.edit.search"))
         self._replace_action.setText(tr("menu.edit.replace"))
+        self._people_manager_action.setText(tr("menu.edit.people_manager"))
 
         self._view_menu.setTitle(tr("menu.view"))
         self._dark_mode_action.setText(tr("menu.view.dark_mode"))
@@ -1295,8 +1327,8 @@ class MainWindow(QMainWindow):
 
     def _set_current_file(self, path: Path | None) -> None:
         self._current_file = path
-        title = f"Méthodo OG {__version__}"
-        self.setWindowTitle(title + (f" — {path.name}" if path else ""))
+        self._current_project_meta = ProjectMeta.load_or_create(path) if path is not None else None
+        self._update_window_title()
         # PATCH 52 — mémorise (ou oublie) le fichier courant pour la
         # reprise de session au prochain lancement.
         settings = QSettings(_SETTINGS_ORG, _SETTINGS_APP)
@@ -1307,6 +1339,40 @@ class MainWindow(QMainWindow):
             _add_recent_file(path)
         else:
             settings.remove(_SETTINGS_LAST_FILE_KEY)
+
+    def _update_window_title(self) -> None:
+        """PATCH 82 — Le titre de fenêtre affiche le nom "métier" du
+        projet (fichier système .methodo-project.json), plus jamais le
+        nom du fichier .json de stockage."""
+        title = f"Méthodo OG {__version__}"
+        if self._current_project_meta is not None:
+            title += f" — {self._current_project_meta.name}"
+        self.setWindowTitle(title)
+
+    def _rename_project(self) -> None:
+        """PATCH 82 — Renomme le projet courant (nom "métier" seulement :
+        le fichier .json et son emplacement ne bougent pas)."""
+        if self._current_file is None or self._current_project_meta is None:
+            QMessageBox.information(
+                self, tr("project.rename_title"), tr("project.rename_no_project")
+            )
+            return
+        name, ok = QInputDialog.getText(
+            self,
+            tr("project.rename_title"),
+            tr("project.rename_label"),
+            text=self._current_project_meta.name,
+        )
+        if ok and name.strip():
+            self._current_project_meta.rename(self._current_file, name.strip())
+            self._update_window_title()
+
+    def _show_people_manager_dialog(self) -> None:
+        """PATCH 82 — Ouvre le Gestionnaire de personnes (jusqu'ici
+        accessible nulle part dans l'interface)."""
+        dialog = PeopleManagerDialog(self._document, self)
+        dialog.exec()
+        self._render_document()
 
     def _new_document(self) -> None:
         """PATCH 48 — Nouveau : repart du template "Modèle OG" (Opportunity Governance)."""

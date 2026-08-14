@@ -29,6 +29,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from core.project_meta import ProjectMeta
 from core.version import __version__
 from ui.i18n import tr
 
@@ -49,6 +50,7 @@ class NewProjectDialog(QDialog):
         self.setMinimumWidth(420)
 
         self.project_path: Optional[Path] = None
+        self.project_name: str = ""
         self._location = Path.home()
 
         layout = QVBoxLayout(self)
@@ -110,6 +112,7 @@ class NewProjectDialog(QDialog):
             )
             return
         self.project_path = target
+        self.project_name = name
         self.accept()
 
 
@@ -147,6 +150,11 @@ class WelcomeDialog(QDialog):
         # PATCH 65/66 — Dossier de projet (nouveau ou récent) ; sert de
         # racine à l'explorateur de fichiers (façon IDE).
         self.result_folder: Optional[Path] = None
+        # PATCH 82 — nom "métier" du projet, tel que saisi (avant
+        # nettoyage des caractères invalides pour le nom de dossier) ;
+        # transmis au fichier système de métadonnées (core.project_meta),
+        # indépendant du nom du fichier .json.
+        self.result_project_name: Optional[str] = None
 
         root = QHBoxLayout(self)
 
@@ -206,8 +214,12 @@ class WelcomeDialog(QDialog):
         fichier .json) : c'est ce dossier qu'on affiche et qu'on
         rouvrira en racine de l'explorateur, pas le nom interne du
         fichier. PATCH 68 — Ajoute une petite croix pour retirer ce
-        projet de la liste sans y toucher sur le disque."""
+        projet de la liste sans y toucher sur le disque. PATCH 82 —
+        Affiche le nom "métier" du projet (fichier système), avec le
+        nom de dossier en repli pour les projets créés avant ce patch."""
         project_folder = path.parent
+        meta = ProjectMeta.load(path)
+        display_name = meta.name if meta is not None else project_folder.name
         item = QListWidgetItem()
         item.setToolTip(str(project_folder))
         item.setData(Qt.UserRole, str(path))
@@ -216,7 +228,7 @@ class WelcomeDialog(QDialog):
         row = QWidget()
         row_layout = QHBoxLayout(row)
         row_layout.setContentsMargins(6, 2, 6, 2)
-        row_layout.addWidget(QLabel(project_folder.name), stretch=1)
+        row_layout.addWidget(QLabel(display_name), stretch=1)
         remove_button = QToolButton()
         remove_button.setText("✕")
         remove_button.setAutoRaise(True)
@@ -277,6 +289,7 @@ class WelcomeDialog(QDialog):
                 self, tr("welcome.error"), f"{tr('welcome.folder_creation_error')}\n{exc}"
             )
             return None
+        self.result_project_name = dialog.project_name
         return dialog.project_path
 
     def _choose_open(self) -> None:

@@ -7,34 +7,41 @@ suppression, déplacement, recherche par ID).
 """
 from __future__ import annotations
 
-import uuid
 from typing import Any, Optional
 
 from core.block import Block
+from core.people_registry import PERSON_COLOR_PALETTE, PeopleRegistry
 
 DOCUMENT_FORMAT_VERSION = 1
 
-# Palette assignée automatiquement (par rotation) aux nouvelles personnes
-# du gestionnaire partagé (PATCH 16).
-PERSON_COLOR_PALETTE: list[str] = [
-    "#e57373", "#64b5f6", "#81c784", "#ffd54f",
-    "#ba68c8", "#4db6ac", "#f06292", "#a1887f",
-]
+# Ré-exporté pour compatibilité (le registre partagé, core.people_registry,
+# est désormais la source de vérité de la palette — PATCH 82).
+__all__ = ["Document", "DOCUMENT_FORMAT_VERSION", "PERSON_COLOR_PALETTE"]
 
 
 class Document:
     """Représente un document composé d'une liste ordonnée de blocs.
 
-    Depuis le PATCH 16, le document porte aussi le registre partagé des
-    personnes (nom + couleur) référencées par les colonnes "Personne"
-    des blocs Tableau : une même personne est ainsi cohérente (même
-    couleur, renommage propagé) dans tout le document.
+    Depuis le PATCH 82, le nom et la couleur des personnes ne sont
+    plus stockés dans le document lui-même mais dans un registre
+    système partagé, réutilisable d'un projet à l'autre (voir
+    `core.people_registry.PeopleRegistry`). Le document ne conserve que
+    la liste des identifiants de personnes qu'il référence : c'est ce
+    qui permet à une même personne de garder le même nom et la même
+    couleur dans tous les projets, et à un projet de "détacher" une
+    personne sans la supprimer ailleurs.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, people_registry: PeopleRegistry | None = None) -> None:
         self._blocks: list[Block] = []
-        self._people: list[dict[str, Any]] = []
+        self._people_registry = people_registry or PeopleRegistry()
+        self._person_ids: list[str] = []
         self._favorite_ids: list[str] = []
+
+    @property
+    def people_registry(self) -> PeopleRegistry:
+        """Le registre système partagé utilisé par ce document."""
+        return self._people_registry
 
     @property
     def blocks(self) -> list[Block]:
@@ -95,48 +102,73 @@ class Document:
     def __len__(self) -> int:
         return len(self._blocks)
 
-    # -- Registre des personnes (PATCH 16) ---------------------------------
+    # -- Registre des personnes (PATCH 16, revu PATCH 82) -----------------
+    #
+    # Le nom et la couleur vivent dans le registre système partagé
+    # (self._people_registry) ; le document ne garde que les ids des
+    # personnes qui font partie de CE projet (self._person_ids), pour
+    # savoir lesquelles afficher dans le bloc "Effectif" et proposer
+    # dans les colonnes "Personne" des tableaux.
 
     @property
     def people(self) -> list[dict[str, Any]]:
-        """Retourne la liste des personnes connues (copie superficielle)."""
-        return list(self._people)
+        """Personnes de ce projet (nom/couleur résolus depuis le
+        registre système partagé). Une personne dont l'id n'existerait
+        plus dans le registre (supprimée ailleurs) est simplement
+        omise, plutôt que de faire planter l'affichage."""
+        people = []
+        for person_id in self._person_ids:
+            person = self._people_registry.find_person(person_id)
+            if person is not None:
+                people.append(person)
+        return people
 
     def find_person(self, person_id: str) -> Optional[dict[str, Any]]:
-        for person in self._people:
-            if person["id"] == person_id:
-                return person
-        return None
+        """Une personne, mais seulement si elle fait partie de ce projet."""
+        if person_id not in self._person_ids:
+            return None
+        return self._people_registry.find_person(person_id)
 
     def add_person(self, name: str, color: str | None = None) -> dict[str, Any]:
-        """Ajoute une personne au registre partagé et la retourne."""
-        if color is None:
-            color = PERSON_COLOR_PALETTE[len(self._people) % len(PERSON_COLOR_PALETTE)]
-        person = {"id": str(uuid.uuid4()), "name": name, "color": color}
-        self._people.append(person)
+        """Ajoute (ou réutilise, si elle existe déjà sous ce nom dans le
+        registre partagé) une personne, et l'associe à ce projet."""
+        person = self._people_registry.add_person(name, color)
+        if person["id"] not in self._person_ids:
+            self._person_ids.append(person["id"])
         return person
 
-    def rename_person(self, person_id: str, name: str) -> bool:
-        person = self.find_person(person_id)
-        if person is None:
+    def link_person(self, person_id: str) -> bool:
+        """Associe à ce projet une personne déjà connue du registre
+        partagé (typiquement créée depuis un autre projet). Retourne
+        False si cet id est inconnu du registre."""
+        if self._people_registry.find_person(person_id) is None:
             return False
-        person["name"] = name
+        if person_id not in self._person_ids:
+            self._person_ids.append(person_id)
         return True
+
+    def rename_person(self, person_id: str, name: str) -> bool:
+        if person_id not in self._person_ids:
+            return False
+        return self._people_registry.rename_person(person_id, name)
 
     def set_person_color(self, person_id: str, color: str) -> bool:
-        person = self.find_person(person_id)
-        if person is None:
+        if person_id not in self._person_ids:
             return False
-        person["color"] = color
-        return True
+        return self._people_registry.set_person_color(person_id, color)
 
     def remove_person(self, person_id: str) -> bool:
-        """Retire une personne du registre et purge toutes ses références
-        dans les colonnes "Personne" des blocs Tableau du document."""
-        person = self.find_person(person_id)
-        if person is None:
+        """Détache une personne de CE projet et purge ses références
+        dans les colonnes "Personne" des blocs Tableau du document.
+
+        Contrairement à l'ancien comportement (PATCH 16), ceci ne
+        supprime PAS la personne du registre partagé : elle reste
+        disponible pour les autres projets. Pour la supprimer
+        définitivement partout, voir `self.people_registry.remove_person`.
+        """
+        if person_id not in self._person_ids:
             return False
-        self._people.remove(person)
+        self._person_ids.remove(person_id)
 
         # Import local pour éviter un import circulaire (blocks -> core).
         from blocks.table_block import COLUMN_TYPE_PERSON
@@ -197,20 +229,32 @@ class Document:
     # -- Sauvegarde / chargement JSON (PATCH 8) ---------------------------
 
     def to_dict(self) -> dict[str, Any]:
-        """Sérialise le document entier (format de sauvegarde JSON)."""
+        """Sérialise le document entier (format de sauvegarde JSON).
+
+        Depuis le PATCH 82, seuls les identifiants des personnes de ce
+        projet sont sauvegardés ("person_ids") : leur nom et leur
+        couleur vivent dans le registre système partagé, pas dans ce
+        fichier (voir `core.people_registry`).
+        """
         return {
             "version": DOCUMENT_FORMAT_VERSION,
             "blocks": [block.to_dict() for block in self._blocks],
-            "people": list(self._people),
+            "person_ids": list(self._person_ids),
             "favorite_ids": list(self._favorite_ids),
         }
 
     @classmethod
-    def from_dict(cls, raw: dict[str, Any]) -> "Document":
+    def from_dict(cls, raw: dict[str, Any], people_registry: PeopleRegistry | None = None) -> "Document":
         """Reconstruit un document complet à partir d'un dictionnaire JSON.
 
         Toutes les données de chaque bloc (id, type, contenu complet)
         sont restaurées à l'identique (PATCH 9).
+
+        Args:
+            raw: Le document sérialisé (voir `to_dict`).
+            people_registry: Registre système à utiliser. Par défaut,
+                celui de l'utilisateur courant (voir
+                `core.people_registry.default_registry_path`).
 
         Raises:
             ValueError: si le fichier a été sauvegardé par une version
@@ -229,17 +273,33 @@ class Document:
         if "blocks" not in raw:
             raise ValueError("Fichier invalide : clé 'blocks' manquante.")
 
-        document = cls()
+        document = cls(people_registry=people_registry)
         for raw_block in raw["blocks"]:
             document.add_block(block_from_dict(raw_block))
+
+        # PATCH 82 — Rétrocompatibilité : les fichiers créés avant ce
+        # patch embarquent encore une liste "people" complète (id, nom,
+        # couleur). On la migre dans le registre partagé, en évitant
+        # les doublons si une personne du même nom y existe déjà.
         for raw_person in raw.get("people", []):
-            document._people.append(
-                {
-                    "id": raw_person.get("id") or str(uuid.uuid4()),
-                    "name": raw_person.get("name", ""),
-                    "color": raw_person.get("color", PERSON_COLOR_PALETTE[0]),
-                }
-            )
+            name = raw_person.get("name", "")
+            existing = document._people_registry.find_person(raw_person.get("id", ""))
+            if existing is not None:
+                person_id = existing["id"]
+            else:
+                migrated = document._people_registry.add_person(
+                    name, raw_person.get("color")
+                )
+                person_id = migrated["id"]
+            if person_id not in document._person_ids:
+                document._person_ids.append(person_id)
+
+        # Format courant : uniquement des ids, résolus dans le registre.
+        for person_id in raw.get("person_ids", []):
+            if document._people_registry.find_person(person_id) is not None:
+                if person_id not in document._person_ids:
+                    document._person_ids.append(person_id)
+
         # Ne conserve que les ids référençant un bloc effectivement chargé
         # (robustesse face à un fichier corrompu ou édité à la main).
         existing_ids = {block.id for block in document._blocks}
