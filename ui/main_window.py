@@ -5,12 +5,14 @@ from __future__ import annotations
 
 import base64
 import json
+import shutil
 import uuid
 from pathlib import Path
 
-from PySide6.QtCore import QEvent, QPoint, QSettings, Qt, QTimer
+from PySide6.QtCore import QEvent, QModelIndex, QPoint, QSettings, Qt, QTimer
 from PySide6.QtGui import QAction, QActionGroup, QColor, QKeySequence, QTextCursor
 from PySide6.QtWidgets import (
+    QAbstractItemView,
     QApplication,
     QColorDialog,
     QDialog,
@@ -537,7 +539,15 @@ class MainWindow(QMainWindow):
     def _setup_file_explorer_dock(self) -> None:
         """PATCH 53 — Panneau latéral façon IDE : arborescence d'un
         dossier choisi par l'utilisateur, double-clic sur un ".json"
-        pour l'ouvrir comme document Méthodo OG."""
+        pour l'ouvrir comme document Méthodo OG.
+
+        PATCH 81 — rapproché des explorateurs de fichiers des IDE
+        courants (VS Code, PyCharm...) : toute l'arborescence est
+        visible (plus seulement les ".json"), et un clic droit permet
+        de créer un fichier/dossier, renommer (aussi via F2) ou
+        supprimer (aussi via la touche Suppr), avec renommage immédiat
+        à la création comme le font ces IDE.
+        """
         self._explorer_dock = QDockWidget(tr("explorer.title"), self)
         self._explorer_dock.setObjectName("file_explorer_dock")
 
@@ -556,8 +566,10 @@ class MainWindow(QMainWindow):
         layout.addLayout(header)
 
         self._explorer_model = QFileSystemModel(self)
-        self._explorer_model.setNameFilters(["*.json"])
-        self._explorer_model.setNameFilterDisables(False)
+        # PATCH 81 — toute l'arborescence est affichée (plus de filtre
+        # sur les ".json") : un vrai panneau de projet, pas une liste
+        # de documents. Seul l'ouverture au double-clic reste limitée
+        # aux ".json" (_on_explorer_item_activated).
 
         self._explorer_tree = QTreeView(container)
         self._explorer_tree.setModel(self._explorer_model)
@@ -565,6 +577,23 @@ class MainWindow(QMainWindow):
         for column in (1, 2, 3):
             self._explorer_tree.hideColumn(column)
         self._explorer_tree.doubleClicked.connect(self._on_explorer_item_activated)
+        # PATCH 81 — F2/menu déclenchent l'édition manuellement (voir
+        # _explorer_rename) : pas d'édition sur simple/double-clic, qui
+        # servent déjà à sélectionner/ouvrir.
+        self._explorer_tree.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self._explorer_tree.setContextMenuPolicy(Qt.CustomContextMenu)
+        self._explorer_tree.customContextMenuRequested.connect(self._show_explorer_context_menu)
+        # PATCH 81 — F2 (renommer) et Suppr (supprimer), comme les IDE.
+        rename_shortcut = QAction(self._explorer_tree)
+        rename_shortcut.setShortcut(QKeySequence(Qt.Key_F2))
+        rename_shortcut.setShortcutContext(Qt.WidgetShortcut)
+        rename_shortcut.triggered.connect(lambda: self._explorer_rename(self._explorer_tree.currentIndex()))
+        self._explorer_tree.addAction(rename_shortcut)
+        delete_shortcut = QAction(self._explorer_tree)
+        delete_shortcut.setShortcut(QKeySequence(Qt.Key_Delete))
+        delete_shortcut.setShortcutContext(Qt.WidgetShortcut)
+        delete_shortcut.triggered.connect(lambda: self._explorer_delete(self._explorer_tree.currentIndex()))
+        self._explorer_tree.addAction(delete_shortcut)
         layout.addWidget(self._explorer_tree)
 
         self._explorer_dock.setWidget(container)
@@ -610,6 +639,111 @@ class MainWindow(QMainWindow):
         if path.is_dir() or path.suffix != ".json":
             return
         self._load_document_from_path(path)
+
+    # -- Explorateur : créer / renommer / supprimer (PATCH 81) -----------
+
+    def _explorer_target_dir(self, index: QModelIndex) -> Path:
+        """Dossier dans lequel agir : celui de l'élément cliqué s'il
+        s'agit d'un dossier, son parent s'il s'agit d'un fichier, sinon
+        (clic dans le vide) la racine actuelle de l'explorateur."""
+        if not index.isValid():
+            return Path(self._explorer_model.rootPath())
+        path = Path(self._explorer_model.filePath(index))
+        return path if path.is_dir() else path.parent
+
+    def _show_explorer_context_menu(self, pos: QPoint) -> None:
+        index = self._explorer_tree.indexAt(pos)
+
+        menu = QMenu(self._explorer_tree)
+        new_file_action = menu.addAction(tr("explorer.new_file"))
+        new_folder_action = menu.addAction(tr("explorer.new_folder"))
+        rename_action = None
+        delete_action = None
+        if index.isValid():
+            menu.addSeparator()
+            rename_action = menu.addAction(tr("explorer.rename"))
+            delete_action = menu.addAction(tr("explorer.delete"))
+
+        action = menu.exec(self._explorer_tree.viewport().mapToGlobal(pos))
+        if action is None:
+            return
+        if action is new_file_action:
+            self._explorer_create(index, is_folder=False)
+        elif action is new_folder_action:
+            self._explorer_create(index, is_folder=True)
+        elif action is rename_action:
+            self._explorer_rename(index)
+        elif action is delete_action:
+            self._explorer_delete(index)
+
+    def _explorer_create(self, index: QModelIndex, is_folder: bool) -> None:
+        """PATCH 81 — Crée un fichier ou dossier, façon IDE : nom par
+        défaut unique, puis renommage immédiat proposé à l'utilisateur."""
+        target_dir = self._explorer_target_dir(index)
+        base_name = tr("explorer.new_folder_name") if is_folder else tr("explorer.new_file_name")
+        candidate = target_dir / base_name if is_folder else target_dir / f"{base_name}.json"
+        counter = 1
+        while candidate.exists():
+            if is_folder:
+                candidate = target_dir / f"{base_name} ({counter})"
+            else:
+                candidate = target_dir / f"{base_name} ({counter}).json"
+            counter += 1
+
+        try:
+            if is_folder:
+                candidate.mkdir(parents=True)
+            else:
+                candidate.write_text(
+                    json.dumps(Document().to_dict(), ensure_ascii=False, indent=2), encoding="utf-8"
+                )
+        except OSError as exc:
+            QMessageBox.critical(
+                self, tr("explorer.create_error_title"), f"{tr('explorer.create_error_text')}\n{exc}"
+            )
+            return
+
+        self._explorer_edit_when_ready(candidate)
+
+    def _explorer_rename(self, index: QModelIndex) -> None:
+        if not index.isValid():
+            return
+        self._explorer_tree.setCurrentIndex(index)
+        self._explorer_tree.edit(index)
+
+    def _explorer_edit_when_ready(self, path: Path) -> None:
+        """PATCH 81 — QFileSystemModel indexe le système de fichiers de
+        façon asynchrone : on retente jusqu'à ce que le nouvel élément
+        soit visible, puis on le sélectionne et on lance son édition
+        (nom pré-sélectionné) pour qu'il puisse être renommé aussitôt."""
+        index = self._explorer_model.index(str(path))
+        if not index.isValid():
+            QTimer.singleShot(50, lambda: self._explorer_edit_when_ready(path))
+            return
+        self._explorer_tree.setCurrentIndex(index)
+        self._explorer_tree.scrollTo(index)
+        self._explorer_tree.edit(index)
+
+    def _explorer_delete(self, index: QModelIndex) -> None:
+        if not index.isValid():
+            return
+        path = Path(self._explorer_model.filePath(index))
+        confirm = QMessageBox.question(
+            self,
+            tr("explorer.delete_title"),
+            tr("explorer.delete_confirm").format(name=path.name),
+        )
+        if confirm != QMessageBox.Yes:
+            return
+        try:
+            if path.is_dir():
+                shutil.rmtree(path)
+            else:
+                path.unlink()
+        except OSError as exc:
+            QMessageBox.critical(
+                self, tr("explorer.delete_error_title"), f"{tr('explorer.delete_error_text')}\n{exc}"
+            )
 
     # -- Mise en forme (PATCH 5 / 6) -------------------------------------
 

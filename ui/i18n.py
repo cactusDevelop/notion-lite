@@ -180,6 +180,29 @@ _STRINGS: dict[str, dict[str, str]] = {
     "explorer.choose_folder": {"fr": "Choisir un dossier...", "en": "Choose a folder..."},
     "explorer.choose_folder_dialog": {"fr": "Choisir un dossier", "en": "Choose a folder"},
 
+    # -- Explorateur : créer / renommer / supprimer (PATCH 81) ----------------
+    "explorer.new_file": {"fr": "Nouveau fichier", "en": "New file"},
+    "explorer.new_folder": {"fr": "Nouveau dossier", "en": "New folder"},
+    "explorer.rename": {"fr": "Renommer", "en": "Rename"},
+    "explorer.delete": {"fr": "Supprimer", "en": "Delete"},
+    "explorer.new_file_name": {"fr": "Nouveau document", "en": "New document"},
+    "explorer.new_folder_name": {"fr": "Nouveau dossier", "en": "New folder"},
+    "explorer.create_error_title": {"fr": "Erreur de création", "en": "Creation error"},
+    "explorer.create_error_text": {
+        "fr": "Impossible de créer l'élément :",
+        "en": "Could not create the item:",
+    },
+    "explorer.delete_title": {"fr": "Supprimer", "en": "Delete"},
+    "explorer.delete_confirm": {
+        "fr": "Supprimer définitivement « {name} » ?",
+        "en": "Permanently delete \"{name}\"?",
+    },
+    "explorer.delete_error_title": {"fr": "Erreur de suppression", "en": "Deletion error"},
+    "explorer.delete_error_text": {
+        "fr": "Impossible de supprimer l'élément :",
+        "en": "Could not delete the item:",
+    },
+
     # -- Menu contextuel des blocs (PATCH 80) ----------------------------------
     "context.duplicate": {"fr": "Dupliquer", "en": "Duplicate"},
     "context.delete": {"fr": "Supprimer", "en": "Delete"},

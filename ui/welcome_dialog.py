@@ -280,7 +280,7 @@ class WelcomeDialog(QDialog):
         return dialog.project_path
 
     def _choose_open(self) -> None:
-        path_str, _ = QFileDialog.getOpenFileName(self, tr("welcome.open_project_dialog"), "", f"Méthodo OG (*.json)")
+        path_str, _ = QFileDialog.getOpenFileName(self, tr("welcome.open_project_dialog"), "", "Méthodo OG (*.json)")
         if not path_str:
             return
         self.result_action = self.ACTION_OPEN
