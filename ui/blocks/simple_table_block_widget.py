@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
 )
 
 from blocks.simple_table_block import SimpleTableBlock
+from ui.i18n import tr
 
 
 class SimpleTableBlockWidget(QWidget):
@@ -38,10 +39,10 @@ class SimpleTableBlockWidget(QWidget):
 
         buttons = QHBoxLayout()
         for label, handler in (
-            ("+ Ligne", self._on_add_row),
-            ("+ Colonne", self._on_add_column),
-            ("- Ligne", self._on_delete_row),
-            ("- Colonne", self._on_delete_column),
+            (tr("simple_table.add_row"), self._on_add_row),
+            (tr("simple_table.add_column"), self._on_add_column),
+            (tr("simple_table.delete_row"), self._on_delete_row),
+            (tr("simple_table.delete_column"), self._on_delete_column),
         ):
             btn = QPushButton(label, self)
             btn.clicked.connect(handler)

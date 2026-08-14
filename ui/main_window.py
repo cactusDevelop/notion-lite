@@ -76,7 +76,7 @@ from ui.blocks.text_block_widget import TextBlockWidget
 from ui.block_picker_dialog import BlockPickerDialog
 from ui.blocks_area import BlocksArea
 from ui.command_menu import CommandMenu
-from ui.command_registry import COMMANDS
+from ui.command_registry import get_commands
 from ui.emoji_picker import EmojiPicker
 from ui.export_pdf import export_document_to_pdf
 from ui.i18n import LANGUAGES, get_language, set_language, tr
@@ -171,14 +171,15 @@ _UNDO_POLL_INTERVAL_MS = 600
 
 # PATCH 26 — Cibles de conversion proposées dans le menu contextuel :
 # uniquement les blocs à contenu texte simple (voir _create_content_widget_for_block).
-_CONVERT_TARGETS: list[tuple[str, str]] = [
-    ("text", "Texte"),
-    ("heading1", "Titre 1"),
-    ("heading2", "Titre 2"),
-    ("heading3", "Titre 3"),
-    ("quote", "Citation"),
-    ("code", "Code"),
-]
+def _convert_targets() -> list[tuple[str, str]]:
+    return [
+        ("text", tr("context.convert.text")),
+        ("heading1", tr("context.convert.heading1")),
+        ("heading2", tr("context.convert.heading2")),
+        ("heading3", tr("context.convert.heading3")),
+        ("quote", tr("context.convert.quote")),
+        ("code", tr("context.convert.code")),
+    ]
 
 
 class MainWindow(QMainWindow):
@@ -257,7 +258,7 @@ class MainWindow(QMainWindow):
                 return Document.from_dict(raw), dialog.result_path
             except (OSError, ValueError, KeyError) as exc:
                 QMessageBox.critical(
-                    self, "Erreur d'ouverture", f"Impossible d'ouvrir le fichier :\n{exc}"
+                    self, tr("error.open_title"), f"{tr('error.open_text')}\n{exc}"
                 )
                 return build_project_template(), None
 
@@ -280,7 +281,7 @@ class MainWindow(QMainWindow):
             )
         except OSError as exc:
             QMessageBox.critical(
-                self, "Erreur", f"Impossible de créer le fichier du projet :\n{exc}"
+                self, tr("error.generic_title"), f"{tr('error.create_project_file')}\n{exc}"
             )
             return None
         return path
@@ -319,6 +320,7 @@ class MainWindow(QMainWindow):
             on_info=self._show_info_dialog,
             info_icon_path=_INFO_ICON_PATH,
         )
+        self._toolbar = toolbar
         self.addToolBar(toolbar)
         self._setup_file_explorer_dock()
         self._setup_file_menu()
@@ -522,6 +524,7 @@ class MainWindow(QMainWindow):
         self._block_spacing_action.setText(tr("menu.view.block_spacing"))
         self._autosave_action.setText(tr("menu.view.autosave"))
         self._explorer_action.setText(tr("menu.view.explorer"))
+        self._toolbar.retranslate()
 
     def _toggle_explorer_dock(self, visible: bool) -> None:
         """PATCH 66 — Affiche/masque le panneau "Fichiers". La zone de
@@ -535,7 +538,7 @@ class MainWindow(QMainWindow):
         """PATCH 53 — Panneau latéral façon IDE : arborescence d'un
         dossier choisi par l'utilisateur, double-clic sur un ".json"
         pour l'ouvrir comme document Méthodo OG."""
-        self._explorer_dock = QDockWidget("Fichiers", self)
+        self._explorer_dock = QDockWidget(tr("explorer.title"), self)
         self._explorer_dock.setObjectName("file_explorer_dock")
 
         container = QWidget(self._explorer_dock)
@@ -545,9 +548,9 @@ class MainWindow(QMainWindow):
         header = QHBoxLayout()
         self._explorer_path_label = QLineEdit()
         self._explorer_path_label.setReadOnly(True)
-        self._explorer_path_label.setPlaceholderText("Aucun dossier sélectionné")
+        self._explorer_path_label.setPlaceholderText(tr("explorer.no_folder"))
         header.addWidget(self._explorer_path_label)
-        choose_folder_button = QPushButton("Choisir un dossier...")
+        choose_folder_button = QPushButton(tr("explorer.choose_folder"))
         choose_folder_button.clicked.connect(self._choose_explorer_folder)
         header.addWidget(choose_folder_button)
         layout.addLayout(header)
@@ -588,7 +591,7 @@ class MainWindow(QMainWindow):
 
     def _choose_explorer_folder(self) -> None:
         """PATCH 53 — Sélectionne le dossier affiché dans l'explorateur."""
-        folder = QFileDialog.getExistingDirectory(self, "Choisir un dossier")
+        folder = QFileDialog.getExistingDirectory(self, tr("explorer.choose_folder_dialog"))
         if not folder:
             return
         self._set_explorer_root(Path(folder))
@@ -791,8 +794,8 @@ class MainWindow(QMainWindow):
 
         response = QMessageBox.question(
             self,
-            "Modifications non sauvegardées",
-            "Voulez-vous sauvegarder les modifications avant de quitter ?",
+            tr("unsaved.title"),
+            tr("unsaved.text"),
             QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel,
             QMessageBox.Save,
         )
@@ -1031,25 +1034,25 @@ class MainWindow(QMainWindow):
         block = self._document.blocks[index]
 
         menu = QMenu(self)
-        duplicate_action = menu.addAction("Dupliquer")
-        delete_action = menu.addAction("Supprimer")
+        duplicate_action = menu.addAction(tr("context.duplicate"))
+        delete_action = menu.addAction(tr("context.delete"))
         menu.addSeparator()
 
-        favorite_label = "Retirer des favoris" if self._document.is_favorite(block_id) else "Ajouter aux favoris"
+        favorite_label = tr("context.remove_favorite") if self._document.is_favorite(block_id) else tr("context.add_favorite")
         favorite_action = menu.addAction(favorite_label)
         menu.addSeparator()
 
-        move_up_action = menu.addAction("Déplacer vers le haut")
+        move_up_action = menu.addAction(tr("context.move_up"))
         move_up_action.setEnabled(index > 0)
-        move_down_action = menu.addAction("Déplacer vers le bas")
+        move_down_action = menu.addAction(tr("context.move_down"))
         move_down_action.setEnabled(index < len(self._document.blocks) - 1)
 
         convert_actions: dict[QAction, str] = {}
         if hasattr(block, "content"):
             # Conversion uniquement entre blocs à contenu texte simple.
             menu.addSeparator()
-            convert_menu = menu.addMenu("Convertir en")
-            for target_id, label in _CONVERT_TARGETS:
+            convert_menu = menu.addMenu(tr("context.convert_to"))
+            for target_id, label in _convert_targets():
                 action = convert_menu.addAction(label)
                 action.setEnabled(block.type != target_id)
                 convert_actions[action] = target_id
@@ -1075,7 +1078,7 @@ class MainWindow(QMainWindow):
         de document (mêmes cibles que le menu "/")."""
         menu = QMenu(self)
         actions: dict[QAction, str] = {}
-        for command in COMMANDS:
+        for command in get_commands():
             action = menu.addAction(command["label"])
             actions[action] = command["id"]
 
@@ -1188,7 +1191,7 @@ class MainWindow(QMainWindow):
     def _open_document(self) -> None:
         """PATCH 8 — Ouvrir : charge un document depuis un fichier JSON."""
         path_str, _ = QFileDialog.getOpenFileName(
-            self, "Ouvrir un document", "", "Méthodo OG (*.json)"
+            self, tr("dialog.open_document"), "", "Méthodo OG (*.json)"
         )
         if not path_str:
             return
@@ -1202,7 +1205,7 @@ class MainWindow(QMainWindow):
             document = Document.from_dict(raw)
         except (OSError, ValueError, KeyError) as exc:
             QMessageBox.critical(
-                self, "Erreur d'ouverture", f"Impossible d'ouvrir le fichier :\n{exc}"
+                self, tr("error.open_title"), f"{tr('error.open_text')}\n{exc}"
             )
             return
 
@@ -1219,7 +1222,7 @@ class MainWindow(QMainWindow):
             )
         except OSError as exc:
             QMessageBox.critical(
-                self, "Erreur de sauvegarde", f"Impossible d'enregistrer le fichier :\n{exc}"
+                self, tr("error.save_title"), f"{tr('error.save_text')}\n{exc}"
             )
             return
         self._set_current_file(path)
@@ -1235,7 +1238,7 @@ class MainWindow(QMainWindow):
     def _save_document_as(self) -> None:
         """PATCH 8 — Sauvegarder sous : demande toujours un nouveau fichier."""
         path_str, _ = QFileDialog.getSaveFileName(
-            self, "Sauvegarder sous", "", "Méthodo OG (*.json)"
+            self, tr("dialog.save_as"), "", "Méthodo OG (*.json)"
         )
         if not path_str:
             return
@@ -1246,7 +1249,7 @@ class MainWindow(QMainWindow):
 
     def _export_pdf(self) -> None:
         """PATCH 36 — Exporte le document courant en PDF."""
-        path_str, _ = QFileDialog.getSaveFileName(self, "Exporter en PDF", "", "PDF (*.pdf)")
+        path_str, _ = QFileDialog.getSaveFileName(self, tr("dialog.export_pdf"), "", "PDF (*.pdf)")
         if not path_str:
             return
         path = Path(path_str)
@@ -1341,9 +1344,9 @@ class MainWindow(QMainWindow):
         le bloc actif (PATCH 67)."""
         path_str, _ = QFileDialog.getOpenFileName(
             self,
-            "Insérer une image",
+            tr("dialog.insert_image"),
             "",
-            "Images (*.png *.jpg *.jpeg *.gif *.bmp *.webp)",
+            f"{tr('dialog.images_filter')} (*.png *.jpg *.jpeg *.gif *.bmp *.webp)",
         )
         if not path_str:
             return
@@ -1353,7 +1356,7 @@ class MainWindow(QMainWindow):
             raw_bytes = path.read_bytes()
         except OSError as exc:
             QMessageBox.critical(
-                self, "Erreur d'insertion", f"Impossible de lire l'image :\n{exc}"
+                self, tr("error.insert_title"), f"{tr('error.insert_text')}\n{exc}"
             )
             return
 

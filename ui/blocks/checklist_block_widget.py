@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
 )
 
 from blocks.checklist_block import ChecklistBlock
+from ui.i18n import tr
 
 
 class _ChecklistItemRow(QWidget):
@@ -41,14 +42,14 @@ class _ChecklistItemRow(QWidget):
 
         self.line_edit = QLineEdit(self)
         self.line_edit.setText(text)
-        self.line_edit.setPlaceholderText("Élément de la liste...")
+        self.line_edit.setPlaceholderText(tr("checklist.item_placeholder"))
         self.line_edit.textChanged.connect(self._on_text_changed)
         self.line_edit.returnPressed.connect(self._on_return_pressed)
         layout.addWidget(self.line_edit, 1)
 
         remove_button = QToolButton(self)
         remove_button.setText("×")
-        remove_button.setToolTip("Supprimer cet élément")
+        remove_button.setToolTip(tr("checklist.remove_item"))
         remove_button.clicked.connect(lambda: self._owner.remove_row(self))
         layout.addWidget(remove_button)
 

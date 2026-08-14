@@ -19,6 +19,7 @@ from blocks.formula_block import (
 )
 from blocks.table_block import TableBlock
 from ui.no_scroll_combo_box import NoScrollComboBox
+from ui.i18n import tr
 
 _REFRESH_INTERVAL_MS = 500
 
@@ -36,22 +37,22 @@ class FormulaBlockWidget(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
 
         selectors = QHBoxLayout()
-        selectors.addWidget(QLabel("Libellé :", self))
+        selectors.addWidget(QLabel(tr("formula.label"), self))
         self._label_edit = QLineEdit(block.label, self)
         self._label_edit.textChanged.connect(self._on_label_changed)
         selectors.addWidget(self._label_edit, 1)
 
-        selectors.addWidget(QLabel("Tableau :", self))
+        selectors.addWidget(QLabel(tr("formula.table"), self))
         self._table_combo = NoScrollComboBox(self)
         self._table_combo.currentIndexChanged.connect(self._on_table_changed)
         selectors.addWidget(self._table_combo, 1)
 
-        selectors.addWidget(QLabel("Points :", self))
+        selectors.addWidget(QLabel(tr("formula.points"), self))
         self._number_combo = NoScrollComboBox(self)
         self._number_combo.currentIndexChanged.connect(self._on_number_column_changed)
         selectors.addWidget(self._number_combo, 1)
 
-        selectors.addWidget(QLabel("État :", self))
+        selectors.addWidget(QLabel(tr("formula.state"), self))
         self._boolean_combo = NoScrollComboBox(self)
         self._boolean_combo.currentIndexChanged.connect(self._on_boolean_column_changed)
         selectors.addWidget(self._boolean_combo, 1)
@@ -83,9 +84,9 @@ class FormulaBlockWidget(QWidget):
     def _populate_table_combo(self) -> None:
         self._syncing = True
         self._table_combo.clear()
-        self._table_combo.addItem("(aucun)", None)
+        self._table_combo.addItem(tr("formula.none"), None)
         for table in self._table_blocks():
-            title = f"Tableau ({table.columns[0]['name']}...)" if table.columns else "Tableau"
+            title = f"{tr('formula.table_prefix')} ({table.columns[0]['name']}...)" if table.columns else tr("formula.table_prefix")
             self._table_combo.addItem(title, table.id)
         index = self._table_combo.findData(self._block.table_block_id)
         self._table_combo.setCurrentIndex(index if index >= 0 else 0)
@@ -100,9 +101,9 @@ class FormulaBlockWidget(QWidget):
         table = find_source_table(self._document, self._block)
         if table is not None:
             for column in available_number_columns(table):
-                self._number_combo.addItem(column["name"] or "(sans nom)", column["id"])
+                self._number_combo.addItem(column["name"] or tr("formula.unnamed"), column["id"])
             for column in available_boolean_columns(table):
-                self._boolean_combo.addItem(column["name"] or "(sans nom)", column["id"])
+                self._boolean_combo.addItem(column["name"] or tr("formula.unnamed"), column["id"])
 
         number_index = self._number_combo.findData(self._block.number_column_id)
         self._number_combo.setCurrentIndex(number_index if number_index >= 0 else 0)

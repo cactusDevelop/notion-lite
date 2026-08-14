@@ -83,6 +83,7 @@ from blocks.dependency_gantt_block import (
 )
 from blocks.table_block import TableBlock
 from ui.no_scroll_combo_box import NoScrollComboBox
+from ui.i18n import tr
 
 _REFRESH_INTERVAL_MS = 500
 _ROW_HEIGHT = 30
@@ -101,7 +102,8 @@ _ADVANCE_COLOR = QColor("#2196f3")
 _DRAG_THRESHOLD_PX = 4
 _DELTA_RANGE_DAYS = 999.0
 
-_UNIT_LABELS = {UNIT_DAYS: "Jours", UNIT_MONTHS: "Mois"}
+def _unit_labels() -> dict[str, str]:
+    return {UNIT_DAYS: tr("dep_gantt.days"), UNIT_MONTHS: tr("dep_gantt.months")}
 
 # PATCH 71 — nombre de pixels par jour à l'échelle 100 %, multiplié par
 # le zoom courant pour obtenir la largeur totale du graphique.
@@ -208,7 +210,7 @@ class _DependencyGanttCanvas(QWidget):
         people: list[str] = []
         tasks_by_person: dict[str, list[dict]] = {}
         for task in schedule:
-            for name in task["person_names"] or ["(non assigné)"]:
+            for name in task["person_names"] or [tr("dep_gantt.unassigned")]:
                 if name not in tasks_by_person:
                     tasks_by_person[name] = []
                     people.append(name)
@@ -286,7 +288,7 @@ class _DependencyGanttCanvas(QWidget):
 
         if not self._people:
             painter.setPen(QPen(self.palette().color(QPalette.WindowText)))
-            painter.drawText(self.rect(), Qt.AlignCenter, "Aucune donnée à afficher.")
+            painter.drawText(self.rect(), Qt.AlignCenter, tr("gantt.no_data"))
             painter.end()
             return
 
@@ -377,14 +379,14 @@ class _DeltaDialog(QDialog):
 
     def __init__(self, task_label: str, current_delta_days: float, unit: str, parent=None) -> None:
         super().__init__(parent)
-        self.setWindowTitle(f"Écart — {task_label}")
+        self.setWindowTitle(f"{tr('dep_gantt.delta')} — {task_label}")
         self._unit = unit
         divisor = DAYS_PER_MONTH if unit == UNIT_MONTHS else 1.0
 
         layout = QVBoxLayout(self)
-        unit_label = _UNIT_LABELS.get(unit, "Jours").lower()
+        unit_label = _unit_labels().get(unit, tr("dep_gantt.days")).lower()
         layout.addWidget(
-            QLabel(f"Retard (positif) ou avance (négatif), en {unit_label} :", self)
+            QLabel(f"{tr('dep_gantt.delta_hint')} {unit_label} :", self)
         )
         self._spin = QDoubleSpinBox(self)
         self._spin.setRange(-999, 999)
@@ -423,14 +425,14 @@ class DependencyGanttBlockWidget(QWidget):
         selectors = QHBoxLayout()
         self._combos: dict[str] = {}
         for key, label in (
-            ("table", "Tableau"),
-            ("label", "Sous-tâches"),
-            ("person", "Personnes"),
-            ("duration", "Durée"),
-            ("risk", "Risques"),
-            ("dependency", "Dépendances"),
-            ("delta", "Ecarts"),
-            ("phase", "Phases"),
+            ("table", tr("formula.table_prefix")),
+            ("label", tr("dep_gantt.subtasks")),
+            ("person", tr("dep_gantt.people")),
+            ("duration", tr("dep_gantt.duration")),
+            ("risk", tr("dep_gantt.risks")),
+            ("dependency", tr("dep_gantt.dependencies")),
+            ("delta", tr("dep_gantt.deltas")),
+            ("phase", tr("dep_gantt.phases")),
         ):
             selectors.addWidget(QLabel(f"{label} :", self))
             combo = NoScrollComboBox(self)
@@ -440,10 +442,10 @@ class DependencyGanttBlockWidget(QWidget):
         layout.addLayout(selectors)
 
         unit_row = QHBoxLayout()
-        unit_row.addWidget(QLabel("Unité :", self))
+        unit_row.addWidget(QLabel(tr("dep_gantt.unit"), self))
         self._unit_combo = NoScrollComboBox(self)
-        self._unit_combo.addItem("Jours", UNIT_DAYS)
-        self._unit_combo.addItem("Mois", UNIT_MONTHS)
+        self._unit_combo.addItem(tr("dep_gantt.days"), UNIT_DAYS)
+        self._unit_combo.addItem(tr("dep_gantt.months"), UNIT_MONTHS)
         index = self._unit_combo.findData(self._block.time_unit)
         self._unit_combo.setCurrentIndex(index if index >= 0 else 0)
         self._unit_combo.currentIndexChanged.connect(self._on_unit_changed)
@@ -454,7 +456,7 @@ class DependencyGanttBlockWidget(QWidget):
         # PATCH 70 — curseur d'échelle (zoom) : agrandit/réduit le
         # nombre de pixels par jour, indépendamment de la largeur du bloc.
         zoom_row = QHBoxLayout()
-        zoom_row.addWidget(QLabel("Échelle :", self))
+        zoom_row.addWidget(QLabel(tr("gantt.scale"), self))
         zoom_out_button = QToolButton(self)
         zoom_out_button.setText("－")
         zoom_out_button.setAutoRaise(True)
@@ -476,8 +478,8 @@ class DependencyGanttBlockWidget(QWidget):
         self._zoom_label = QLabel(f"{_ZOOM_DEFAULT} %", self)
         self._zoom_label.setFixedWidth(42)
         zoom_row.addWidget(self._zoom_label)
-        self._auto_button = QPushButton("Auto", self)
-        self._auto_button.setToolTip("Ajuster l'échelle pour tout voir")
+        self._auto_button = QPushButton(tr("gantt.auto"), self)
+        self._auto_button.setToolTip(tr("gantt.auto_tooltip"))
         self._auto_button.setFixedWidth(56)
         self._auto_button.clicked.connect(self._enable_auto_zoom)
         zoom_row.addWidget(self._auto_button)
@@ -531,9 +533,9 @@ class DependencyGanttBlockWidget(QWidget):
         self._syncing = True
         combo = self._combos["table"]
         combo.clear()
-        combo.addItem("(aucun)", None)
+        combo.addItem(tr("formula.none"), None)
         for table in self._table_blocks():
-            title = f"Tableau ({table.columns[0]['name']}...)" if table.columns else "Tableau"
+            title = f"{tr('formula.table_prefix')} ({table.columns[0]['name']}...)" if table.columns else tr("formula.table_prefix")
             combo.addItem(title, table.id)
         index = combo.findData(self._block.table_block_id)
         combo.setCurrentIndex(index if index >= 0 else 0)
@@ -555,10 +557,10 @@ class DependencyGanttBlockWidget(QWidget):
         for key, getter, current_id in specs:
             combo = self._combos[key]
             combo.clear()
-            combo.addItem("(aucune)", None)
+            combo.addItem(tr("dep_gantt.none_fem"), None)
             if table is not None:
                 for column in getter(table):
-                    combo.addItem(column["name"] or "(sans nom)", column["id"])
+                    combo.addItem(column["name"] or tr("formula.unnamed"), column["id"])
             index = combo.findData(current_id)
             combo.setCurrentIndex(index if index >= 0 else 0)
         self._syncing = False

@@ -53,6 +53,7 @@ from blocks.gantt_block import (
 )
 from blocks.table_block import TableBlock
 from ui.no_scroll_combo_box import NoScrollComboBox
+from ui.i18n import tr
 
 _REFRESH_INTERVAL_MS = 500
 _ROW_HEIGHT = 28
@@ -127,7 +128,7 @@ class _GanttCanvas(QWidget):
         painter.setRenderHint(QPainter.Antialiasing)
 
         if not self._rows:
-            painter.drawText(self.rect(), Qt.AlignCenter, "Aucune donnée à afficher.")
+            painter.drawText(self.rect(), Qt.AlignCenter, tr("gantt.no_data"))
             painter.end()
             return
 
@@ -144,7 +145,7 @@ class _GanttCanvas(QWidget):
 
         for i, (row, start, end) in enumerate(dated):
             y = i * _ROW_HEIGHT
-            painter.drawText(0, y, _LABEL_WIDTH, _ROW_HEIGHT, Qt.AlignVCenter, row["label"] or "(sans titre)")
+            painter.drawText(0, y, _LABEL_WIDTH, _ROW_HEIGHT, Qt.AlignVCenter, row["label"] or tr("gantt.untitled"))
 
             if start is None:
                 continue
@@ -175,17 +176,17 @@ class GanttBlockWidget(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
 
         selectors = QHBoxLayout()
-        selectors.addWidget(QLabel("Tableau :", self))
+        selectors.addWidget(QLabel(tr("formula.table"), self))
         self._table_combo = NoScrollComboBox(self)
         self._table_combo.currentIndexChanged.connect(self._on_table_changed)
         selectors.addWidget(self._table_combo, 1)
 
-        selectors.addWidget(QLabel("Libellé :", self))
+        selectors.addWidget(QLabel(tr("formula.label"), self))
         self._label_combo = NoScrollComboBox(self)
         self._label_combo.currentIndexChanged.connect(self._on_label_column_changed)
         selectors.addWidget(self._label_combo, 1)
 
-        selectors.addWidget(QLabel("Dates :", self))
+        selectors.addWidget(QLabel(tr("gantt.dates"), self))
         self._date_combo = NoScrollComboBox(self)
         self._date_combo.currentIndexChanged.connect(self._on_date_column_changed)
         selectors.addWidget(self._date_combo, 1)
@@ -195,7 +196,7 @@ class GanttBlockWidget(QWidget):
         # nombre de pixels par jour, plus bouton "Auto" pour ajuster
         # exactement à la largeur visible et resynchroniser le curseur.
         zoom_row = QHBoxLayout()
-        zoom_row.addWidget(QLabel("Échelle :", self))
+        zoom_row.addWidget(QLabel(tr("gantt.scale"), self))
         zoom_out_button = QToolButton(self)
         zoom_out_button.setText("－")
         zoom_out_button.setAutoRaise(True)
@@ -217,8 +218,8 @@ class GanttBlockWidget(QWidget):
         self._zoom_label = QLabel(f"{_ZOOM_DEFAULT} %", self)
         self._zoom_label.setFixedWidth(42)
         zoom_row.addWidget(self._zoom_label)
-        self._auto_button = QPushButton("Auto", self)
-        self._auto_button.setToolTip("Ajuster l'échelle pour tout voir")
+        self._auto_button = QPushButton(tr("gantt.auto"), self)
+        self._auto_button.setToolTip(tr("gantt.auto_tooltip"))
         self._auto_button.setFixedWidth(56)
         self._auto_button.clicked.connect(self._enable_auto_zoom)
         zoom_row.addWidget(self._auto_button)
@@ -267,9 +268,9 @@ class GanttBlockWidget(QWidget):
     def _populate_table_combo(self) -> None:
         self._syncing = True
         self._table_combo.clear()
-        self._table_combo.addItem("(aucun)", None)
+        self._table_combo.addItem(tr("formula.none"), None)
         for table in self._table_blocks():
-            title = f"Tableau ({table.columns[0]['name']}...)" if table.columns else "Tableau"
+            title = f"{tr('formula.table_prefix')} ({table.columns[0]['name']}...)" if table.columns else tr("formula.table_prefix")
             self._table_combo.addItem(title, table.id)
         index = self._table_combo.findData(self._block.table_block_id)
         self._table_combo.setCurrentIndex(index if index >= 0 else 0)
@@ -284,9 +285,9 @@ class GanttBlockWidget(QWidget):
         table = find_source_table(self._document, self._block)
         if table is not None:
             for column in table.columns:
-                self._label_combo.addItem(column["name"] or "(sans nom)", column["id"])
+                self._label_combo.addItem(column["name"] or tr("formula.unnamed"), column["id"])
             for column in available_date_columns(table):
-                self._date_combo.addItem(column["name"] or "(sans nom)", column["id"])
+                self._date_combo.addItem(column["name"] or tr("formula.unnamed"), column["id"])
 
         label_index = self._label_combo.findData(self._block.label_column_id)
         self._label_combo.setCurrentIndex(label_index if label_index >= 0 else 0)

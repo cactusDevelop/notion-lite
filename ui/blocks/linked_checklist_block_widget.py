@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
 )
 
 from blocks.linked_checklist_block import LinkedChecklistBlock
+from ui.i18n import tr
 
 _SPLITTER_TOTAL = 1000
 
@@ -45,14 +46,14 @@ class _LinkedItemRow(QWidget):
 
         self.line_edit = QLineEdit(self)
         self.line_edit.setText(text)
-        self.line_edit.setPlaceholderText("Élément...")
+        self.line_edit.setPlaceholderText(tr("checklist.item_placeholder_short"))
         self.line_edit.textChanged.connect(self._on_text_changed)
         self.line_edit.returnPressed.connect(self._on_return_pressed)
         layout.addWidget(self.line_edit, 1)
 
         remove_button = QToolButton(self)
         remove_button.setText("×")
-        remove_button.setToolTip("Supprimer cet élément")
+        remove_button.setToolTip(tr("checklist.remove_item"))
         remove_button.clicked.connect(lambda: self._owner.remove_row(self))
         layout.addWidget(remove_button)
 
@@ -111,8 +112,8 @@ class LinkedChecklistBlockWidget(QWidget):
         self._splitter.setChildrenCollapsible(False)
         self._splitter.splitterMoved.connect(self._on_splitter_moved)
 
-        self._todo_column = _ChecklistColumn("À faire", show_add_button=True, owner=self)
-        self._done_column = _ChecklistColumn("Faites", show_add_button=False, owner=self)
+        self._todo_column = _ChecklistColumn(tr("linked_checklist.todo"), show_add_button=True, owner=self)
+        self._done_column = _ChecklistColumn(tr("linked_checklist.done"), show_add_button=False, owner=self)
         self._splitter.addWidget(self._todo_column)
         self._splitter.addWidget(self._done_column)
 

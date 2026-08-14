@@ -4,6 +4,8 @@ Barre d'outils principale.
 PATCH 5 : actions de base (nouveau bloc, mise en forme simple).
 PATCH 6 : mise en forme complète (barré, alignement, listes,
 citation, code).
+PATCH 80 : tous les libellés passent par `tr()` (voir ui.i18n) ; les
+actions sont retraduites via `retranslate()` quand la langue change.
 
 La toolbar fait partie du cadre de QMainWindow (pas de la zone de
 contenu défilable) : tout ce qu'elle contient, y compris le bouton
@@ -16,38 +18,40 @@ from typing import Callable, Optional
 from PySide6.QtGui import QAction, QIcon
 from PySide6.QtWidgets import QSizePolicy, QSpinBox, QToolBar, QWidget
 
-# (clé d'action, libellé affiché). label=None -> séparateur.
+from ui.i18n import tr
+
+# (clé d'action, clé i18n du libellé). i18n_key=None -> séparateur.
 _ACTIONS: list[tuple[str, Optional[str]]] = [
-    ("new_block", "Nouveau bloc"),
-    ("new_checklist", "Nouvelle checklist"),
-    ("new_image", "Insérer une image"),
-    ("new_table", "Nouveau tableau"),
-    ("new_simple_table", "Nouveau tableau simple"),
-    ("new_gantt", "Nouveau Gantt"),
-    ("new_separator", "Insérer un séparateur"),
-    ("new_quote", "Insérer une citation"),
-    ("new_code", "Insérer un bloc de code"),
-    ("new_list", "Insérer une liste"),
+    ("new_block", "toolbar.new_block"),
+    ("new_checklist", "toolbar.new_checklist"),
+    ("new_image", "toolbar.new_image"),
+    ("new_table", "toolbar.new_table"),
+    ("new_simple_table", "toolbar.new_simple_table"),
+    ("new_gantt", "toolbar.new_gantt"),
+    ("new_separator", "toolbar.new_separator"),
+    ("new_quote", "toolbar.new_quote"),
+    ("new_code", "toolbar.new_code"),
+    ("new_list", "toolbar.new_list"),
     ("sep1", None),
-    ("bold", "Gras"),
-    ("italic", "Italique"),
-    ("underline", "Souligné"),
-    ("strikethrough", "Barré"),
+    ("bold", "toolbar.bold"),
+    ("italic", "toolbar.italic"),
+    ("underline", "toolbar.underline"),
+    ("strikethrough", "toolbar.strikethrough"),
     ("sep2", None),
-    ("align_left", "Aligner à gauche"),
-    ("align_center", "Centrer"),
-    ("align_right", "Aligner à droite"),
-    ("align_justify", "Justifier"),
+    ("align_left", "toolbar.align_left"),
+    ("align_center", "toolbar.align_center"),
+    ("align_right", "toolbar.align_right"),
+    ("align_justify", "toolbar.align_justify"),
     ("sep3", None),
-    ("bullet_list", "Liste à puces"),
-    ("numbered_list", "Liste numérotée"),
-    ("quote", "Citation"),
-    ("code", "Code"),
+    ("bullet_list", "toolbar.bullet_list"),
+    ("numbered_list", "toolbar.numbered_list"),
+    ("quote", "toolbar.quote"),
+    ("code", "toolbar.code"),
     ("sep4", None),
-    ("color", "Couleur"),
+    ("color", "toolbar.color"),
     ("sep5", None),
-    ("insert_link", "Lien interne..."),
-    ("insert_emoji", "Emoji..."),
+    ("insert_link", "toolbar.insert_link"),
+    ("insert_emoji", "toolbar.insert_emoji"),
 ]
 
 
@@ -70,16 +74,18 @@ class MainToolBar(QToolBar):
         info_icon_path: str,
         parent=None,
     ) -> None:
-        super().__init__("Barre d'outils", parent)
+        super().__init__(tr("toolbar.title"), parent)
         self.setMovable(False)
 
-        for key, label in _ACTIONS:
-            if label is None:
+        self._actions_by_key: dict[str, QAction] = {}
+        for key, i18n_key in _ACTIONS:
+            if i18n_key is None:
                 self.addSeparator()
                 continue
-            action = QAction(label, self)
+            action = QAction(tr(i18n_key), self)
             action.triggered.connect(actions[key])
             self.addAction(action)
+            self._actions_by_key[key] = action
 
         self._size_spin = QSpinBox(self)
         self._size_spin.setRange(8, 72)
@@ -93,7 +99,16 @@ class MainToolBar(QToolBar):
         spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         self.addWidget(spacer)
 
-        info_action = QAction(QIcon(info_icon_path), "", self)
-        info_action.setToolTip("Informations et choix de design")
-        info_action.triggered.connect(on_info)
-        self.addAction(info_action)
+        self._info_action = QAction(QIcon(info_icon_path), "", self)
+        self._info_action.setToolTip(tr("toolbar.info_tooltip"))
+        self._info_action.triggered.connect(on_info)
+        self.addAction(self._info_action)
+
+    def retranslate(self) -> None:
+        """PATCH 80 — réapplique `tr()` aux libellés (changement de langue)."""
+        self.setWindowTitle(tr("toolbar.title"))
+        for key, i18n_key in _ACTIONS:
+            if i18n_key is None:
+                continue
+            self._actions_by_key[key].setText(tr(i18n_key))
+        self._info_action.setToolTip(tr("toolbar.info_tooltip"))

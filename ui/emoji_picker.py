@@ -11,6 +11,7 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QLineEdit, QListWidget, QListWidgetItem, QVBoxLayout, QWidget
 
 from core.emoji_data import search_emojis
+from ui.i18n import tr
 
 
 class EmojiPicker(QWidget):
@@ -26,7 +27,7 @@ class EmojiPicker(QWidget):
         layout.setContentsMargins(4, 4, 4, 4)
 
         self._search = QLineEdit(self)
-        self._search.setPlaceholderText("Rechercher un emoji (ex. smile)...")
+        self._search.setPlaceholderText(tr("emoji.search_placeholder"))
         self._search.textChanged.connect(self._on_search_changed)
         self._search.returnPressed.connect(self._on_return_pressed)
         layout.addWidget(self._search)

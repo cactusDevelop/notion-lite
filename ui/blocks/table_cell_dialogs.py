@@ -24,14 +24,36 @@ from PySide6.QtWidgets import (
 )
 
 from blocks.table_block import (
+    COLUMN_TYPE_BOOLEAN,
+    COLUMN_TYPE_CHECKLIST,
     COLUMN_TYPE_DATE,
-    COLUMN_TYPE_LABELS,
-    COLUMN_TYPE_NUMBER,
-    COLUMN_TYPE_SELECT,
+    COLUMN_TYPE_DURATION,
     COLUMN_TYPE_MULTI_SELECT,
+    COLUMN_TYPE_NUMBER,
+    COLUMN_TYPE_PERSON,
+    COLUMN_TYPE_SELECT,
+    COLUMN_TYPE_TEXT,
     COLUMN_TYPES,
 )
 from ui.no_scroll_combo_box import NoScrollComboBox
+from ui.i18n import tr
+
+
+def _column_type_labels() -> dict[str, str]:
+    """Libellés affichés des types de colonne (PATCH 80 : traduits via
+    `tr()` ; ne remplace pas `blocks.table_block.COLUMN_TYPE_LABELS`,
+    qui reste la source française utilisée en repli/tests)."""
+    return {
+        COLUMN_TYPE_TEXT: tr("column_type.text"),
+        COLUMN_TYPE_NUMBER: tr("column_type.number"),
+        COLUMN_TYPE_DATE: tr("column_type.date"),
+        COLUMN_TYPE_DURATION: tr("column_type.duration"),
+        COLUMN_TYPE_BOOLEAN: tr("column_type.boolean"),
+        COLUMN_TYPE_PERSON: tr("column_type.person"),
+        COLUMN_TYPE_SELECT: tr("column_type.select"),
+        COLUMN_TYPE_MULTI_SELECT: tr("column_type.multi_select"),
+        COLUMN_TYPE_CHECKLIST: tr("column_type.checklist"),
+    }
 
 
 def ask_column_definition(
@@ -50,30 +72,30 @@ def ask_column_definition(
     Retourne (name, col_type, options, date_range, unit) ou None si annulé.
     """
     dialog = QDialog(parent)
-    dialog.setWindowTitle("Colonne")
+    dialog.setWindowTitle(tr("table.column_dialog.title"))
     layout = QVBoxLayout(dialog)
 
-    layout.addWidget(QLabel("Nom :"))
+    layout.addWidget(QLabel(tr("table.column_dialog.name")))
     name_edit = QLineEdit(name, dialog)
     layout.addWidget(name_edit)
 
-    layout.addWidget(QLabel("Type :"))
+    layout.addWidget(QLabel(tr("table.column_dialog.type")))
     type_combo = NoScrollComboBox(dialog)
     for type_key in COLUMN_TYPES:
-        type_combo.addItem(COLUMN_TYPE_LABELS[type_key], type_key)
+        type_combo.addItem(_column_type_labels()[type_key], type_key)
     type_combo.setCurrentIndex(max(0, COLUMN_TYPES.index(col_type) if col_type in COLUMN_TYPES else 0))
     layout.addWidget(type_combo)
 
-    options_label = QLabel("Choix possibles (séparés par des virgules) :")
+    options_label = QLabel(tr("table.column_dialog.options"))
     options_edit = QLineEdit(", ".join(options or []), dialog)
     layout.addWidget(options_label)
     layout.addWidget(options_edit)
 
-    range_checkbox = QCheckBox("Plage de dates (début / fin)", dialog)
+    range_checkbox = QCheckBox(tr("table.column_dialog.date_range"), dialog)
     range_checkbox.setChecked(date_range)
     layout.addWidget(range_checkbox)
 
-    unit_label = QLabel("Unité affichée dans l'en-tête (ex : j, €, %) :")
+    unit_label = QLabel(tr("table.column_dialog.unit"))
     unit_edit = QLineEdit(unit, dialog)
     layout.addWidget(unit_label)
     layout.addWidget(unit_edit)
@@ -118,7 +140,7 @@ def edit_person_list(parent, document, selected_ids: list[str]) -> list[str] | N
     toutes les autres cellules "Personne" du document).
     """
     dialog = QDialog(parent)
-    dialog.setWindowTitle("Personnes assignées")
+    dialog.setWindowTitle(tr("table.people_dialog.title"))
     layout = QVBoxLayout(dialog)
 
     list_widget = QListWidget(dialog)
@@ -138,7 +160,7 @@ def edit_person_list(parent, document, selected_ids: list[str]) -> list[str] | N
 
     add_row = QHBoxLayout()
     name_edit = QLineEdit(dialog)
-    name_edit.setPlaceholderText("Nouvelle personne...")
+    name_edit.setPlaceholderText(tr("table.people_dialog.new_person"))
     add_row.addWidget(name_edit)
 
     def _add_person() -> None:
@@ -150,7 +172,7 @@ def edit_person_list(parent, document, selected_ids: list[str]) -> list[str] | N
         name_edit.clear()
         _populate()
 
-    add_button = QPushButton("Ajouter", dialog)
+    add_button = QPushButton(tr("people.add_short"), dialog)
     add_button.clicked.connect(_add_person)
     name_edit.returnPressed.connect(_add_person)
     add_row.addWidget(add_button)
@@ -173,11 +195,11 @@ def edit_person_list(parent, document, selected_ids: list[str]) -> list[str] | N
 def edit_multi_select(parent, options: list[str], selected: list[str]) -> list[str] | None:
     """Dialogue de sélection multiple parmi les choix de la colonne."""
     dialog = QDialog(parent)
-    dialog.setWindowTitle("Choix multiples")
+    dialog.setWindowTitle(tr("table.multi_select_dialog.title"))
     layout = QVBoxLayout(dialog)
 
     if not options:
-        layout.addWidget(QLabel("Aucun choix défini pour cette colonne."))
+        layout.addWidget(QLabel(tr("table.multi_select_dialog.no_options")))
 
     checkboxes: list[QCheckBox] = []
     for option in options:
@@ -201,7 +223,7 @@ def edit_checklist_cell(parent, items: list[dict]) -> list[dict] | None:
     import uuid
 
     dialog = QDialog(parent)
-    dialog.setWindowTitle("Checklist")
+    dialog.setWindowTitle(tr("table.checklist_dialog.title"))
     layout = QVBoxLayout(dialog)
 
     rows_container = QVBoxLayout()
@@ -234,7 +256,7 @@ def edit_checklist_cell(parent, items: list[dict]) -> list[dict] | None:
 
     _rebuild_rows()
 
-    add_button = QPushButton("+ Ajouter un élément", dialog)
+    add_button = QPushButton(tr("table.checklist_dialog.add_item"), dialog)
 
     def _add_item() -> None:
         working_items.append({"id": str(uuid.uuid4()), "text": "", "checked": False})

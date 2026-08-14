@@ -18,9 +18,11 @@ from core.document import Document
 
 # Réutilise les libellés lisibles du menu "/" (PATCH 25) plutôt que
 # de les dupliquer.
-from ui.command_registry import COMMANDS
+from ui.command_registry import get_commands
+from ui.i18n import tr
 
-_TYPE_LABELS: dict[str, str] = {command["id"]: command["label"] for command in COMMANDS}
+def _type_labels() -> dict[str, str]:
+    return {command["id"]: command["label"] for command in get_commands()}
 
 
 class BlockPickerDialog(QDialog):
@@ -36,7 +38,7 @@ class BlockPickerDialog(QDialog):
         self._document = document
         self.selected_block_id: Optional[str] = None
 
-        self.setWindowTitle("Lier vers un bloc")
+        self.setWindowTitle(tr("block_picker.title"))
         self.resize(440, 400)
 
         layout = QVBoxLayout(self)
@@ -48,7 +50,7 @@ class BlockPickerDialog(QDialog):
         for block in document.blocks:
             if block.id == exclude_block_id:
                 continue
-            type_label = _TYPE_LABELS.get(block.type, block.type)
+            type_label = _type_labels().get(block.type, block.type)
             item = QListWidgetItem(f"[{type_label}] {preview_for_block(block)}")
             item.setData(Qt.UserRole, block.id)
             self._list.addItem(item)

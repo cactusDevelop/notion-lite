@@ -18,8 +18,11 @@ from PySide6.QtWidgets import (
 
 from blocks.list_block import LIST_TYPE_BULLET, LIST_TYPE_NUMBERED, ListBlock
 from ui.no_scroll_combo_box import NoScrollComboBox
+from ui.i18n import tr
 
-_TYPE_LABELS = {LIST_TYPE_BULLET: "À puces", LIST_TYPE_NUMBERED: "Numérotée"}
+
+def _type_labels() -> dict[str, str]:
+    return {LIST_TYPE_BULLET: tr("list.bullet"), LIST_TYPE_NUMBERED: tr("list.numbered")}
 
 
 class ListBlockWidget(QWidget):
@@ -34,9 +37,9 @@ class ListBlockWidget(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
 
         header = QHBoxLayout()
-        header.addWidget(QLabel("Style :", self))
+        header.addWidget(QLabel(tr("list.style"), self))
         self._type_combo = NoScrollComboBox(self)
-        for list_type, label in _TYPE_LABELS.items():
+        for list_type, label in _type_labels().items():
             self._type_combo.addItem(label, list_type)
         self._type_combo.currentIndexChanged.connect(self._on_type_changed)
         header.addWidget(self._type_combo)
@@ -46,7 +49,7 @@ class ListBlockWidget(QWidget):
         self._items_layout = QVBoxLayout()
         layout.addLayout(self._items_layout)
 
-        add_button = QPushButton("+ Élément", self)
+        add_button = QPushButton(tr("list.add_item"), self)
         add_button.clicked.connect(self._on_add_item)
         layout.addWidget(add_button)
 

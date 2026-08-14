@@ -45,6 +45,7 @@ from blocks.line_chart_block import (
     compute_line_series,
 )
 from ui.no_scroll_combo_box import NoScrollComboBox
+from ui.i18n import tr
 
 _REFRESH_INTERVAL_MS = 500
 _MARGIN = 30
@@ -187,17 +188,17 @@ class LineChartBlockWidget(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
 
         header = QHBoxLayout()
-        self._title_edit = _TitleLikeLineEdit(block.title, "Titre", _TITLE_STYLE, self)
+        self._title_edit = _TitleLikeLineEdit(block.title, tr("line_chart.title"), _TITLE_STYLE, self)
         self._title_edit.textChanged.connect(self._on_title_changed)
         header.addWidget(self._title_edit, 1)
         # PATCH 58 — nom de l'axe Y déplacé dans l'en-tête, à côté du
         # titre (comme le graphique "Delta de budget") : le champ ici ne
         # sert plus qu'à la saisie, l'affichage réel est désormais
         # dessiné à la verticale sur le graphique (voir _LineChartCanvas).
-        self._y_axis_edit = _TitleLikeLineEdit(block.y_axis_label, "Axe Y", _AXIS_STYLE, self)
+        self._y_axis_edit = _TitleLikeLineEdit(block.y_axis_label, tr("line_chart.y_axis"), _AXIS_STYLE, self)
         self._y_axis_edit.textChanged.connect(self._on_y_axis_changed)
         header.addWidget(self._y_axis_edit, 1)
-        header.addWidget(QLabel("Échelle :", self))
+        header.addWidget(QLabel(tr("gantt.scale"), self))
         self._x_max_spin = QDoubleSpinBox(self)
         self._x_max_spin.setRange(0.01, 100000)
         self._x_max_spin.setValue(block.x_max)
@@ -213,7 +214,7 @@ class LineChartBlockWidget(QWidget):
         # aussi désormais dessiné centré sous le graphique.
         x_axis_row = QHBoxLayout()
         x_axis_row.addStretch(1)
-        self._x_axis_edit = _TitleLikeLineEdit(block.x_axis_label, "Axe X", _AXIS_STYLE, self)
+        self._x_axis_edit = _TitleLikeLineEdit(block.x_axis_label, tr("line_chart.x_axis"), _AXIS_STYLE, self)
         self._x_axis_edit.setAlignment(Qt.AlignCenter)
         self._x_axis_edit.textChanged.connect(self._on_x_axis_changed)
         x_axis_row.addWidget(self._x_axis_edit)
@@ -223,7 +224,7 @@ class LineChartBlockWidget(QWidget):
         self._series_area = QGridLayout()
         layout.addLayout(self._series_area)
 
-        add_button = QPushButton("+ Ajouter une droite", self)
+        add_button = QPushButton(tr("line_chart.add_series"), self)
         add_button.clicked.connect(self._on_add_series)
         layout.addWidget(add_button)
 
@@ -256,8 +257,8 @@ class LineChartBlockWidget(QWidget):
             self._series_area.addWidget(name_edit, row_index, 0)
 
             mode_combo = NoScrollComboBox(self)
-            mode_combo.addItem("Constante", SLOPE_MODE_CONSTANT)
-            mode_combo.addItem("Vélocité réelle (planning)", SLOPE_MODE_EFFICIENCY)
+            mode_combo.addItem(tr("line_chart.constant"), SLOPE_MODE_CONSTANT)
+            mode_combo.addItem(tr("line_chart.real_velocity"), SLOPE_MODE_EFFICIENCY)
             mode_combo.setCurrentIndex(0 if s["mode"] == SLOPE_MODE_CONSTANT else 1)
             self._series_area.addWidget(mode_combo, row_index, 1)
 
@@ -270,9 +271,9 @@ class LineChartBlockWidget(QWidget):
             self._series_area.addWidget(slope_spin, row_index, 2)
 
             source_combo = NoScrollComboBox(self)
-            source_combo.addItem("(aucun planning)", None)
+            source_combo.addItem(tr("line_chart.no_schedule"), None)
             for gantt in self._gantt_blocks():
-                source_combo.addItem(f"Planning {gantt.id[:8]}", gantt.id)
+                source_combo.addItem(f"{tr('bar_chart.schedule')} {gantt.id[:8]}", gantt.id)
             source_index = source_combo.findData(s.get("source_block_id"))
             source_combo.setCurrentIndex(source_index if source_index >= 0 else 0)
             source_combo.setEnabled(s["mode"] == SLOPE_MODE_EFFICIENCY)
@@ -310,7 +311,7 @@ class LineChartBlockWidget(QWidget):
         self.refresh()
 
     def _on_add_series(self) -> None:
-        self._block.add_series(name=f"Droite {len(self._block.series) + 1}")
+        self._block.add_series(name=f"{tr('line_chart.line')} {len(self._block.series) + 1}")
         self._rebuild_series_rows()
         self.refresh()
 

@@ -5,7 +5,8 @@ from __future__ import annotations
 
 from PySide6.QtWidgets import QDialog, QTextBrowser, QVBoxLayout
 
-from ui.design_notes import DESIGN_NOTES
+from ui.design_notes import get_design_notes
+from ui.i18n import tr
 from core.version import __version__
 
 
@@ -14,7 +15,7 @@ class InfoDialog(QDialog):
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("À propos de ce projet")
+        self.setWindowTitle(tr("info.title"))
         self.resize(520, 420)
 
         layout = QVBoxLayout(self)
@@ -26,7 +27,10 @@ class InfoDialog(QDialog):
 
     @staticmethod
     def _build_html() -> str:
-        parts = [f"<h3>Méthodo OG {__version__}</h3>", "<h4>Explications et choix de design</h4>"]
-        for title, text in DESIGN_NOTES:
+        parts = [
+            f"<h3>{tr('info.heading')} {__version__}</h3>",
+            f"<h4>{tr('info.subheading')}</h4>",
+        ]
+        for title, text in get_design_notes():
             parts.append(f"<p><b>{title}</b><br>{text}</p>")
         return "".join(parts)

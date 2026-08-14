@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
 )
 
 from core.document import Document
+from ui.i18n import tr
 
 
 class PeopleManagerDialog(QDialog):
@@ -31,7 +32,7 @@ class PeopleManagerDialog(QDialog):
     def __init__(self, document: Document, parent=None) -> None:
         super().__init__(parent)
         self._document = document
-        self.setWindowTitle("Gestionnaire de personnes")
+        self.setWindowTitle(tr("people.title"))
         self.resize(360, 400)
 
         layout = QVBoxLayout(self)
@@ -40,24 +41,24 @@ class PeopleManagerDialog(QDialog):
         layout.addWidget(self._list)
 
         add_row = QHBoxLayout()
-        add_button = QPushButton("Ajouter...", self)
+        add_button = QPushButton(tr("people.add"), self)
         add_button.clicked.connect(self._on_add)
         add_row.addWidget(add_button)
 
-        rename_button = QPushButton("Renommer...", self)
+        rename_button = QPushButton(tr("people.rename"), self)
         rename_button.clicked.connect(self._on_rename)
         add_row.addWidget(rename_button)
 
-        color_button = QPushButton("Couleur...", self)
+        color_button = QPushButton(tr("people.color"), self)
         color_button.clicked.connect(self._on_change_color)
         add_row.addWidget(color_button)
 
-        remove_button = QPushButton("Supprimer", self)
+        remove_button = QPushButton(tr("people.remove"), self)
         remove_button.clicked.connect(self._on_remove)
         add_row.addWidget(remove_button)
         layout.addLayout(add_row)
 
-        close_button = QPushButton("Fermer", self)
+        close_button = QPushButton(tr("people.close"), self)
         close_button.clicked.connect(self.accept)
         layout.addWidget(close_button)
 
@@ -76,7 +77,7 @@ class PeopleManagerDialog(QDialog):
         return item.data(Qt.UserRole) if item else None
 
     def _on_add(self) -> None:
-        name, ok = QInputDialog.getText(self, "Nouvelle personne", "Nom :")
+        name, ok = QInputDialog.getText(self, tr("people.new_person"), tr("people.name_label"))
         if ok and name.strip():
             self._document.add_person(name.strip())
             self._refresh()
@@ -87,7 +88,7 @@ class PeopleManagerDialog(QDialog):
             return
         person = self._document.find_person(person_id)
         name, ok = QInputDialog.getText(
-            self, "Renommer la personne", "Nom :", text=person["name"] if person else ""
+            self, tr("people.rename_person"), tr("people.name_label"), text=person["name"] if person else ""
         )
         if ok and name.strip():
             self._document.rename_person(person_id, name.strip())
@@ -99,7 +100,7 @@ class PeopleManagerDialog(QDialog):
             return
         person = self._document.find_person(person_id)
         current = QColor(person.get("color", "#000000")) if person else QColor("black")
-        color = QColorDialog.getColor(current, self, "Choisir une couleur")
+        color = QColorDialog.getColor(current, self, tr("people.pick_color"))
         if color.isValid():
             self._document.set_person_color(person_id, color.name())
             self._refresh()
@@ -111,9 +112,8 @@ class PeopleManagerDialog(QDialog):
         person = self._document.find_person(person_id)
         confirm = QMessageBox.question(
             self,
-            "Supprimer la personne",
-            f"Supprimer « {person['name'] if person else ''} » et la retirer de "
-            "toutes les cellules qui la référencent ?",
+            tr("people.remove_title"),
+            tr("people.remove_confirm").format(name=person["name"] if person else ""),
         )
         if confirm == QMessageBox.Yes:
             self._document.remove_person(person_id)

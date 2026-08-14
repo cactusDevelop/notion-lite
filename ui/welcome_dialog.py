@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
 )
 
 from core.version import __version__
+from ui.i18n import tr
 
 # PATCH 66 — Caractères interdits dans un nom de dossier sur Windows /
 # macOS / Linux ; retirés du nom de projet saisi.
@@ -43,7 +44,7 @@ class NewProjectDialog(QDialog):
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Nouveau projet")
+        self.setWindowTitle(tr("welcome.new_project.title"))
         self.setModal(True)
         self.setMinimumWidth(420)
 
@@ -54,20 +55,20 @@ class NewProjectDialog(QDialog):
 
         form = QFormLayout()
         self._name_edit = QLineEdit()
-        self._name_edit.setPlaceholderText("Mon projet")
+        self._name_edit.setPlaceholderText(tr("welcome.new_project.name_placeholder"))
         self._name_edit.textChanged.connect(self._update_preview)
-        form.addRow("Nom du projet", self._name_edit)
+        form.addRow(tr("welcome.new_project.name_label"), self._name_edit)
 
         location_row = QHBoxLayout()
         self._location_edit = QLineEdit(str(self._location))
         self._location_edit.setReadOnly(True)
         location_row.addWidget(self._location_edit)
-        browse_button = QPushButton("Parcourir...")
+        browse_button = QPushButton(tr("welcome.new_project.browse"))
         browse_button.clicked.connect(self._browse_location)
         location_row.addWidget(browse_button)
         location_widget = QWidget()
         location_widget.setLayout(location_row)
-        form.addRow("Emplacement", location_widget)
+        form.addRow(tr("welcome.new_project.location_label"), location_widget)
         layout.addLayout(form)
 
         self._preview_label = QLabel()
@@ -82,7 +83,7 @@ class NewProjectDialog(QDialog):
         layout.addWidget(buttons)
 
     def _browse_location(self) -> None:
-        folder = QFileDialog.getExistingDirectory(self, "Emplacement du projet", str(self._location))
+        folder = QFileDialog.getExistingDirectory(self, tr("welcome.new_project.location_dialog"), str(self._location))
         if folder:
             self._location = Path(folder)
             self._location_edit.setText(str(self._location))
@@ -92,21 +93,20 @@ class NewProjectDialog(QDialog):
         return _INVALID_NAME_CHARS.sub("", self._name_edit.text().strip()).strip()
 
     def _update_preview(self) -> None:
-        name = self._sanitized_name() or "<nom du projet>"
-        self._preview_label.setText(f"Sera créé dans : {self._location / name}")
+        name = self._sanitized_name() or tr("welcome.new_project.name_fallback")
+        self._preview_label.setText(f"{tr('welcome.new_project.preview')} {self._location / name}")
 
     def _on_accept(self) -> None:
         name = self._sanitized_name()
         if not name:
-            QMessageBox.warning(self, "Nom manquant", "Merci de donner un nom au projet.")
+            QMessageBox.warning(self, tr("welcome.new_project.missing_name_title"), tr("welcome.new_project.missing_name_text"))
             return
         target = self._location / name
         if target.exists():
             QMessageBox.warning(
                 self,
-                "Dossier existant",
-                f"Un dossier « {name} » existe déjà à cet emplacement.\n"
-                "Choisis un autre nom ou un autre emplacement.",
+                tr("welcome.new_project.folder_exists_title"),
+                tr("welcome.new_project.folder_exists_text").format(name=name),
             )
             return
         self.project_path = target
@@ -134,7 +134,7 @@ class WelcomeDialog(QDialog):
         on_remove_recent: Optional[callable] = None,
     ) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Bienvenue dans Méthodo OG")
+        self.setWindowTitle(tr("welcome.title"))
         self.setModal(True)
         self.setMinimumSize(640, 420)
         # PATCH 68 — Callback appelé avec le chemin du fichier quand
@@ -155,21 +155,21 @@ class WelcomeDialog(QDialog):
         title = QLabel("Méthodo OG")
         title.setStyleSheet("font-size: 22px; font-weight: 600;")
         left.addWidget(title)
-        subtitle = QLabel(f"version {__version__}")
+        subtitle = QLabel(f"{tr('welcome.version')} {__version__}")
         subtitle.setStyleSheet("color: gray;")
         left.addWidget(subtitle)
         left.addSpacing(24)
 
-        new_template_button = QPushButton("＋  Nouveau projet (Modèle OG)")
+        new_template_button = QPushButton(tr("welcome.new_project_template"))
         new_template_button.setDefault(True)
         new_template_button.clicked.connect(self._choose_new_template)
         left.addWidget(new_template_button)
 
-        new_blank_button = QPushButton("＋  Nouveau document vide")
+        new_blank_button = QPushButton(tr("welcome.new_blank"))
         new_blank_button.clicked.connect(self._choose_new_blank)
         left.addWidget(new_blank_button)
 
-        open_button = QPushButton("📂  Ouvrir un projet...")
+        open_button = QPushButton(tr("welcome.open_project"))
         open_button.clicked.connect(self._choose_open)
         left.addWidget(open_button)
 
@@ -185,7 +185,7 @@ class WelcomeDialog(QDialog):
 
         # -- Colonne droite : projets récents -----------------------------
         right = QVBoxLayout()
-        right.addWidget(QLabel("Projets récents"))
+        right.addWidget(QLabel(tr("welcome.recent_projects")))
 
         self._recent_list = QListWidget()
         self._recent_list.setAlternatingRowColors(True)
@@ -221,14 +221,14 @@ class WelcomeDialog(QDialog):
         remove_button.setText("✕")
         remove_button.setAutoRaise(True)
         remove_button.setCursor(Qt.PointingHandCursor)
-        remove_button.setToolTip("Retirer de la liste des projets récents")
+        remove_button.setToolTip(tr("welcome.remove_recent_tooltip"))
         remove_button.clicked.connect(lambda: self._remove_recent_item(item))
         row_layout.addWidget(remove_button)
         item.setSizeHint(row.sizeHint())
         self._recent_list.setItemWidget(item, row)
 
     def _show_empty_placeholder(self) -> None:
-        placeholder = QListWidgetItem("(aucun projet récent)")
+        placeholder = QListWidgetItem(tr("welcome.no_recent_projects"))
         placeholder.setFlags(Qt.ItemIsEnabled)
         self._recent_list.addItem(placeholder)
 
@@ -274,13 +274,13 @@ class WelcomeDialog(QDialog):
             dialog.project_path.mkdir(parents=True)
         except OSError as exc:
             QMessageBox.critical(
-                self, "Erreur", f"Impossible de créer le dossier du projet :\n{exc}"
+                self, tr("welcome.error"), f"{tr('welcome.folder_creation_error')}\n{exc}"
             )
             return None
         return dialog.project_path
 
     def _choose_open(self) -> None:
-        path_str, _ = QFileDialog.getOpenFileName(self, "Ouvrir un projet", "", "Méthodo OG (*.json)")
+        path_str, _ = QFileDialog.getOpenFileName(self, tr("welcome.open_project_dialog"), "", f"Méthodo OG (*.json)")
         if not path_str:
             return
         self.result_action = self.ACTION_OPEN

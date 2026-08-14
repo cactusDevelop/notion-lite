@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
 )
 
 from blocks.image_block import ImageBlock
+from ui.i18n import tr
 
 _MIN_WIDTH = 50
 _MAX_WIDTH = 2000
@@ -55,7 +56,7 @@ class ImageBlockWidget(QWidget):
 
         controls = QHBoxLayout()
 
-        controls.addWidget(QLabel("Largeur :", self))
+        controls.addWidget(QLabel(tr("image.width"), self))
         self._width_spin = QSpinBox(self)
         self._width_spin.setRange(_MIN_WIDTH, _MAX_WIDTH)
         self._width_spin.setSingleStep(10)
@@ -67,17 +68,17 @@ class ImageBlockWidget(QWidget):
 
         up_button = QToolButton(self)
         up_button.setText("↑")
-        up_button.setToolTip("Déplacer vers le haut")
+        up_button.setToolTip(tr("context.move_up"))
         up_button.clicked.connect(lambda: self._on_move_up() if self._on_move_up else None)
         controls.addWidget(up_button)
 
         down_button = QToolButton(self)
         down_button.setText("↓")
-        down_button.setToolTip("Déplacer vers le bas")
+        down_button.setToolTip(tr("context.move_down"))
         down_button.clicked.connect(lambda: self._on_move_down() if self._on_move_down else None)
         controls.addWidget(down_button)
 
-        delete_button = QPushButton("Supprimer", self)
+        delete_button = QPushButton(tr("context.delete"), self)
         delete_button.clicked.connect(lambda: self._on_delete() if self._on_delete else None)
         controls.addWidget(delete_button)
 

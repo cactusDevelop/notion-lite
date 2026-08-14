@@ -4,9 +4,15 @@ Notes d'architecture et choix de design.
 Chaque patch peut ajouter une entrée ici. Le contenu est affiché
 dans la popup d'information accessible depuis l'icône (i) en haut
 à droite de la fenêtre.
+
+PATCH 80 : chaque entrée existe en français et en anglais ; `tr()`
+n'est pas utilisé ici (texte trop long pour `ui.i18n`), on sélectionne
+directement la liste voulue via `get_design_notes()`.
 """
 
-DESIGN_NOTES: list[tuple[str, str]] = [
+from ui.i18n import get_language, LANGUAGE_EN
+
+DESIGN_NOTES_FR: list[tuple[str, str]] = [
     (
         "Architecture générale",
         "Le Document est l'unique source de vérité. Chaque bloc "
@@ -221,3 +227,225 @@ DESIGN_NOTES: list[tuple[str, str]] = [
         "<code>CHANGELOG.md</code> résumant les 42 patches.",
     ),
 ]
+
+DESIGN_NOTES_EN: list[tuple[str, str]] = [
+    (
+        "Overall architecture",
+        "The Document is the single source of truth. Every block "
+        "has a UUID identifier, a type and data "
+        "(<i>data</i>). Views only render what the document "
+        "actually contains.",
+    ),
+    (
+        "PATCH 3 — Text block",
+        "Built on QTextEdit: free editing, line breaks, selection "
+        "and copy/paste are native to Qt, no extra code "
+        "needed.",
+    ),
+    (
+        "PATCH 4 — Headings",
+        "H1/H2/H3 are separate blocks (QLineEdit), with a font "
+        "size that depends on the level.",
+    ),
+    (
+        "PATCH 5 — Toolbar",
+        "A bug was fixed: the \"New block\" button unintentionally "
+        "passed a boolean as content (Qt's "
+        "<i>triggered(bool)</i> signal). Fixed with an argument-less "
+        "lambda.",
+    ),
+    (
+        "PATCH 6 — Formatting",
+        "Content is saved as HTML (in addition to plain text) "
+        "to preserve formatting. Quote and code blocks stay "
+        "simplified (no visual border) for now.",
+    ),
+    (
+        "PATCH 7 — Cursor handling",
+        "Shift+Enter splits the block in two; Enter alone adds a "
+        "line break within the same block (reversed compared to "
+        "Notion's original behaviour, per explicit request). "
+        "Backspace at the start of an empty block removes it, "
+        "otherwise it merges with the previous text block (merging "
+        "with a heading isn't supported yet).",
+    ),
+    (
+        "PATCH 8 — Saving",
+        "Versioned JSON format (<i>version</i> + <i>blocks</i>). A "
+        "registry (<i>blocks/registry.py</i>) rebuilds the right "
+        "block class from the stored type, so New, Open, Save and "
+        "Save As all share the same generic document "
+        "rendering.",
+    ),
+    (
+        "PATCH 9 — Loading",
+        "Reconstruction (id, type, full data) was already handled "
+        "by <i>Document.from_dict</i> (PATCH 8); this patch adds "
+        "strict validation (missing <i>blocks</i> key, file version "
+        "too recent, unknown block type) and a regression test "
+        "proving every field survives a save/load round trip.",
+    ),
+    (
+        "PATCH 10 — Checklist block",
+        "Each item is {text, checked} in <i>data['items']</i>. "
+        "Registered in <i>blocks/registry.py</i> as expected, so "
+        "already compatible with saving/loading without touching "
+        "PATCH 8/9.",
+    ),
+    (
+        "PATCH 11 — \"To do / Done\" checklist",
+        "<i>ChecklistBlock.sort_by_status</i> stably sorts unchecked "
+        "tasks before checked ones. The widget runs this sort on "
+        "construction (so also after loading) and after every "
+        "checkbox toggle, then rebuilds its rows in the new order: "
+        "the user never has to move anything by hand.",
+    ),
+    (
+        "PATCH 12 — Image block",
+        "Image encoded as base64 straight into <i>data</i>: no "
+        "companion file, so it's compatible as-is with JSON saving "
+        "(PATCH 8/9) and the round-trip tests. Resized via a width "
+        "value (height recomputed from the original ratio by Qt). "
+        "Moving/deleting reuse <i>Document.move_block</i> and "
+        "<i>remove_block</i> (PATCH 2), exposed here as two ↑/↓ "
+        "buttons; generic drag & drop arrives in PATCH 13.",
+    ),
+    (
+        "PATCH 13 — Drag & Drop",
+        "<i>BlockContainer</i> adds a \"⠿\" handle to every block "
+        "and starts a <i>QDrag</i> (private mime-type carrying the "
+        "block ID). <i>BlocksArea</i>, now the central widget, "
+        "accepts the drop and computes the insertion index from the "
+        "Y position. It all goes through "
+        "<i>Document.move_block</i> (PATCH 2): generic, so it works "
+        "for every block type (text, headings, checklists, images, "
+        "and tables in PATCH 14). The image's ↑/↓ buttons "
+        "(PATCH 12) remain as an accessible alternative.",
+    ),
+    (
+        "Fix — ChecklistBlock API",
+        "PATCH 10's tests expected an item-id-based API "
+        "(<i>add_item</i> returns the item, <i>remove_item</i>/"
+        "<i>set_item_text</i>/<i>set_item_checked</i> take an id) "
+        "while the implementation was index-based. Fixed by "
+        "generalising ids, with backward compatibility: an id is "
+        "generated on the fly for checklists saved before this "
+        "fix. The widget (PATCH 10/11) now tracks the same id per "
+        "row instead of its position.",
+    ),
+    (
+        "PATCH 26 — Context menu",
+        "Full right-click support, in two flavours. On a block: "
+        "<i>BlockContainer.contextMenuEvent</i> delegates to "
+        "<i>MainWindow._show_block_context_menu</i>, which offers "
+        "Duplicate (via <i>blocks.registry.block_from_dict</i> with "
+        "a new id), Delete, Move ↑/↓, and Convert to "
+        "(only between simple text-<i>content</i> blocks: text, "
+        "headings, quote, code — the conversion preserves the "
+        "content). On an empty area: <i>BlocksArea</i> offers to "
+        "add any block type at the end of the document, "
+        "via the same factory as the \"/\" menu (PATCH 25), now "
+        "shared (<i>_block_factory</i>) to avoid any divergence "
+        "between the two menus.",
+    ),
+    (
+        "PATCH 27 — Undo / Redo",
+        "A single history stack (<i>core/history.UndoHistory</i>), "
+        "agnostic of block type: each undo point is a full JSON "
+        "snapshot of the document (same serialisation as saving in "
+        "PATCH 8/9), compared to the current state by a "
+        "<i>QTimer</i> polling every 600 ms — which groups fast "
+        "typing into a single \"undo\" per pause, without "
+        "instrumenting every block widget individually. Ctrl+Z "
+        "always forces an immediate flush, so undo works even right "
+        "after a keystroke. An application-level event filter "
+        "intercepts Ctrl+Z/Ctrl+Y before QTextEdit/QLineEdit's "
+        "native undo (disabled on the text block) to guarantee a "
+        "single, consistent history.",
+    ),
+    (
+        "PATCH 28 — Search",
+        "<i>core/search.py</i>: a pure function "
+        "(<i>search_document</i>), testable without Qt, that scans "
+        "text/headings/quote/code, checklists, lists and both table "
+        "engines (typed PATCH 14 and simple PATCH 24). "
+        "<i>SearchDialog</i> (Ctrl+F) reruns the search on every "
+        "keystroke and scrolls to the chosen result. This exposed "
+        "the lack of a <i>QScrollArea</i> around the blocks: added "
+        "here (a prerequisite for \"go to result\" to make sense), "
+        "without changing the drag & drop logic (coordinates still "
+        "relative to <i>BlocksArea</i>).",
+    ),
+    (
+        "PATCH 29 — Replace",
+        "<i>core/replace.py</i> (<i>replace_all</i>) follows the "
+        "same block categories as search, with one deliberate "
+        "exception: in the typed table (PATCH 15), only text "
+        "columns (text, number, dropdown, multi-select, items of a "
+        "nested checklist) are affected — Person columns are "
+        "excluded (a rename must go through PATCH 16 to stay in "
+        "sync with the registry), and Date/Duration/Boolean aren't "
+        "text. Replacing rich text (PATCH 6) clears its HTML, which "
+        "would otherwise become inconsistent with the new content. "
+        "\"Replace all\", in <i>SearchDialog</i>, is a document "
+        "mutation like any other: it's therefore undoable via "
+        "PATCH 27's generic history, with no extra code.",
+    ),
+    (
+        "PATCH 30 — Internal links",
+        "An internal link is an HTML anchor "
+        "<code>&lt;a href=\"block://ID\"&gt;</code> inserted into "
+        "rich text (PATCH 6): it therefore gets JSON saving for "
+        "free (the block's HTML already contains it), no new "
+        "format needed. The block picker (<i>BlockPickerDialog</i>, "
+        "opened via the toolbar's \"Internal link\" button) reuses "
+        "<i>core/block_preview.py</i> (generic text preview, tested "
+        "on its own) to display each candidate block. Ctrl+Click on "
+        "the link emits <i>link_activated</i>, wired to "
+        "<i>_scroll_to_block</i> (PATCH 28): navigation and search "
+        "share the same scrolling mechanism.",
+    ),
+    (
+        "PATCH 41 — Documentation",
+        "<code>README.md</code> at the root: install instructions, "
+        "the correct test command (<code>pytest</code>, not "
+        "<code>unittest discover</code> — see the PATCH 13 fix), "
+        "the three-layer architecture "
+        "(<code>core</code>/<code>blocks</code>/<code>ui</code>), the "
+        "internal API of the most reused entry points "
+        "(<i>Document</i>, <i>block_from_dict</i>, <i>UndoHistory</i>, "
+        "search/replace, export/import), the full JSON save format "
+        "with an example generated from the code (not hand-written), "
+        "and a five-step guide for adding a new block type. "
+        "<code>requirements.txt</code> / "
+        "<code>requirements-dev.txt</code> added: missing until now, "
+        "even though the README needs to reference them.",
+    ),
+    (
+        "PATCH 42 — Version 1.0",
+        "Stabilisation: cleaned up unused imports flagged by static "
+        "analysis (<code>pyflakes</code>, 0 warnings left on "
+        "<code>core/</code>, <code>blocks/</code>, "
+        "<code>ui/</code>), and an end-to-end integration test "
+        "(<code>tests/test_full_document_integration.py</code>): a "
+        "document with one block of every type, a full disk "
+        "save/reload cycle, cross-cutting search and replace, then "
+        "a real <i>MainWindow</i> smoke test "
+        "(adding nine block types, undone then redone in one "
+        "step). Feature freeze and release: "
+        "<code>core/version.py</code> (single source of the "
+        "version, shown in the window title and \"About\") and "
+        "<code>CHANGELOG.md</code> summarising the 42 patches.",
+    ),
+]
+
+
+def get_design_notes() -> list[tuple[str, str]]:
+    """Retourne les notes de design dans la langue courante."""
+    if get_language() == LANGUAGE_EN:
+        return DESIGN_NOTES_EN
+    return DESIGN_NOTES_FR
+
+
+# Conservé pour compatibilité ascendante (ancien nom importé ailleurs).
+DESIGN_NOTES = DESIGN_NOTES_FR

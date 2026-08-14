@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
 
 from core.document import Document
 from blocks.people_list_block import PeopleListBlock
+from ui.i18n import tr
 
 
 class _PersonChip(QWidget):
@@ -45,7 +46,7 @@ class _PersonChip(QWidget):
 
         remove_button = QToolButton(self)
         remove_button.setText("×")
-        remove_button.setToolTip("Retirer cette personne de l'effectif")
+        remove_button.setToolTip(tr("people_list.remove_tooltip"))
         remove_button.setStyleSheet("border: none;")
         remove_button.clicked.connect(on_remove)
         layout.addWidget(remove_button)
@@ -68,7 +69,7 @@ class PeopleListBlockWidget(QWidget):
         self._layout.addLayout(self._chips_row)
 
         self._input = QLineEdit(self)
-        self._input.setPlaceholderText("Ajouter une personne… (Entrée pour valider)")
+        self._input.setPlaceholderText(tr("people_list.add_placeholder"))
         self._input.returnPressed.connect(self._on_return_pressed)
         self._layout.addWidget(self._input)
 

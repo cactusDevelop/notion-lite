@@ -29,6 +29,7 @@ from PySide6.QtWidgets import (
 from core.document import Document
 from core.replace import replace_all
 from core.search import search_document
+from ui.i18n import tr
 
 
 class SearchDialog(QDialog):
@@ -46,22 +47,22 @@ class SearchDialog(QDialog):
         self._on_result_activated = on_result_activated
         self._on_document_changed = on_document_changed
 
-        self.setWindowTitle("Rechercher et remplacer")
+        self.setWindowTitle(tr("search.title"))
         self.resize(480, 460)
 
         layout = QVBoxLayout(self)
 
         self._input = QLineEdit(self)
-        self._input.setPlaceholderText("Rechercher dans le document...")
+        self._input.setPlaceholderText(tr("search.placeholder"))
         self._input.textChanged.connect(self._on_query_changed)
         layout.addWidget(self._input)
 
         replace_row = QHBoxLayout()
         self._replacement_input = QLineEdit(self)
-        self._replacement_input.setPlaceholderText("Remplacer par...")
+        self._replacement_input.setPlaceholderText(tr("search.replace_placeholder"))
         replace_row.addWidget(self._replacement_input, 1)
 
-        self._replace_all_button = QPushButton("Tout remplacer", self)
+        self._replace_all_button = QPushButton(tr("search.replace_all"), self)
         self._replace_all_button.clicked.connect(self._on_replace_all_clicked)
         replace_row.addWidget(self._replace_all_button)
         layout.addLayout(replace_row)
@@ -82,10 +83,10 @@ class SearchDialog(QDialog):
         if not query.strip():
             self._status_label.setText("")
         elif not results:
-            self._status_label.setText("Aucun résultat.")
+            self._status_label.setText(tr("search.no_results"))
         else:
-            plural = "s" if len(results) > 1 else ""
-            self._status_label.setText(f"{len(results)} résultat{plural}")
+            key = "search.result" if len(results) == 1 else "search.results"
+            self._status_label.setText(f"{len(results)} {tr(key)}")
 
         for result in results:
             item = QListWidgetItem(f"[{result.location}] {result.snippet}")
@@ -107,12 +108,13 @@ class SearchDialog(QDialog):
         count = replace_all(self._document, query, replacement)
 
         if count == 0:
-            self._status_label.setText("Aucun remplacement effectué.")
+            self._status_label.setText(tr("search.no_replacement"))
             return
 
         if self._on_document_changed is not None:
             self._on_document_changed()
 
-        plural = "s" if count > 1 else ""
-        self._status_label.setText(f"{count} remplacement{plural} effectué{plural}.")
+        self._status_label.setText(
+            tr("search.replacement_done_one" if count == 1 else "search.replacement_done_many").format(count=count)
+        )
         self._on_query_changed(self._input.text())

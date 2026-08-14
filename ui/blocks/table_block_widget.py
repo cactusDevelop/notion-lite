@@ -57,6 +57,7 @@ from ui.blocks.table_cell_dialogs import (
     edit_person_list,
 )
 from ui.no_scroll_combo_box import NoScrollComboBox
+from ui.i18n import tr
 
 # PATCH 56 — même intervalle de sondage que les blocs graphiques
 # (Gantt, courbes, formules) pour détecter une modification externe.
@@ -91,19 +92,19 @@ class TableBlockWidget(QWidget):
         layout.addWidget(self._table)
 
         buttons = QHBoxLayout()
-        add_row_btn = QPushButton("+ Ligne", self)
+        add_row_btn = QPushButton(tr("simple_table.add_row"), self)
         add_row_btn.clicked.connect(self._on_add_row)
         buttons.addWidget(add_row_btn)
 
-        add_col_btn = QPushButton("+ Colonne", self)
+        add_col_btn = QPushButton(tr("simple_table.add_column"), self)
         add_col_btn.clicked.connect(self._on_add_column)
         buttons.addWidget(add_col_btn)
 
-        del_row_btn = QPushButton("- Ligne", self)
+        del_row_btn = QPushButton(tr("simple_table.delete_row"), self)
         del_row_btn.clicked.connect(self._on_delete_row)
         buttons.addWidget(del_row_btn)
 
-        del_col_btn = QPushButton("- Colonne", self)
+        del_col_btn = QPushButton(tr("simple_table.delete_column"), self)
         del_col_btn.clicked.connect(self._on_delete_column)
         buttons.addWidget(del_col_btn)
         buttons.addStretch(1)
@@ -173,7 +174,7 @@ class TableBlockWidget(QWidget):
         place, son unité si elle est pertinente ("j", "€", "%" pour une
         colonne "Nombre") ou l'indication "début/fin" pour une colonne
         "Date" en plage. Rien du tout sinon (texte, booléen, liste...)."""
-        name = column.get("name") or f"Colonne {index + 1}"
+        name = column.get("name") or f"{tr('table.column_prefix')} {index + 1}"
         if column["type"] == COLUMN_TYPE_NUMBER and column.get("unit"):
             return f"{name} ({column['unit']})"
         if column["type"] == COLUMN_TYPE_DATE and column.get("range"):
@@ -261,10 +262,10 @@ class TableBlockWidget(QWidget):
         merge_up_action = None
         merge_down_action = None
         if row_index > 0:
-            merge_up_action = menu.addAction("Fusionner avec la ligne au-dessus")
+            merge_up_action = menu.addAction(tr("table.merge_up"))
         if row_index < len(rows) - 1:
-            merge_down_action = menu.addAction("Fusionner avec la ligne en dessous")
-        unmerge_action = menu.addAction("Annuler la fusion") if currently_merged else None
+            merge_down_action = menu.addAction(tr("table.merge_down"))
+        unmerge_action = menu.addAction(tr("table.unmerge")) if currently_merged else None
         if merge_up_action is None and merge_down_action is None and unmerge_action is None:
             return
 
@@ -387,9 +388,9 @@ class TableBlockWidget(QWidget):
 
         start_edit = _make_edit("start")
         end_edit = _make_edit("end")
-        cell_layout.addWidget(QLabel("Du", container))
+        cell_layout.addWidget(QLabel(tr("table.date_from"), container))
         cell_layout.addWidget(start_edit)
-        cell_layout.addWidget(QLabel("au", container))
+        cell_layout.addWidget(QLabel(tr("table.date_to"), container))
         cell_layout.addWidget(end_edit)
 
         def _push() -> None:
@@ -513,7 +514,7 @@ class TableBlockWidget(QWidget):
     # -- Colonnes ------------------------------------------------------
 
     def _on_add_column(self) -> None:
-        result = ask_column_definition(self, name=f"Colonne {len(self._block.columns) + 1}")
+        result = ask_column_definition(self, name=f"{tr('table.column_prefix')} {len(self._block.columns) + 1}")
         if result is None:
             return
         name, col_type, options, date_range, unit = result

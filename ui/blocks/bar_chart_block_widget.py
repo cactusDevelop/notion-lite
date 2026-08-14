@@ -37,6 +37,7 @@ from blocks.dependency_gantt_block import (
     find_source_table,
 )
 from ui.no_scroll_combo_box import NoScrollComboBox
+from ui.i18n import tr
 
 _MARGIN = 30
 _REFRESH_INTERVAL_MS = 500
@@ -77,7 +78,7 @@ class _BarChartCanvas(QWidget):
         painter.drawLine(_MARGIN, h - _MARGIN, w - _MARGIN, h - _MARGIN)
 
         if not self._bars:
-            painter.drawText(self.rect(), Qt.AlignCenter, "Aucune barre à afficher.")
+            painter.drawText(self.rect(), Qt.AlignCenter, tr("bar_chart.no_data"))
             painter.end()
             return
 
@@ -133,7 +134,7 @@ class BarChartBlockWidget(QWidget):
 
         header = QHBoxLayout()
         self._title_edit = QLineEdit(block.title, self)
-        self._title_edit.setPlaceholderText("Titre")
+        self._title_edit.setPlaceholderText(tr("bar_chart.title_placeholder"))
         self._title_edit.setFrame(False)
         self._title_edit.setStyleSheet(
             "QLineEdit { border: none; background: transparent; font-weight: bold; font-size: 15pt; }"
@@ -141,7 +142,7 @@ class BarChartBlockWidget(QWidget):
         self._title_edit.textChanged.connect(self._on_title_changed)
         header.addWidget(self._title_edit, 1)
         self._y_label_edit = QLineEdit(block.y_axis_label, self)
-        self._y_label_edit.setPlaceholderText("Axe Y")
+        self._y_label_edit.setPlaceholderText(tr("bar_chart.y_axis_placeholder"))
         self._y_label_edit.setFrame(False)
         self._y_label_edit.setStyleSheet(
             "QLineEdit { border: none; background: transparent; color: #666666; }"
@@ -152,11 +153,11 @@ class BarChartBlockWidget(QWidget):
 
         # -- PATCH 54 : source (planning par dépendances) + regroupement --
         source_row = QHBoxLayout()
-        source_row.addWidget(QLabel("Source :", self))
+        source_row.addWidget(QLabel(tr("bar_chart.source"), self))
         self._source_combo = NoScrollComboBox(self)
         self._source_combo.currentIndexChanged.connect(self._on_source_changed)
         source_row.addWidget(self._source_combo, 1)
-        source_row.addWidget(QLabel("Regrouper par :", self))
+        source_row.addWidget(QLabel(tr("bar_chart.group_by"), self))
         self._group_combo = NoScrollComboBox(self)
         self._group_combo.currentIndexChanged.connect(self._on_group_changed)
         source_row.addWidget(self._group_combo, 1)
@@ -165,11 +166,11 @@ class BarChartBlockWidget(QWidget):
         # -- PATCH 59 : colonnes "Prévu" / "Réel" (ex : "Prix estimé" /
         # "Prix réel") remplaçant l'ancienne ligne d'édition manuelle --
         columns_row = QHBoxLayout()
-        columns_row.addWidget(QLabel("Prévu :", self))
+        columns_row.addWidget(QLabel(tr("bar_chart.planned"), self))
         self._value_column_combo = NoScrollComboBox(self)
         self._value_column_combo.currentIndexChanged.connect(self._on_value_column_changed)
         columns_row.addWidget(self._value_column_combo, 1)
-        columns_row.addWidget(QLabel("Réel :", self))
+        columns_row.addWidget(QLabel(tr("bar_chart.actual"), self))
         self._actual_column_combo = NoScrollComboBox(self)
         self._actual_column_combo.currentIndexChanged.connect(self._on_actual_column_changed)
         columns_row.addWidget(self._actual_column_combo, 1)
@@ -207,10 +208,10 @@ class BarChartBlockWidget(QWidget):
     def _populate_source_combo(self) -> None:
         self._syncing = True
         self._source_combo.clear()
-        self._source_combo.addItem("Aucune", None)
+        self._source_combo.addItem(tr("dep_gantt.none_fem"), None)
         selected_index = 0
         for gantt in self._gantt_blocks():
-            self._source_combo.addItem(f"Planning « {gantt.id[:8]} »", gantt.id)
+            self._source_combo.addItem(f"{tr('bar_chart.schedule')} « {gantt.id[:8]} »", gantt.id)
             if gantt.id == self._block.source_gantt_id:
                 selected_index = self._source_combo.count() - 1
         self._source_combo.setCurrentIndex(selected_index)
@@ -220,7 +221,7 @@ class BarChartBlockWidget(QWidget):
 
     def _populate_group_combo(self) -> None:
         self._group_combo.clear()
-        self._group_combo.addItem("Par sous-tâche", None)
+        self._group_combo.addItem(tr("bar_chart.by_subtask"), None)
         table = self._source_table()
         selected_index = 0
         if table is not None:
@@ -242,7 +243,7 @@ class BarChartBlockWidget(QWidget):
             (self._actual_column_combo, self._block.actual_column_id),
         ):
             combo.clear()
-            combo.addItem("Durée + écart (Gantt)", None)
+            combo.addItem(tr("bar_chart.duration_plus_delta"), None)
             selected_index = 0
             for column in columns:
                 combo.addItem(column["name"], column["id"])
