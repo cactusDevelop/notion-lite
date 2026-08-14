@@ -126,6 +126,20 @@ pour ce qui est plus récent que cette section :
   écrits en style pytest** (plus de la moitié de la suite). Toujours
   utiliser `pytest`, jamais `unittest discover`, pour juger si "les
   tests passent".
+- **`QFileSystemModel.setFilter(... | QDir.Hidden)`** fait planter la
+  suite de tests offscreen (segfault natif Qt, non déterministe dans
+  le trace Python — n'apparaît pas forcément dans le test qui en est
+  la cause). Cause probable : indexation/watch récursif de tous les
+  dotfiles/dossiers cachés d'un dossier racine (dont `Path.home()`,
+  repli par défaut de l'explorateur), multiplié par les nombreuses
+  instances `MainWindow()` créées à travers la suite. Pour griser une
+  entrée "cachée" par convention (nom préfixé d'un point) sans
+  toucher au filtre du modèle, vérifier le nom via
+  `model.fileName(index).startswith(".")` dans un délégué
+  (`QStyledItemDelegate.initStyleOption`), pas `QFileInfo.isHidden()`
+  (dépend de l'attribut système sous Windows, pas du nom — ne se
+  déclenche pas pour un fichier juste préfixé d'un point sans cet
+  attribut posé).
 
 ## Conventions de test
 

@@ -10,7 +10,7 @@ import uuid
 from pathlib import Path
 
 from PySide6.QtCore import QEvent, QModelIndex, QPoint, QSettings, Qt, QTimer
-from PySide6.QtGui import QAction, QActionGroup, QColor, QKeySequence, QTextCursor
+from PySide6.QtGui import QAction, QActionGroup, QColor, QKeySequence, QPalette, QTextCursor
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QSizePolicy,
+    QStyledItemDelegate,
     QTextEdit,
     QTreeView,
     QVBoxLayout,
@@ -185,6 +186,28 @@ def _convert_targets() -> list[tuple[str, str]]:
         ("quote", tr("context.convert.quote")),
         ("code", tr("context.convert.code")),
     ]
+
+
+class _ExplorerHiddenFileDelegate(QStyledItemDelegate):
+    """PATCH 87 — Grise les entrées "cachées" par convention (nom
+    préfixé d'un point, ex. ".methodo-project.json"), pour celles que
+    le filtre par défaut de QFileSystemModel choisit malgré tout
+    d'afficher : sous Windows, `QFileInfo.isHidden()` ne se base pas
+    sur le nom mais sur l'attribut système "caché" (non positionné ici
+    à la création du fichier), donc ces entrées y échappent au filtre
+    et restent visibles — d'où le grisé, à l'instar de l'explorateur
+    Windows. Sous Unix, elles sont déjà exclues en amont par le filtre
+    par défaut (dont on ne change rien ici, pour ne pas faire
+    apparaître tout le contenu cache/config d'un dossier quelconque)."""
+
+    def __init__(self, model: QFileSystemModel, parent=None) -> None:
+        super().__init__(parent)
+        self._model = model
+
+    def initStyleOption(self, option, index) -> None:
+        super().initStyleOption(option, index)
+        if self._model.fileName(index).startswith("."):
+            option.palette.setColor(option.palette.currentColorGroup(), QPalette.Text, QColor(Qt.gray))
 
 
 class MainWindow(QMainWindow):
@@ -639,6 +662,9 @@ class MainWindow(QMainWindow):
 
         self._explorer_tree = QTreeView(container)
         self._explorer_tree.setModel(self._explorer_model)
+        self._explorer_tree.setItemDelegate(
+            _ExplorerHiddenFileDelegate(self._explorer_model, self._explorer_tree)
+        )
         self._explorer_tree.setHeaderHidden(True)
         # PATCH 85 — Sélection multiple façon IDE : Shift étend la
         # sélection à tous les éléments consécutifs entre l'ancre et le

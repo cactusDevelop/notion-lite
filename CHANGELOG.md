@@ -2,6 +2,16 @@
 
 ## Post-1.0
 
+- **87** — Fichier système `.methodo-project.json` du template "Modèle
+  OG" : reste dans "client 1" (voir explication en session, il décrit
+  ce document précis, pas "le projet" au sens du dossier parent avec
+  ses deux clients — cohérent avec le reste de l'architecture où un
+  dossier = un projet = un `.json`). Explorateur : les entrées
+  préfixées d'un point (invisibles par défaut sous Unix, mais pas
+  masquées par Windows faute d'attribut système "caché" posé à la
+  création) sont désormais grisées quand elles apparaissent, à
+  l'instar de l'explorateur de fichiers Windows
+  (`_ExplorerHiddenFileDelegate`).
 - **86** — "Nouveau projet (Modèle OG)" crée désormais deux dossiers
   clients ("client 1", "client 2") dans le dossier projet, le gabarit
   "Modèle OG" étant initialisé dans "client 1" (au lieu d'un unique

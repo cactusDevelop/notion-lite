@@ -157,6 +157,32 @@ def test_explorer_tree_allows_multi_selection(window):
     assert window._explorer_tree.selectionMode() == QAbstractItemView.ExtendedSelection
 
 
+def test_dotfile_is_greyed_out_when_visible(window, project_dir):
+    """PATCH 87 — Un fichier préfixé d'un point (ex.
+    ".methodo-project.json") doit être affiché en grisé par le
+    délégué de l'explorateur, à l'instar de l'explorateur Windows,
+    plutôt que dans la couleur de texte normale."""
+    (project_dir / ".methodo-project.json").write_text("{}", encoding="utf-8")
+    (project_dir / "visible.json").write_text("{}", encoding="utf-8")
+    window._set_explorer_root(project_dir)
+
+    from PySide6.QtWidgets import QStyleOptionViewItem
+
+    delegate = window._explorer_tree.itemDelegate()
+    hidden_index = window._explorer_model.index(str(project_dir / ".methodo-project.json"))
+    visible_index = window._explorer_model.index(str(project_dir / "visible.json"))
+
+    hidden_option = QStyleOptionViewItem()
+    delegate.initStyleOption(hidden_option, hidden_index)
+    visible_option = QStyleOptionViewItem()
+    delegate.initStyleOption(visible_option, visible_index)
+
+    from PySide6.QtGui import QPalette
+
+    assert hidden_option.palette.color(QPalette.Text).name() == "#a0a0a4"
+    assert visible_option.palette.color(QPalette.Text).name() != "#a0a0a4"
+
+
 def test_new_project_template_creates_two_client_folders(window, project_dir):
     """PATCH 86 — "Nouveau projet (Modèle OG)" crée "client 1" (avec le
     gabarit dedans) et "client 2" (vide), au lieu d'un fichier gabarit
