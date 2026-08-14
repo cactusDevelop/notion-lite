@@ -2,6 +2,9 @@
 
 ## Post-1.0
 
+- **84** — Le Gantt du template "Modèle OG" a désormais sa colonne
+  "Phases" pré-sélectionnée (regroupement par phase visible dès
+  l'ouverture, sans configuration manuelle).
 - **83** — Corrige la croix de suppression des étiquettes du bloc
   "Effectif" : ne réagissait pas au clic (le signal Qt `clicked(bool)`
   écrasait silencieusement l'identifiant de la personne attendu par le

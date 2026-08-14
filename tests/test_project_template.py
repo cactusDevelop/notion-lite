@@ -96,6 +96,18 @@ def test_tasks_table_and_dependency_gantt_are_consistent():
     assert tests["person_names"] != []
 
 
+def test_gantt_has_phases_column_preselected():
+    """PATCH 84 — La colonne "Phases" du tableau des tâches doit être
+    pré-sélectionnée dans le Gantt du template, pour que le groupement
+    par phase soit visible dès l'ouverture, sans configuration manuelle."""
+    document = build_project_template()
+    tasks_table = document.blocks[9]
+    gantt = document.blocks[10]
+    phase_col = next(c for c in tasks_table.columns if c["name"] == "Phases")
+
+    assert gantt.phase_column_id == phase_col["id"]
+
+
 def test_efficiency_chart_tracks_the_gantt_block():
     document = build_project_template()
     gantt = document.blocks[10]

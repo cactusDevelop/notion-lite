@@ -151,6 +151,7 @@ def build_project_template() -> Document:
         risk_column_id=risk_col["id"],
         dependency_column_id=dependency_col["id"],
         delta_column_id=delta_col["id"],
+        phase_column_id=phase_col["id"],
     )
     document.add_block(gantt)
 
