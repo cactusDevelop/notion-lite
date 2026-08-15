@@ -99,7 +99,7 @@ def block_from_dict(raw: dict[str, Any]) -> Block:
             dependency_column_id=data.get("dependency_column_id"),
             delta_column_id=data.get("delta_column_id"),
             deltas=data.get("deltas", {}),
-            time_unit=data.get("time_unit", "jours"),
+            chart_format=data.get("chart_format", "micro"),
             # PATCH 89 — manquait à la reconstruction : le bloc était
             # bien enregistré avec sa colonne "Phases" (voir
             # DependencyGanttBlock.set_source / to_dict), mais elle

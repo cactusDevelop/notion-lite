@@ -2,6 +2,21 @@
 
 ## Post-1.0
 
+- **90** — Gantt (dépendances) : le menu "Unité" (Jours/Mois) devient
+  "Format", avec deux options :
+  - **micro** — comportement précédent, mais l'axe temporel bascule
+    désormais automatiquement entre jours et mois selon le zoom
+    (progression adaptative 1J, 2J, 4J, 8J, 16J, 1M, 2M... au lieu du
+    choix manuel Jours/Mois, supprimé) ;
+  - **macro** — nouveau : calendrier (une ligne = une semaine de 7
+    cases/jours), avec les bâtonnets de chaque personne dessinés à
+    l'intérieur de chaque semaine (retard/avance gérés comme en
+    micro). Le clic-glissé d'ajustement direct reste réservé au mode
+    micro ; en macro, cliquer un bâtonnet ouvre toujours la pop-up de
+    saisie précise (échelle non uniforme d'une semaine à l'autre).
+  `DependencyGanttBlock.time_unit` (jours/mois) est remplacé par
+  `chart_format` (micro/macro) ; la saisie précise de l'écart se fait
+  désormais toujours en jours.
 - **89** — Corrige la colonne "Phases" du Gantt (dépendances) du
   template "Modèle OG" (et de tout Gantt utilisant cette option) :
   bien sélectionnée à la création, mais perdue dès la première

@@ -64,6 +64,16 @@ DAYS_PER_MONTH = 30.0
 UNIT_DAYS = "jours"
 UNIT_MONTHS = "mois"
 
+# PATCH 90 — remplace l'ancien sélecteur manuel "Jours"/"Mois" (UNIT_DAYS/
+# UNIT_MONTHS ci-dessus, conservés pour format_duration_in_unit) par un
+# menu "Format" à deux entrées :
+#   - micro : axe temporel continu, gradué en jours puis en mois de façon
+#     adaptative selon le zoom (voir _micro_axis_step côté widget).
+#   - macro : calendrier (lignes de 7 cases/jours) avec le Gantt dessiné
+#     à l'intérieur de chaque semaine.
+FORMAT_MICRO = "micro"
+FORMAT_MACRO = "macro"
+
 
 def format_duration_in_unit(days: float, unit: str) -> str:
     """Formate une durée (toujours reçue en jours) pour l'affichage,
@@ -96,7 +106,7 @@ class DependencyGanttBlock(Block):
         dependency_column_id: Optional[str] = None,
         delta_column_id: Optional[str] = None,
         deltas: dict[str, float] | None = None,
-        time_unit: str = UNIT_DAYS,
+        chart_format: str = FORMAT_MICRO,
         phase_column_id: Optional[str] = None,
         id: str | None = None,
     ) -> None:
@@ -111,7 +121,7 @@ class DependencyGanttBlock(Block):
                 "dependency_column_id": dependency_column_id,
                 "delta_column_id": delta_column_id,
                 "deltas": dict(deltas or {}),
-                "time_unit": time_unit,
+                "chart_format": chart_format,
                 # PATCH 74 — colonne texte optionnelle (ex : "Phases") pour
                 # regrouper les sous-tâches et afficher des séparateurs
                 # verticaux étiquetés sur le graphique (voir compute_schedule
@@ -154,15 +164,16 @@ class DependencyGanttBlock(Block):
         return self.data.get("phase_column_id")
 
     @property
-    def time_unit(self) -> str:
-        """PATCH 49 — unité d'affichage de l'axe temporel et des valeurs
-        chiffrées du planning ("jours" ou "mois"). Le stockage interne
-        reste toujours en jours, voir format_duration_in_unit()."""
-        return self.data.get("time_unit", UNIT_DAYS)
+    def chart_format(self) -> str:
+        """PATCH 90 — affichage du graphique : "micro" (axe temporel
+        continu, granularité jours/mois adaptative) ou "macro"
+        (calendrier hebdomadaire). Remplace l'ancien `time_unit`
+        (PATCH 49, "jours"/"mois")."""
+        return self.data.get("chart_format", FORMAT_MICRO)
 
-    @time_unit.setter
-    def time_unit(self, value: str) -> None:
-        self.data["time_unit"] = value if value in (UNIT_DAYS, UNIT_MONTHS) else UNIT_DAYS
+    @chart_format.setter
+    def chart_format(self, value: str) -> None:
+        self.data["chart_format"] = value if value in (FORMAT_MICRO, FORMAT_MACRO) else FORMAT_MICRO
 
     def set_source(
         self,

@@ -68,8 +68,8 @@ from PySide6.QtWidgets import (
 
 from blocks.dependency_gantt_block import (
     DAYS_PER_MONTH,
-    UNIT_DAYS,
-    UNIT_MONTHS,
+    FORMAT_MACRO,
+    FORMAT_MICRO,
     DependencyGanttBlock,
     available_delta_columns,
     available_dependency_columns,
@@ -102,31 +102,41 @@ _ADVANCE_COLOR = QColor("#2196f3")
 _DRAG_THRESHOLD_PX = 4
 _DELTA_RANGE_DAYS = 999.0
 
-def _unit_labels() -> dict[str, str]:
-    return {UNIT_DAYS: tr("dep_gantt.days"), UNIT_MONTHS: tr("dep_gantt.months")}
-
 # PATCH 71 — nombre de pixels par jour à l'échelle 100 %, multiplié par
-# le zoom courant pour obtenir la largeur totale du graphique.
+# le zoom courant pour obtenir la largeur totale du graphique (mode
+# micro uniquement, voir _MACRO_BASE_CELL_PX pour le mode macro).
 _BASE_PX_PER_DAY = 4
 _ZOOM_MIN = 10
 _ZOOM_MAX = 800
 _ZOOM_STEP = 25
 _ZOOM_DEFAULT = 100
 
+# PATCH 90 — mode macro (calendrier) : largeur/hauteur des cases du
+# calendrier (7 colonnes = jours de la semaine), une "semaine" par
+# ligne, avec une bande par personne à l'intérieur de chaque semaine.
+_MACRO_BASE_CELL_PX = 40
+_MACRO_MIN_CELL_PX = 24
+_MACRO_HEADER_H = 16
+_MACRO_PERSON_ROW_H = 22
+_MACRO_WEEK_GAP = 6
 
-def _nice_axis_step(max_value: float) -> float:
-    """Choisit un pas d'axe "rond" et toujours entier (1, 2, 5, 10, 20,
-    50, 100, ...), qui grandit avec `max_value` (dézoomer donne des
-    graduations plus espacées : 1, 5, 10, 20 J...), quelle que soit
-    l'unité d'affichage (jours ou mois — jamais de graduation
-    fractionnaire comme "0.1")."""
-    raw_step = max(max_value / 8, 1.0)
-    magnitude = 10 ** math.floor(math.log10(raw_step))
-    for factor in (1, 2, 5, 10):
-        step = factor * magnitude
-        if step >= raw_step:
-            return step
-    return magnitude * 10
+
+def _micro_axis_step(max_value_days: float) -> tuple[float, str]:
+    """PATCH 90 — Choisit un pas d'axe adaptatif pour le mode micro, en
+    doublant depuis 1 jour (1, 2, 4, 8, 16 J) puis en poursuivant le
+    doublement en mois au-delà (1, 2, 4, 8... M), plutôt que la
+    progression 1/2/5/10 utilisée avant l'introduction du mode macro.
+    Retourne (pas en jours, suffixe "J" ou "M")."""
+    raw_step = max(max_value_days / 8, 1.0)
+    step = 1.0
+    is_months = False
+    while step < raw_step:
+        if step < 16:
+            step *= 2
+        else:
+            step = DAYS_PER_MONTH if not is_months else step * 2
+            is_months = True
+    return step, ("M" if is_months else "J")
 
 
 def _compute_phase_groups(schedule: list[dict]) -> list[dict]:
@@ -169,7 +179,7 @@ class _DependencyGanttCanvas(QWidget):
         # PATCH 74 — séparateurs de phase (voir set_schedule/_update_geometry).
         self._phase_groups: list[dict] = []
         self._content_top = _AXIS_HEIGHT
-        self._time_unit = UNIT_DAYS
+        self._format = FORMAT_MICRO
         self.on_bar_clicked = None
         self.on_bar_drag_moved = None
         self.on_bar_drag_finished = None
@@ -202,9 +212,23 @@ class _DependencyGanttCanvas(QWidget):
         self._update_geometry()
         self.update()
 
-    def set_time_unit(self, unit: str) -> None:
-        self._time_unit = unit
+    def set_format(self, chart_format: str) -> None:
+        self._format = chart_format
+        self._update_geometry()
         self.update()
+
+    @property
+    def base_content_width(self) -> float:
+        """PATCH 90 — largeur "à 100 %" utilisée par le zoom auto
+        (`DependencyGanttBlockWidget._sync_auto_zoom`), qui diffère
+        entre les deux modes : proportionnelle au nombre de jours en
+        micro, fixe (7 colonnes) en macro."""
+        if self._format == FORMAT_MACRO:
+            return 7 * _MACRO_BASE_CELL_PX
+        return max(self._max_x_days, 1.0) * _BASE_PX_PER_DAY
+
+    def _macro_cell_width(self) -> int:
+        return max(int(_MACRO_BASE_CELL_PX * self._zoom_percent / 100), _MACRO_MIN_CELL_PX)
 
     def set_schedule(self, schedule: list[dict]) -> None:
         people: list[str] = []
@@ -229,10 +253,18 @@ class _DependencyGanttCanvas(QWidget):
         self.update()
 
     def _update_geometry(self) -> None:
-        chart_width = int(self._max_x_days * _BASE_PX_PER_DAY * self._zoom_percent / 100)
-        self._content_top = _AXIS_HEIGHT + (_PHASE_BAND_HEIGHT if self._phase_groups else 0)
-        self.setFixedWidth(_LABEL_WIDTH + max(chart_width, 20) + 10)
-        self.setFixedHeight(max(_ROW_HEIGHT, _ROW_HEIGHT * len(self._people)) + self._content_top)
+        if self._format == FORMAT_MACRO:
+            cell_w = self._macro_cell_width()
+            total_days = max(int(math.ceil(max(self._max_x_days, 1.0))), 1)
+            weeks = max(1, math.ceil(total_days / 7))
+            week_h = _MACRO_HEADER_H + max(1, len(self._people)) * _MACRO_PERSON_ROW_H
+            self.setFixedWidth(_LABEL_WIDTH + 7 * cell_w + 10)
+            self.setFixedHeight(weeks * week_h + max(weeks - 1, 0) * _MACRO_WEEK_GAP + 10)
+        else:
+            chart_width = int(self._max_x_days * _BASE_PX_PER_DAY * self._zoom_percent / 100)
+            self._content_top = _AXIS_HEIGHT + (_PHASE_BAND_HEIGHT if self._phase_groups else 0)
+            self.setFixedWidth(_LABEL_WIDTH + max(chart_width, 20) + 10)
+            self.setFixedHeight(max(_ROW_HEIGHT, _ROW_HEIGHT * len(self._people)) + self._content_top)
         if self.on_geometry_changed is not None:
             self.on_geometry_changed()
 
@@ -246,6 +278,14 @@ class _DependencyGanttCanvas(QWidget):
         if event.button() == Qt.LeftButton:
             task = self._bar_at(event.pos())
             if task is not None:
+                if self._format == FORMAT_MACRO:
+                    # PATCH 90 — pas de clic-glissé en mode macro : les
+                    # échelles ne sont pas uniformes (semaine par semaine),
+                    # le clic ouvre donc toujours la pop-up de saisie
+                    # précise plutôt qu'un ajustement direct au pixel.
+                    if self.on_bar_clicked is not None:
+                        self.on_bar_clicked(task)
+                    return
                 self._drag_task = task
                 self._drag_start_x = event.pos().x()
                 self._drag_start_delta = task["delta"]
@@ -292,6 +332,13 @@ class _DependencyGanttCanvas(QWidget):
             painter.end()
             return
 
+        if self._format == FORMAT_MACRO:
+            self._paint_macro(painter)
+        else:
+            self._paint_micro(painter)
+        painter.end()
+
+    def _paint_micro(self, painter: QPainter) -> None:
         max_x_days = max(
             (max(t["resolution"], t["end"]) for tasks in self._tasks_by_person.values() for t in tasks),
             default=1.0,
@@ -308,20 +355,21 @@ class _DependencyGanttCanvas(QWidget):
         def to_x(day: float) -> int:
             return _LABEL_WIDTH + int(day / max_x_days * chart_width)
 
-        # -- Axe temporel (PATCH 49), gradué dans l'unité choisie -------
-        divisor = DAYS_PER_MONTH if self._time_unit == UNIT_MONTHS else 1.0
-        max_x_display = max_x_days / divisor
-        step_display = _nice_axis_step(max_x_display)
-        unit_suffix = "M" if self._time_unit == UNIT_MONTHS else "J"
+        # -- Axe temporel (PATCH 49), gradué en jours puis en mois de
+        # façon adaptative selon le zoom (PATCH 90, remplace l'ancien
+        # sélecteur manuel "Jours"/"Mois") -------------------------------
+        step_days, unit_suffix = _micro_axis_step(max_x_days)
+        divisor = DAYS_PER_MONTH if unit_suffix == "M" else 1.0
 
         painter.setPen(QPen(QColor("#888888"), 1))
         painter.drawLine(_LABEL_WIDTH, _AXIS_HEIGHT, self.width(), _AXIS_HEIGHT)
-        tick_display = 0.0
-        while tick_display <= max_x_display + step_display / 2:
-            x = to_x(tick_display * divisor)
+        tick_days = 0.0
+        while tick_days <= max_x_days + step_days / 2:
+            x = to_x(tick_days)
             painter.drawLine(x, _AXIS_HEIGHT - 4, x, _AXIS_HEIGHT)
+            tick_display = tick_days / divisor
             painter.drawText(x - 20, 0, 40, _AXIS_HEIGHT - 4, Qt.AlignCenter, f"{unit_suffix}{tick_display:g}")
-            tick_display += step_display
+            tick_days += step_days
 
         # -- Séparateurs de phase (PATCH 74) : un trait vertical pointillé
         # à chaque début de phase (sauf la toute première, en début d'axe),
@@ -366,32 +414,86 @@ class _DependencyGanttCanvas(QWidget):
 
                 self._bar_rects.append((hit_rect, task))
 
-        painter.end()
+    def _paint_macro(self, painter: QPainter) -> None:
+        """PATCH 90 — mode macro : calendrier (une ligne = une semaine
+        de 7 cases/jours), avec une bande par personne à l'intérieur de
+        chaque semaine, colorée aux jours où elle a une sous-tâche
+        active (mêmes couleurs/retard/avance qu'en mode micro)."""
+        cell_w = self._macro_cell_width()
+        week_h = _MACRO_HEADER_H + max(1, len(self._people)) * _MACRO_PERSON_ROW_H
+        total_days = max(int(math.ceil(max(self._max_x_days, 1.0))), 1)
+        weeks = max(1, math.ceil(total_days / 7))
+
+        def day_x(day_in_week: float) -> int:
+            return _LABEL_WIDTH + int(day_in_week * cell_w)
+
+        for week in range(weeks):
+            week_y = week * (week_h + _MACRO_WEEK_GAP)
+            week_start_day = week * 7
+
+            painter.setPen(QPen(self.palette().color(QPalette.WindowText)))
+            painter.drawText(
+                0, week_y, _LABEL_WIDTH, week_h, Qt.AlignVCenter | Qt.AlignLeft,
+                f"{tr('dep_gantt.week')} {week + 1}",
+            )
+
+            for d in range(7):
+                x = day_x(d)
+                painter.setPen(QPen(QColor("#cccccc"), 1))
+                painter.drawRect(QRect(x, week_y, cell_w, week_h))
+                painter.setPen(QPen(self.palette().color(QPalette.WindowText)))
+                painter.drawText(
+                    x + 3, week_y + 1, cell_w - 6, _MACRO_HEADER_H - 2,
+                    Qt.AlignLeft | Qt.AlignVCenter, f"J{week_start_day + d + 1}",
+                )
+
+            for p_index, name in enumerate(self._people):
+                row_y = week_y + _MACRO_HEADER_H + p_index * _MACRO_PERSON_ROW_H
+                for task in self._tasks_by_person[name]:
+                    for x0, x1, color in _clip_task_to_week(task, week_start_day, week_start_day + 7):
+                        bar_rect = QRect(
+                            day_x(x0), row_y + 3, max(day_x(x1) - day_x(x0), 2), _MACRO_PERSON_ROW_H - 6
+                        )
+                        painter.fillRect(bar_rect, color)
+                        self._bar_rects.append((QRect(bar_rect), task))
+
+
+def _clip_task_to_week(task: dict, week_start_day: float, week_end_day: float):
+    """PATCH 90 — Découpe les segments (barre normale + retard/avance)
+    d'une sous-tâche sur l'étendue [week_start_day, week_end_day),
+    en coordonnées "jour dans la semaine" (0-7). Ne produit rien pour
+    les semaines que la sous-tâche ne traverse pas."""
+    segments = [(task["start"], task["end"], QColor(task["color"]))]
+    if task["delta"] > 0:
+        segments.append((task["end"], task["resolution"], _DELAY_COLOR))
+    elif task["delta"] < 0:
+        segments.append((task["resolution"], task["end"], _ADVANCE_COLOR))
+    for start, end, color in segments:
+        clipped_start = max(start, week_start_day)
+        clipped_end = min(end, week_end_day)
+        if clipped_end > clipped_start:
+            yield clipped_start - week_start_day, clipped_end - week_start_day, color
 
 
 class _DeltaDialog(QDialog):
     """Pop-up d'édition de l'écart (retard/avance) d'une sous-tâche.
 
-    La valeur est saisie et affichée dans l'unité choisie pour le
-    Gantt (jours ou mois), mais toujours convertie en jours avant
-    d'être renvoyée via value_in_days().
+    PATCH 90 — la saisie précise se fait toujours en jours (l'ancien
+    sélecteur "Jours"/"Mois" est remplacé par le menu "Format"
+    micro/macro, qui ne concerne que l'affichage du graphique, plus la
+    saisie).
     """
 
-    def __init__(self, task_label: str, current_delta_days: float, unit: str, parent=None) -> None:
+    def __init__(self, task_label: str, current_delta_days: float, parent=None) -> None:
         super().__init__(parent)
         self.setWindowTitle(f"{tr('dep_gantt.delta')} — {task_label}")
-        self._unit = unit
-        divisor = DAYS_PER_MONTH if unit == UNIT_MONTHS else 1.0
 
         layout = QVBoxLayout(self)
-        unit_label = _unit_labels().get(unit, tr("dep_gantt.days")).lower()
-        layout.addWidget(
-            QLabel(f"{tr('dep_gantt.delta_hint')} {unit_label} :", self)
-        )
+        layout.addWidget(QLabel(f"{tr('dep_gantt.delta_hint')} {tr('dep_gantt.days').lower()} :", self))
         self._spin = QDoubleSpinBox(self)
         self._spin.setRange(-999, 999)
         self._spin.setDecimals(2)
-        self._spin.setValue(current_delta_days / divisor)
+        self._spin.setValue(current_delta_days)
         layout.addWidget(self._spin)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel, self)
@@ -400,8 +502,7 @@ class _DeltaDialog(QDialog):
         layout.addWidget(buttons)
 
     def value_in_days(self) -> float:
-        divisor = DAYS_PER_MONTH if self._unit == UNIT_MONTHS else 1.0
-        return self._spin.value() * divisor
+        return self._spin.value()
 
 
 class DependencyGanttBlockWidget(QWidget):
@@ -441,17 +542,21 @@ class DependencyGanttBlockWidget(QWidget):
             self._combos[key] = combo
         layout.addLayout(selectors)
 
-        unit_row = QHBoxLayout()
-        unit_row.addWidget(QLabel(tr("dep_gantt.unit"), self))
-        self._unit_combo = NoScrollComboBox(self)
-        self._unit_combo.addItem(tr("dep_gantt.days"), UNIT_DAYS)
-        self._unit_combo.addItem(tr("dep_gantt.months"), UNIT_MONTHS)
-        index = self._unit_combo.findData(self._block.time_unit)
-        self._unit_combo.setCurrentIndex(index if index >= 0 else 0)
-        self._unit_combo.currentIndexChanged.connect(self._on_unit_changed)
-        unit_row.addWidget(self._unit_combo)
-        unit_row.addStretch(1)
-        layout.addLayout(unit_row)
+        # PATCH 90 — remplace l'ancien sélecteur "Unité" (Jours/Mois) par
+        # "Format" (Micro/Macro) : micro garde l'axe continu (désormais
+        # gradué en jours puis mois de façon adaptative selon le zoom),
+        # macro affiche un calendrier hebdomadaire.
+        format_row = QHBoxLayout()
+        format_row.addWidget(QLabel(tr("dep_gantt.format"), self))
+        self._format_combo = NoScrollComboBox(self)
+        self._format_combo.addItem(tr("dep_gantt.micro"), FORMAT_MICRO)
+        self._format_combo.addItem(tr("dep_gantt.macro"), FORMAT_MACRO)
+        index = self._format_combo.findData(self._block.chart_format)
+        self._format_combo.setCurrentIndex(index if index >= 0 else 0)
+        self._format_combo.currentIndexChanged.connect(self._on_format_changed)
+        format_row.addWidget(self._format_combo)
+        format_row.addStretch(1)
+        layout.addLayout(format_row)
 
         # PATCH 70 — curseur d'échelle (zoom) : agrandit/réduit le
         # nombre de pixels par jour, indépendamment de la largeur du bloc.
@@ -490,7 +595,7 @@ class DependencyGanttBlockWidget(QWidget):
         self._canvas.on_bar_clicked = self._on_bar_clicked
         self._canvas.on_bar_drag_moved = self._on_bar_drag_moved
         self._canvas.on_bar_drag_finished = self._on_bar_drag_finished
-        self._canvas.set_time_unit(self._block.time_unit)
+        self._canvas.set_format(self._block.chart_format)
         # PATCH 71 — zone de défilement STRICTEMENT horizontale : le
         # canvas garde toujours sa hauteur complète (jamais tronquée
         # verticalement), `widgetResizable=False` pour que sa largeur
@@ -584,11 +689,13 @@ class DependencyGanttBlockWidget(QWidget):
             )
         self.refresh()
 
-    def _on_unit_changed(self) -> None:
+    def _on_format_changed(self) -> None:
         if self._syncing:
             return
-        self._block.time_unit = self._unit_combo.currentData()
-        self._canvas.set_time_unit(self._block.time_unit)
+        self._block.chart_format = self._format_combo.currentData()
+        self._canvas.set_format(self._block.chart_format)
+        self._zoom_auto = True
+        self._sync_auto_zoom()
         self.refresh()
 
     # -- Zoom (PATCH 71) --------------------------------------------------
@@ -616,8 +723,7 @@ class DependencyGanttBlockWidget(QWidget):
             return
         viewport_width = self._scroll_area.viewport().width()
         available = max(viewport_width - _LABEL_WIDTH - 10, 20)
-        max_x_days = max(self._canvas.max_x_days, 1.0)
-        ideal = available / (max_x_days * _BASE_PX_PER_DAY) * 100
+        ideal = available / self._canvas.base_content_width * 100
         target = max(_ZOOM_MIN, min(_ZOOM_MAX, math.floor(ideal)))
         self._syncing_zoom = True
         self._zoom_slider.setValue(target)
@@ -668,7 +774,7 @@ class DependencyGanttBlockWidget(QWidget):
             self._block.set_delta(row_id, value_days)
 
     def _on_bar_clicked(self, task: dict) -> None:
-        dialog = _DeltaDialog(task["label"], task["delta"], self._block.time_unit, parent=self)
+        dialog = _DeltaDialog(task["label"], task["delta"], parent=self)
         if dialog.exec() != QDialog.Accepted:
             return
         self._apply_delta(task["row_id"], dialog.value_in_days())

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from blocks.dependency_gantt_block import (
+    FORMAT_MACRO,
+    FORMAT_MICRO,
     UNIT_DAYS,
     UNIT_MONTHS,
     DependencyGanttBlock,
@@ -248,14 +250,14 @@ def test_delta_column_updates_cascade_like_legacy_delta():
     assert dev["start"] == 2.0
 
 
-def test_time_unit_defaults_to_days_and_is_settable():
+def test_chart_format_defaults_to_micro_and_is_settable():
     block = DependencyGanttBlock()
-    assert block.time_unit == UNIT_DAYS
-    block.time_unit = UNIT_MONTHS
-    assert block.time_unit == UNIT_MONTHS
-    # Valeur invalide : repli silencieux sur "jours".
-    block.time_unit = "semaines"
-    assert block.time_unit == UNIT_DAYS
+    assert block.chart_format == FORMAT_MICRO
+    block.chart_format = FORMAT_MACRO
+    assert block.chart_format == FORMAT_MACRO
+    # Valeur invalide : repli silencieux sur "micro".
+    block.chart_format = "meso"
+    assert block.chart_format == FORMAT_MICRO
 
 
 def test_format_duration_in_unit():
@@ -264,7 +266,7 @@ def test_format_duration_in_unit():
     assert format_duration_in_unit(45, UNIT_MONTHS) == "1.5 mois"
 
 
-def test_roundtrip_via_registry_preserves_delta_column_and_time_unit():
+def test_roundtrip_via_registry_preserves_delta_column_and_chart_format():
     doc, table, label_col, person_col, duration_col, risk_col, dep_col = _build_document()
     delta_col = table.add_column("Ecarts", col_type=COLUMN_TYPE_NUMBER)
     gantt = DependencyGanttBlock(
@@ -272,13 +274,13 @@ def test_roundtrip_via_registry_preserves_delta_column_and_time_unit():
         label_column_id=label_col["id"],
         duration_column_id=duration_col["id"],
         delta_column_id=delta_col["id"],
-        time_unit=UNIT_MONTHS,
+        chart_format=FORMAT_MACRO,
     )
 
     rebuilt = block_from_dict(gantt.to_dict())
     assert isinstance(rebuilt, DependencyGanttBlock)
     assert rebuilt.delta_column_id == delta_col["id"]
-    assert rebuilt.time_unit == UNIT_MONTHS
+    assert rebuilt.chart_format == FORMAT_MACRO
 
 
 def test_available_delta_columns_are_number_columns():

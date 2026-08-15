@@ -319,7 +319,10 @@ _STRINGS: dict[str, dict[str, str]] = {
     "dep_gantt.dependencies": {"fr": "Dépendances", "en": "Dependencies"},
     "dep_gantt.deltas": {"fr": "Ecarts", "en": "Deviations"},
     "dep_gantt.phases": {"fr": "Phases", "en": "Phases"},
-    "dep_gantt.unit": {"fr": "Unité :", "en": "Unit:"},
+    "dep_gantt.format": {"fr": "Format :", "en": "Format:"},
+    "dep_gantt.micro": {"fr": "Micro", "en": "Micro"},
+    "dep_gantt.macro": {"fr": "Macro", "en": "Macro"},
+    "dep_gantt.week": {"fr": "Semaine", "en": "Week"},
     "dep_gantt.none_fem": {"fr": "(aucune)", "en": "(none)"},
 
     # -- Bloc Graphique en bâtonnets (PATCH 80) --------------------------------
