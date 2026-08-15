@@ -226,3 +226,48 @@ def test_weekend_color_is_derived_from_palette_not_a_fixed_hex(qapp):
         assert weekend_color.lightness() < base_color.lightness()
     else:
         assert weekend_color.lightness() > base_color.lightness()
+
+
+# PATCH 93 — _business_to_calendar_offset : la barre ne doit pas empiéter
+# sur les cases grisées du weekend quand "Travailler le weekend" est
+# désactivé (les jours stockés par compute_schedule sont toujours des
+# jours ouvrés continus, sans notion de weekend).
+
+
+def test_business_to_calendar_offset_is_identity_when_work_weekends(qapp):
+    canvas = _DependencyGanttCanvas()
+    canvas.set_start_date("2026-08-17")  # lundi
+    canvas.set_work_weekends(True)
+    assert canvas._business_to_calendar_offset(6) == 6
+
+
+def test_business_to_calendar_offset_skips_weekend_when_disabled(qapp):
+    canvas = _DependencyGanttCanvas()
+    canvas.set_start_date("2026-08-17")  # lundi
+    canvas.set_work_weekends(False)
+    # 5 jours ouvrés (lun-ven) -> frontière samedi, aucun weekend traversé.
+    assert canvas._business_to_calendar_offset(5) == 5
+    # 6e jour ouvré -> samedi + dimanche sautés avant de compter le lundi
+    # suivant : 5 (semaine 1) + 2 (weekend) + 1 (lundi) = 8.
+    assert canvas._business_to_calendar_offset(6) == 8
+
+
+def test_business_to_calendar_offset_handles_fractional_day(qapp):
+    canvas = _DependencyGanttCanvas()
+    canvas.set_start_date("2026-08-17")  # lundi
+    canvas.set_work_weekends(False)
+    # 5.5 jours ouvrés : les 5 premiers jours ouvrés se terminent au
+    # samedi (offset 5) ; la demi-journée restante tombe sur le lundi
+    # suivant (offset entier 7, weekend sauté) -> 7.5.
+    assert canvas._business_to_calendar_offset(5.5) == 7.5
+
+
+def test_macro_calendar_weeks_accounts_for_skipped_weekends(qapp):
+    canvas = _DependencyGanttCanvas()
+    canvas.set_start_date("2026-08-17")  # lundi
+    canvas._max_x_days = 6.0
+    canvas.set_work_weekends(True)
+    _, weeks_work = canvas._macro_calendar_weeks()
+    canvas.set_work_weekends(False)
+    _, weeks_off = canvas._macro_calendar_weeks()
+    assert weeks_off >= weeks_work

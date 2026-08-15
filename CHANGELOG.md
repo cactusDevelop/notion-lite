@@ -2,6 +2,24 @@
 
 ## Post-1.0
 
+- **93** — Gantt (dépendances), calendrier réaliste du mode macro
+  (PATCH 91/92) :
+  - Quand "Travailler le weekend" est décoché, les barres du
+    calendrier réaliste (mode macro avec "Jour 0" configuré) sautent
+    désormais réellement samedi/dimanche au lieu de les traverser :
+    une durée en jours ouvrés (telle que stockée par
+    `compute_schedule`, qui reste toujours continue) est convertie en
+    décalage calendaire via `_business_to_calendar_offset` avant
+    d'être dessinée, et la largeur de la grille (`_macro_calendar_weeks`)
+    tient compte de ces jours sautés. Sans effet quand "Travailler le
+    weekend" est coché (jour ouvré == jour calendaire, comportement
+    inchangé) ni sur `compute_schedule` lui-même.
+  - La case "Travailler le weekend" est désormais grisée (et son état
+    non modifiable) tant que "Jour 0" n'est pas coché avec une date
+    valide : sans "Jour 0", le mode macro utilise le calendrier
+    relatif ("Semaine N" / J1..J7, PATCH 90) qui n'a pas de notion de
+    weekend, donc la case n'avait auparavant aucun effet visible tout
+    en semblant active.
 - **92** — Gantt (dépendances), calendrier réaliste du mode macro
   (PATCH 91) :
   - La teinte des week-ends (`_weekend_color`) est désormais calculée

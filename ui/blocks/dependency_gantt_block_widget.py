@@ -273,11 +273,41 @@ class _DependencyGanttCanvas(QWidget):
         couvrir tout le planning)."""
         anchor = self._start_date
         calendar_start = anchor - timedelta(days=anchor.weekday())
-        total_days = max(int(math.ceil(max(self._max_x_days, 1.0))), 1)
+        total_business_days = max(int(math.ceil(max(self._max_x_days, 1.0))), 1)
+        # PATCH 93 — le planning est stocké en jours ouvrés (compute_schedule
+        # ignore les weekends) ; convertir en jours calendaires réels avant
+        # de dimensionner la grille, sinon les dernières semaines (décalées
+        # par les weekends sautés) sont coupées quand "Travailler le
+        # weekend" est désactivé.
+        total_days = max(int(math.ceil(self._business_to_calendar_offset(total_business_days))), 1)
         last_date = anchor + timedelta(days=total_days)
         days_span = (last_date - calendar_start).days + 1
         weeks_count = max(1, math.ceil(days_span / 7))
         return calendar_start, weeks_count
+
+    def _business_to_calendar_offset(self, day: float) -> float:
+        """PATCH 93 — convertit un décalage en jours ouvrés (tel que
+        stocké par `compute_schedule`, qui ignore toujours les weekends)
+        en décalage calendaire réel depuis le "Jour 0", en sautant les
+        samedis/dimanches quand `work_weekends` est désactivé. Sans
+        effet si `work_weekends` est actif (jour ouvré == jour
+        calendaire) : le planning reprend alors son comportement
+        historique, continu."""
+        if self._work_weekends or self._start_date is None or day <= 0:
+            return day
+        anchor = self._start_date
+        whole = int(math.floor(day))
+        frac = day - whole
+        offset = 0
+        counted = 0
+        while counted < whole:
+            if (anchor + timedelta(days=offset)).weekday() < 5:
+                counted += 1
+            offset += 1
+        if frac > 1e-9:
+            while (anchor + timedelta(days=offset)).weekday() >= 5:
+                offset += 1
+        return offset + frac
 
     @property
     def base_content_width(self) -> float:
@@ -560,6 +590,24 @@ class _DependencyGanttCanvas(QWidget):
         for d, key in enumerate(_WEEKDAY_KEYS):
             painter.drawText(day_x(d), 0, cell_w, _MACRO_WEEKDAY_HEADER_H, Qt.AlignCenter, tr(key))
 
+        # PATCH 93 — conversion jours ouvrés -> jours calendaires (voir
+        # _business_to_calendar_offset), calculée une seule fois pour
+        # toutes les semaines : sans elle, une barre continue en jours
+        # ouvrés empiète visuellement sur les cases grisées du weekend
+        # au lieu de les enjamber.
+        tasks_by_person = {
+            name: [
+                {
+                    **task,
+                    "start": self._business_to_calendar_offset(task["start"]),
+                    "end": self._business_to_calendar_offset(task["end"]),
+                    "resolution": self._business_to_calendar_offset(task["resolution"]),
+                }
+                for task in tasks
+            ]
+            for name, tasks in self._tasks_by_person.items()
+        }
+
         last_month: tuple[int, int] | None = None
         for week in range(weeks):
             week_y = top + week * (week_h + _MACRO_WEEK_GAP)
@@ -594,7 +642,7 @@ class _DependencyGanttCanvas(QWidget):
 
             for p_index, name in enumerate(self._people):
                 row_y = week_y + _MACRO_HEADER_H + p_index * _MACRO_PERSON_ROW_H
-                for task in self._tasks_by_person[name]:
+                for task in tasks_by_person[name]:
                     for x0, x1, color in _clip_task_to_week(task, week_start_day, week_start_day + 7):
                         bar_rect = QRect(
                             day_x(x0), row_y + 3, max(day_x(x1) - day_x(x0), 2), _MACRO_PERSON_ROW_H - 6
@@ -725,6 +773,12 @@ class DependencyGanttBlockWidget(QWidget):
         start_date_row.addWidget(self._start_date_edit)
         self._work_weekends_checkbox = QCheckBox(tr("dep_gantt.work_weekends"), self)
         self._work_weekends_checkbox.setChecked(self._block.work_weekends)
+        # PATCH 93 — sans "Jour 0" configuré, le mode macro affiche un
+        # calendrier relatif (_paint_macro_relative) qui n'a pas de
+        # notion de weekend : "Travailler le weekend" n'a alors aucun
+        # effet visible. Le griser évite de laisser croire que la case
+        # fait quelque chose tant que "Jour 0" n'est pas actif.
+        self._work_weekends_checkbox.setEnabled(parsed.isValid())
         self._work_weekends_checkbox.toggled.connect(self._on_work_weekends_toggled)
         start_date_row.addWidget(self._work_weekends_checkbox)
         start_date_row.addStretch(1)
@@ -876,6 +930,7 @@ class DependencyGanttBlockWidget(QWidget):
         """PATCH 91 — active/désactive le "Jour 0" (voir le commentaire
         à la construction de la case à cocher)."""
         self._start_date_edit.setEnabled(checked)
+        self._work_weekends_checkbox.setEnabled(checked)
         self._block.start_date = self._start_date_edit.date().toString("yyyy-MM-dd") if checked else ""
         self._canvas.set_start_date(self._block.start_date)
         self.refresh()
