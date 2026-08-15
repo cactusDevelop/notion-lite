@@ -269,6 +269,13 @@ def test_start_date_defaults_to_empty_and_is_settable():
     assert block.start_date == ""
 
 
+def test_work_weekends_defaults_to_false_and_is_settable():
+    block = DependencyGanttBlock()
+    assert block.work_weekends is False
+    block.work_weekends = True
+    assert block.work_weekends is True
+
+
 def test_format_duration_in_unit():
     assert format_duration_in_unit(30, UNIT_DAYS) == "30 j"
     assert format_duration_in_unit(30, UNIT_MONTHS) == "1 mois"
@@ -292,6 +299,15 @@ def test_roundtrip_via_registry_preserves_delta_column_and_chart_format():
     assert rebuilt.delta_column_id == delta_col["id"]
     assert rebuilt.chart_format == FORMAT_MACRO
     assert rebuilt.start_date == "2026-08-17"
+    assert rebuilt.work_weekends is False
+
+
+def test_roundtrip_via_registry_preserves_work_weekends():
+    doc, table, label_col, person_col, duration_col, risk_col, dep_col = _build_document()
+    gantt = DependencyGanttBlock(table_block_id=table.id, work_weekends=True)
+    rebuilt = block_from_dict(gantt.to_dict())
+    assert isinstance(rebuilt, DependencyGanttBlock)
+    assert rebuilt.work_weekends is True
 
 
 def test_available_delta_columns_are_number_columns():

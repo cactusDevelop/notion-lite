@@ -108,6 +108,7 @@ class DependencyGanttBlock(Block):
         deltas: dict[str, float] | None = None,
         chart_format: str = FORMAT_MICRO,
         start_date: str = "",
+        work_weekends: bool = False,
         phase_column_id: Optional[str] = None,
         id: str | None = None,
     ) -> None:
@@ -131,6 +132,11 @@ class DependencyGanttBlock(Block):
                 # _DependencyGanttCanvas._paint_macro_calendar) ; sans
                 # effet sur compute_schedule.
                 "start_date": start_date,
+                # PATCH 92 — si False (défaut), le calendrier réaliste du
+                # mode macro grise samedi/dimanche (voir
+                # _DependencyGanttCanvas._paint_macro_calendar) ; sans
+                # effet sur le calcul du planning (compute_schedule).
+                "work_weekends": bool(work_weekends),
                 # PATCH 74 — colonne texte optionnelle (ex : "Phases") pour
                 # regrouper les sous-tâches et afficher des séparateurs
                 # verticaux étiquetés sur le graphique (voir compute_schedule
@@ -194,6 +200,16 @@ class DependencyGanttBlock(Block):
     @start_date.setter
     def start_date(self, value: str) -> None:
         self.data["start_date"] = value or ""
+
+    @property
+    def work_weekends(self) -> bool:
+        """PATCH 92 — si False (défaut), samedi/dimanche sont grisés
+        dans le calendrier réaliste du mode macro."""
+        return bool(self.data.get("work_weekends", False))
+
+    @work_weekends.setter
+    def work_weekends(self, value: bool) -> None:
+        self.data["work_weekends"] = bool(value)
 
     def set_source(
         self,

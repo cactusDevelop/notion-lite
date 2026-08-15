@@ -126,7 +126,6 @@ _MACRO_WEEK_GAP = 6
 # de l'en-tête des jours de la semaine, dessiné une seule fois en haut
 # de la grille (voir _paint_macro_calendar).
 _MACRO_WEEKDAY_HEADER_H = 20
-_WEEKEND_COLOR = QColor("#f0f0f0")
 _TODAY_BORDER_COLOR = QColor("#e53935")
 
 _WEEKDAY_KEYS = [
@@ -231,6 +230,10 @@ class _DependencyGanttCanvas(QWidget):
         # relatif ("Semaine N", _paint_macro_relative) et calendrier
         # réaliste (vrais jours de semaine/dates, _paint_macro_calendar).
         self._start_date: date | None = None
+        # PATCH 92 — "Travailler le weekend" (voir la case à cocher
+        # correspondante) : si False (défaut), samedi/dimanche sont
+        # grisés dans le calendrier réaliste (_paint_macro_calendar).
+        self._work_weekends = False
         # PATCH 72 — notifié à chaque changement de taille du canvas,
         # pour que la QScrollArea parente puisse copier sa hauteur
         # (elle ne le fait pas toute seule quand `widgetResizable` est
@@ -260,6 +263,10 @@ class _DependencyGanttCanvas(QWidget):
         self._update_geometry()
         self.update()
 
+    def set_work_weekends(self, work_weekends: bool) -> None:
+        self._work_weekends = work_weekends
+        self.update()
+
     def _macro_calendar_weeks(self) -> tuple[date, int]:
         """PATCH 91 — pour le mode macro calendaire : (lundi de la
         semaine du "Jour 0", nombre de semaines nécessaires pour
@@ -284,6 +291,15 @@ class _DependencyGanttCanvas(QWidget):
 
     def _macro_cell_width(self) -> int:
         return max(int(_MACRO_BASE_CELL_PX * self._zoom_percent / 100), _MACRO_MIN_CELL_PX)
+
+    def _weekend_color(self) -> QColor:
+        """PATCH 92 — dérivée de la couleur de fond courante plutôt
+        qu'une teinte fixe (#f0f0f0, invisible en mode sombre et à
+        peine visible en mode clair) : légèrement plus sombre en mode
+        clair, légèrement plus claire en mode sombre, pour rester un
+        gris discret quel que soit le thème."""
+        base = self.palette().color(QPalette.Base)
+        return base.darker(107) if base.lightness() > 128 else base.lighter(130)
 
     def set_schedule(self, schedule: list[dict]) -> None:
         people: list[str] = []
@@ -563,8 +579,8 @@ class _DependencyGanttCanvas(QWidget):
                 cell_date = week_start_date + timedelta(days=d)
                 x = day_x(d)
                 cell_rect = QRect(x, week_y, cell_w, week_h)
-                if cell_date.weekday() >= 5:
-                    painter.fillRect(cell_rect, _WEEKEND_COLOR)
+                if cell_date.weekday() >= 5 and not self._work_weekends:
+                    painter.fillRect(cell_rect, self._weekend_color())
                 painter.setPen(QPen(QColor("#cccccc"), 1))
                 painter.drawRect(cell_rect)
                 painter.setPen(QPen(self.palette().color(QPalette.WindowText)))
@@ -707,6 +723,10 @@ class DependencyGanttBlockWidget(QWidget):
         self._start_date_edit.dateChanged.connect(self._on_start_date_changed)
         start_date_row.addWidget(self._start_date_checkbox)
         start_date_row.addWidget(self._start_date_edit)
+        self._work_weekends_checkbox = QCheckBox(tr("dep_gantt.work_weekends"), self)
+        self._work_weekends_checkbox.setChecked(self._block.work_weekends)
+        self._work_weekends_checkbox.toggled.connect(self._on_work_weekends_toggled)
+        start_date_row.addWidget(self._work_weekends_checkbox)
         start_date_row.addStretch(1)
         layout.addLayout(start_date_row)
 
@@ -749,6 +769,7 @@ class DependencyGanttBlockWidget(QWidget):
         self._canvas.on_bar_drag_finished = self._on_bar_drag_finished
         self._canvas.set_format(self._block.chart_format)
         self._canvas.set_start_date(self._block.start_date)
+        self._canvas.set_work_weekends(self._block.work_weekends)
         # PATCH 71 — zone de défilement STRICTEMENT horizontale : le
         # canvas garde toujours sa hauteur complète (jamais tronquée
         # verticalement), `widgetResizable=False` pour que sa largeur
@@ -864,6 +885,11 @@ class DependencyGanttBlockWidget(QWidget):
             return
         self._block.start_date = qdate.toString("yyyy-MM-dd")
         self._canvas.set_start_date(self._block.start_date)
+        self.refresh()
+
+    def _on_work_weekends_toggled(self, checked: bool) -> None:
+        self._block.work_weekends = checked
+        self._canvas.set_work_weekends(checked)
         self.refresh()
 
     # -- Zoom (PATCH 71) --------------------------------------------------

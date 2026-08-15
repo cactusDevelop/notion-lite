@@ -2,6 +2,19 @@
 
 ## Post-1.0
 
+- **92** — Gantt (dépendances), calendrier réaliste du mode macro
+  (PATCH 91) :
+  - La teinte des week-ends (`_weekend_color`) est désormais calculée
+    à partir de la couleur de fond courante (plus sombre en thème
+    clair, plus claire en thème sombre) plutôt que fixée en dur
+    (`#f0f0f0`), qui rendait les week-ends invisibles en mode sombre
+    et à peine visibles en mode clair.
+  - Nouvelle case à cocher "Travailler le weekend" (`work_weekends`
+    sur le bloc, décochée par défaut) : décochée (comportement par
+    défaut), samedi/dimanche restent grisés dans le calendrier ;
+    cochée, ils sont affichés comme des jours normaux. Sans effet sur
+    le calcul du planning (toujours en jours calendaires continus,
+    voir compute_schedule) ni sur le mode micro.
 - **91** — Gantt (dépendances) : nouvelle option "Jour 0" (case à
   cocher + sélecteur de date), qui ancre le planning (toujours calculé
   en jours relatifs, sans changement) à une vraie date calendaire.

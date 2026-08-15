@@ -12,7 +12,7 @@ import sys
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
-from PySide6.QtGui import QColor
+from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import QApplication
 
 from datetime import date
@@ -203,3 +203,26 @@ def test_set_start_date_falls_back_to_relative_calendar_on_empty_or_invalid(qapp
 def test_format_month_year_uses_localized_month_name():
     assert _format_month_year(date(2026, 8, 19)) == "Août 2026"
     assert _format_month_year(date(2026, 1, 1)) == "Janvier 2026"
+
+
+def test_weekend_color_defaults_to_off_and_is_toggleable(qapp):
+    canvas = _DependencyGanttCanvas()
+    assert canvas._work_weekends is False
+    canvas.set_work_weekends(True)
+    assert canvas._work_weekends is True
+    canvas.set_work_weekends(False)
+    assert canvas._work_weekends is False
+
+
+def test_weekend_color_is_derived_from_palette_not_a_fixed_hex(qapp):
+    """PATCH 92 — la teinte des week-ends doit rester visible aussi bien
+    en thème clair qu'en thème sombre : elle doit donc être calculée à
+    partir de la couleur de fond courante plutôt que fixée en dur."""
+    canvas = _DependencyGanttCanvas()
+    weekend_color = canvas._weekend_color()
+    base_color = canvas.palette().color(QPalette.Base)
+    assert weekend_color != base_color
+    if base_color.lightness() > 128:
+        assert weekend_color.lightness() < base_color.lightness()
+    else:
+        assert weekend_color.lightness() > base_color.lightness()

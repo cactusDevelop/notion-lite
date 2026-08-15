@@ -324,6 +324,7 @@ _STRINGS: dict[str, dict[str, str]] = {
     "dep_gantt.macro": {"fr": "Macro", "en": "Macro"},
     "dep_gantt.week": {"fr": "Semaine", "en": "Week"},
     "dep_gantt.start_date": {"fr": "Jour 0 :", "en": "Day 0:"},
+    "dep_gantt.work_weekends": {"fr": "Travailler le weekend", "en": "Work weekends"},
     "dep_gantt.weekday.mon": {"fr": "Lun", "en": "Mon"},
     "dep_gantt.weekday.tue": {"fr": "Mar", "en": "Tue"},
     "dep_gantt.weekday.wed": {"fr": "Mer", "en": "Wed"},

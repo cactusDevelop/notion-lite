@@ -101,6 +101,7 @@ def block_from_dict(raw: dict[str, Any]) -> Block:
             deltas=data.get("deltas", {}),
             chart_format=data.get("chart_format", "micro"),
             start_date=data.get("start_date", ""),
+            work_weekends=data.get("work_weekends", False),
             # PATCH 89 — manquait à la reconstruction : le bloc était
             # bien enregistré avec sa colonne "Phases" (voir
             # DependencyGanttBlock.set_source / to_dict), mais elle
