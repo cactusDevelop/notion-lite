@@ -2,6 +2,18 @@
 
 ## Post-1.0
 
+- **91** — Gantt (dépendances) : nouvelle option "Jour 0" (case à
+  cocher + sélecteur de date), qui ancre le planning (toujours calculé
+  en jours relatifs, sans changement) à une vraie date calendaire.
+  Sans effet en mode micro. En mode macro, dès que "Jour 0" est
+  configuré, le calendrier devient réaliste : vrais jours de la
+  semaine (Lundi à Dimanche) affichés une seule fois en en-tête, vraie
+  date du mois dans chaque case, semaines qui commencent toujours un
+  lundi (les cases avant le "Jour 0" dans sa semaine sont affichées
+  sans bâtonnet), week-ends grisés, nom du mois affiché dès qu'il
+  change, et la case du jour courant est mise en évidence. Sans "Jour
+  0" configuré, le mode macro garde son ancien calendrier relatif
+  ("Semaine N" / J1..J7, PATCH 90).
 - **90** — Gantt (dépendances) : le menu "Unité" (Jours/Mois) devient
   "Format", avec deux options :
   - **micro** — comportement précédent, mais l'axe temporel bascule

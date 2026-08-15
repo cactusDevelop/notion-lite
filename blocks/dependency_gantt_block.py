@@ -107,6 +107,7 @@ class DependencyGanttBlock(Block):
         delta_column_id: Optional[str] = None,
         deltas: dict[str, float] | None = None,
         chart_format: str = FORMAT_MICRO,
+        start_date: str = "",
         phase_column_id: Optional[str] = None,
         id: str | None = None,
     ) -> None:
@@ -122,6 +123,14 @@ class DependencyGanttBlock(Block):
                 "delta_column_id": delta_column_id,
                 "deltas": dict(deltas or {}),
                 "chart_format": chart_format,
+                # PATCH 91 — "Jour 0" optionnel (date ISO "AAAA-MM-JJ",
+                # ou "" si non configuré) : ancre le planning (toujours
+                # calculé en jours relatifs) à une vraie date calendaire.
+                # N'affecte que l'affichage du mode macro (calendrier
+                # réaliste avec vrais jours de semaine/mois, voir
+                # _DependencyGanttCanvas._paint_macro_calendar) ; sans
+                # effet sur compute_schedule.
+                "start_date": start_date,
                 # PATCH 74 — colonne texte optionnelle (ex : "Phases") pour
                 # regrouper les sous-tâches et afficher des séparateurs
                 # verticaux étiquetés sur le graphique (voir compute_schedule
@@ -174,6 +183,17 @@ class DependencyGanttBlock(Block):
     @chart_format.setter
     def chart_format(self, value: str) -> None:
         self.data["chart_format"] = value if value in (FORMAT_MICRO, FORMAT_MACRO) else FORMAT_MICRO
+
+    @property
+    def start_date(self) -> str:
+        """PATCH 91 — "Jour 0" : date calendaire réelle (ISO
+        "AAAA-MM-JJ") du début du planning, ou "" si non configuré.
+        N'affecte que l'affichage du mode macro."""
+        return self.data.get("start_date", "")
+
+    @start_date.setter
+    def start_date(self, value: str) -> None:
+        self.data["start_date"] = value or ""
 
     def set_source(
         self,

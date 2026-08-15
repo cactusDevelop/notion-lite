@@ -15,13 +15,17 @@ import pytest
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QApplication
 
+from datetime import date
+
 from blocks.dependency_gantt_block import FORMAT_MACRO, FORMAT_MICRO
 from ui.blocks.dependency_gantt_block_widget import (
     _MACRO_HEADER_H,
     _MACRO_PERSON_ROW_H,
     _MACRO_WEEK_GAP,
+    _MACRO_WEEKDAY_HEADER_H,
     _DependencyGanttCanvas,
     _clip_task_to_week,
+    _format_month_year,
 )
 
 
@@ -130,3 +134,72 @@ def test_switching_back_to_micro_restores_linear_geometry(qapp):
     # 7 colonnes fixes du calendrier : elle doit redevenir raisonnable
     # pour une étendue de 3 jours (bien plus étroite que le calendrier).
     assert canvas.width() < 200
+
+
+# -- PATCH 91 : calendrier réaliste avec "Jour 0" -------------------------
+
+
+def test_calendar_weeks_start_on_monday_even_if_day_zero_does_not(qapp):
+    canvas = _DependencyGanttCanvas()
+    canvas.set_schedule(
+        [
+            {
+                "row_id": "r1",
+                "label": "Tâche",
+                "person_names": ["Alice"],
+                "start": 0.0,
+                "end": 2.0,
+                "resolution": 2.0,
+                "delta": 0.0,
+                "color": "#4db6ac",
+                "phase": "",
+            }
+        ]
+    )
+    canvas.set_format(FORMAT_MACRO)
+    # 2026-08-19 est un mercredi ; le "Jour 0" n'a pas à tomber un lundi.
+    canvas.set_start_date("2026-08-19")
+    calendar_start, weeks = canvas._macro_calendar_weeks()
+    assert calendar_start == date(2026, 8, 17)  # lundi de cette semaine-là
+    assert calendar_start.weekday() == 0
+    assert weeks >= 1
+
+
+def test_geometry_reserves_weekday_header_only_in_calendar_mode(qapp):
+    canvas = _DependencyGanttCanvas()
+    canvas.set_schedule(
+        [
+            {
+                "row_id": "r1",
+                "label": "Tâche",
+                "person_names": ["Alice"],
+                "start": 0.0,
+                "end": 2.0,
+                "resolution": 2.0,
+                "delta": 0.0,
+                "color": "#4db6ac",
+                "phase": "",
+            }
+        ]
+    )
+    canvas.set_format(FORMAT_MACRO)
+    height_without_date = canvas.height()
+    canvas.set_start_date("2026-08-19")
+    height_with_date = canvas.height()
+    assert height_with_date == height_without_date + _MACRO_WEEKDAY_HEADER_H
+
+
+def test_set_start_date_falls_back_to_relative_calendar_on_empty_or_invalid(qapp):
+    canvas = _DependencyGanttCanvas()
+    canvas.set_format(FORMAT_MACRO)
+    canvas.set_start_date("2026-08-19")
+    assert canvas._start_date is not None
+    canvas.set_start_date("")
+    assert canvas._start_date is None
+    canvas.set_start_date("pas une date")
+    assert canvas._start_date is None
+
+
+def test_format_month_year_uses_localized_month_name():
+    assert _format_month_year(date(2026, 8, 19)) == "Août 2026"
+    assert _format_month_year(date(2026, 1, 1)) == "Janvier 2026"

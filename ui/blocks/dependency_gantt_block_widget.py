@@ -48,10 +48,13 @@ le canvas était étiré pour remplir la zone visible) :
 from __future__ import annotations
 
 import math
+from datetime import date, timedelta
 
-from PySide6.QtCore import QRect, QTimer, Qt
+from PySide6.QtCore import QDate, QRect, QTimer, Qt
 from PySide6.QtGui import QColor, QFont, QPainter, QPalette, QPen
 from PySide6.QtWidgets import (
+    QCheckBox,
+    QDateEdit,
     QDialog,
     QDialogButtonBox,
     QDoubleSpinBox,
@@ -119,6 +122,34 @@ _MACRO_MIN_CELL_PX = 24
 _MACRO_HEADER_H = 16
 _MACRO_PERSON_ROW_H = 22
 _MACRO_WEEK_GAP = 6
+# PATCH 91 — mode macro calendaire (avec "Jour 0" configuré) : hauteur
+# de l'en-tête des jours de la semaine, dessiné une seule fois en haut
+# de la grille (voir _paint_macro_calendar).
+_MACRO_WEEKDAY_HEADER_H = 20
+_WEEKEND_COLOR = QColor("#f0f0f0")
+_TODAY_BORDER_COLOR = QColor("#e53935")
+
+_WEEKDAY_KEYS = [
+    "dep_gantt.weekday.mon",
+    "dep_gantt.weekday.tue",
+    "dep_gantt.weekday.wed",
+    "dep_gantt.weekday.thu",
+    "dep_gantt.weekday.fri",
+    "dep_gantt.weekday.sat",
+    "dep_gantt.weekday.sun",
+]
+_MONTH_KEYS = [f"dep_gantt.month.{i}" for i in range(1, 13)]
+
+
+def _format_month_year(day: date) -> str:
+    return f"{tr(_MONTH_KEYS[day.month - 1])} {day.year}"
+
+
+def _parse_iso_date(value: str) -> date | None:
+    try:
+        return date.fromisoformat(value) if value else None
+    except ValueError:
+        return None
 
 
 def _micro_axis_step(max_value_days: float) -> tuple[float, str]:
@@ -195,6 +226,11 @@ class _DependencyGanttCanvas(QWidget):
         # zone de défilement qui le contient.
         self._zoom_percent = _ZOOM_DEFAULT
         self._max_x_days = 1.0
+        # PATCH 91 — "Jour 0" calendaire (None si non configuré, voir
+        # set_start_date) : bascule le mode macro entre calendrier
+        # relatif ("Semaine N", _paint_macro_relative) et calendrier
+        # réaliste (vrais jours de semaine/dates, _paint_macro_calendar).
+        self._start_date: date | None = None
         # PATCH 72 — notifié à chaque changement de taille du canvas,
         # pour que la QScrollArea parente puisse copier sa hauteur
         # (elle ne le fait pas toute seule quand `widgetResizable` est
@@ -216,6 +252,25 @@ class _DependencyGanttCanvas(QWidget):
         self._format = chart_format
         self._update_geometry()
         self.update()
+
+    def set_start_date(self, iso_value: str) -> None:
+        """PATCH 91 — voir `_start_date`. `iso_value` vide ou invalide
+        retombe sur le calendrier relatif (None)."""
+        self._start_date = _parse_iso_date(iso_value)
+        self._update_geometry()
+        self.update()
+
+    def _macro_calendar_weeks(self) -> tuple[date, int]:
+        """PATCH 91 — pour le mode macro calendaire : (lundi de la
+        semaine du "Jour 0", nombre de semaines nécessaires pour
+        couvrir tout le planning)."""
+        anchor = self._start_date
+        calendar_start = anchor - timedelta(days=anchor.weekday())
+        total_days = max(int(math.ceil(max(self._max_x_days, 1.0))), 1)
+        last_date = anchor + timedelta(days=total_days)
+        days_span = (last_date - calendar_start).days + 1
+        weeks_count = max(1, math.ceil(days_span / 7))
+        return calendar_start, weeks_count
 
     @property
     def base_content_width(self) -> float:
@@ -255,11 +310,16 @@ class _DependencyGanttCanvas(QWidget):
     def _update_geometry(self) -> None:
         if self._format == FORMAT_MACRO:
             cell_w = self._macro_cell_width()
-            total_days = max(int(math.ceil(max(self._max_x_days, 1.0))), 1)
-            weeks = max(1, math.ceil(total_days / 7))
             week_h = _MACRO_HEADER_H + max(1, len(self._people)) * _MACRO_PERSON_ROW_H
+            if self._start_date is not None:
+                _, weeks = self._macro_calendar_weeks()
+                top_offset = _MACRO_WEEKDAY_HEADER_H
+            else:
+                total_days = max(int(math.ceil(max(self._max_x_days, 1.0))), 1)
+                weeks = max(1, math.ceil(total_days / 7))
+                top_offset = 0
             self.setFixedWidth(_LABEL_WIDTH + 7 * cell_w + 10)
-            self.setFixedHeight(weeks * week_h + max(weeks - 1, 0) * _MACRO_WEEK_GAP + 10)
+            self.setFixedHeight(top_offset + weeks * week_h + max(weeks - 1, 0) * _MACRO_WEEK_GAP + 10)
         else:
             chart_width = int(self._max_x_days * _BASE_PX_PER_DAY * self._zoom_percent / 100)
             self._content_top = _AXIS_HEIGHT + (_PHASE_BAND_HEIGHT if self._phase_groups else 0)
@@ -333,7 +393,10 @@ class _DependencyGanttCanvas(QWidget):
             return
 
         if self._format == FORMAT_MACRO:
-            self._paint_macro(painter)
+            if self._start_date is not None:
+                self._paint_macro_calendar(painter)
+            else:
+                self._paint_macro_relative(painter)
         else:
             self._paint_micro(painter)
         painter.end()
@@ -414,11 +477,12 @@ class _DependencyGanttCanvas(QWidget):
 
                 self._bar_rects.append((hit_rect, task))
 
-    def _paint_macro(self, painter: QPainter) -> None:
-        """PATCH 90 — mode macro : calendrier (une ligne = une semaine
-        de 7 cases/jours), avec une bande par personne à l'intérieur de
-        chaque semaine, colorée aux jours où elle a une sous-tâche
-        active (mêmes couleurs/retard/avance qu'en mode micro)."""
+    def _paint_macro_relative(self, painter: QPainter) -> None:
+        """PATCH 90 — mode macro sans "Jour 0" configuré : calendrier
+        relatif (une ligne = une semaine de 7 cases/jours), avec une
+        bande par personne à l'intérieur de chaque semaine, colorée
+        aux jours où elle a une sous-tâche active (mêmes couleurs/
+        retard/avance qu'en mode micro)."""
         cell_w = self._macro_cell_width()
         week_h = _MACRO_HEADER_H + max(1, len(self._people)) * _MACRO_PERSON_ROW_H
         total_days = max(int(math.ceil(max(self._max_x_days, 1.0))), 1)
@@ -446,6 +510,71 @@ class _DependencyGanttCanvas(QWidget):
                     x + 3, week_y + 1, cell_w - 6, _MACRO_HEADER_H - 2,
                     Qt.AlignLeft | Qt.AlignVCenter, f"J{week_start_day + d + 1}",
                 )
+
+            for p_index, name in enumerate(self._people):
+                row_y = week_y + _MACRO_HEADER_H + p_index * _MACRO_PERSON_ROW_H
+                for task in self._tasks_by_person[name]:
+                    for x0, x1, color in _clip_task_to_week(task, week_start_day, week_start_day + 7):
+                        bar_rect = QRect(
+                            day_x(x0), row_y + 3, max(day_x(x1) - day_x(x0), 2), _MACRO_PERSON_ROW_H - 6
+                        )
+                        painter.fillRect(bar_rect, color)
+                        self._bar_rects.append((QRect(bar_rect), task))
+
+    def _paint_macro_calendar(self, painter: QPainter) -> None:
+        """PATCH 91 — mode macro avec "Jour 0" configuré : calendrier
+        réaliste (vrais jours de la semaine affichés une seule fois en
+        en-tête, vraies dates du mois par case, week-ends grisés, nom
+        du mois affiché à gauche dès qu'il change), plutôt que le
+        calendrier relatif "Semaine N / J1..J7" de
+        `_paint_macro_relative`. Les semaines commencent toujours un
+        lundi (même si le "Jour 0" du planning tombe un autre jour :
+        les cases avant le "Jour 0" dans sa semaine sont affichées,
+        sans bâtonnet)."""
+        cell_w = self._macro_cell_width()
+        calendar_start, weeks = self._macro_calendar_weeks()
+        week_h = _MACRO_HEADER_H + max(1, len(self._people)) * _MACRO_PERSON_ROW_H
+        top = _MACRO_WEEKDAY_HEADER_H
+        today = date.today()
+
+        def day_x(day_in_week: float) -> int:
+            return _LABEL_WIDTH + int(day_in_week * cell_w)
+
+        painter.setPen(QPen(self.palette().color(QPalette.WindowText)))
+        for d, key in enumerate(_WEEKDAY_KEYS):
+            painter.drawText(day_x(d), 0, cell_w, _MACRO_WEEKDAY_HEADER_H, Qt.AlignCenter, tr(key))
+
+        last_month: tuple[int, int] | None = None
+        for week in range(weeks):
+            week_y = top + week * (week_h + _MACRO_WEEK_GAP)
+            week_start_date = calendar_start + timedelta(weeks=week)
+            week_start_day = (week_start_date - self._start_date).days
+
+            month_key = (week_start_date.year, week_start_date.month)
+            if month_key != last_month:
+                painter.setPen(QPen(self.palette().color(QPalette.WindowText)))
+                painter.drawText(
+                    0, week_y, _LABEL_WIDTH, week_h, Qt.AlignVCenter | Qt.AlignLeft,
+                    _format_month_year(week_start_date),
+                )
+                last_month = month_key
+
+            for d in range(7):
+                cell_date = week_start_date + timedelta(days=d)
+                x = day_x(d)
+                cell_rect = QRect(x, week_y, cell_w, week_h)
+                if cell_date.weekday() >= 5:
+                    painter.fillRect(cell_rect, _WEEKEND_COLOR)
+                painter.setPen(QPen(QColor("#cccccc"), 1))
+                painter.drawRect(cell_rect)
+                painter.setPen(QPen(self.palette().color(QPalette.WindowText)))
+                painter.drawText(
+                    x + 3, week_y + 1, cell_w - 6, _MACRO_HEADER_H - 2,
+                    Qt.AlignLeft | Qt.AlignVCenter, str(cell_date.day),
+                )
+                if cell_date == today:
+                    painter.setPen(QPen(_TODAY_BORDER_COLOR, 2))
+                    painter.drawRect(cell_rect.adjusted(1, 1, -1, -1))
 
             for p_index, name in enumerate(self._people):
                 row_y = week_y + _MACRO_HEADER_H + p_index * _MACRO_PERSON_ROW_H
@@ -558,6 +687,29 @@ class DependencyGanttBlockWidget(QWidget):
         format_row.addStretch(1)
         layout.addLayout(format_row)
 
+        # PATCH 91 — "Jour 0" optionnel : ancre le planning (toujours
+        # calculé en jours relatifs) à une vraie date calendaire,
+        # utilisée par le mode macro pour un calendrier réaliste (vrais
+        # jours de semaine/dates, voir _paint_macro_calendar). Une case
+        # à cocher rend la date explicitement optionnelle (QDateEdit
+        # n'a pas d'état "vide" natif).
+        start_date_row = QHBoxLayout()
+        self._start_date_checkbox = QCheckBox(tr("dep_gantt.start_date"), self)
+        self._start_date_edit = QDateEdit(self)
+        self._start_date_edit.setCalendarPopup(True)
+        self._start_date_edit.setDisplayFormat("dd/MM/yyyy")
+        stored_start_date = self._block.start_date
+        parsed = QDate.fromString(stored_start_date, "yyyy-MM-dd") if stored_start_date else QDate()
+        self._start_date_checkbox.setChecked(parsed.isValid())
+        self._start_date_edit.setDate(parsed if parsed.isValid() else QDate.currentDate())
+        self._start_date_edit.setEnabled(parsed.isValid())
+        self._start_date_checkbox.toggled.connect(self._on_start_date_toggled)
+        self._start_date_edit.dateChanged.connect(self._on_start_date_changed)
+        start_date_row.addWidget(self._start_date_checkbox)
+        start_date_row.addWidget(self._start_date_edit)
+        start_date_row.addStretch(1)
+        layout.addLayout(start_date_row)
+
         # PATCH 70 — curseur d'échelle (zoom) : agrandit/réduit le
         # nombre de pixels par jour, indépendamment de la largeur du bloc.
         zoom_row = QHBoxLayout()
@@ -596,6 +748,7 @@ class DependencyGanttBlockWidget(QWidget):
         self._canvas.on_bar_drag_moved = self._on_bar_drag_moved
         self._canvas.on_bar_drag_finished = self._on_bar_drag_finished
         self._canvas.set_format(self._block.chart_format)
+        self._canvas.set_start_date(self._block.start_date)
         # PATCH 71 — zone de défilement STRICTEMENT horizontale : le
         # canvas garde toujours sa hauteur complète (jamais tronquée
         # verticalement), `widgetResizable=False` pour que sa largeur
@@ -696,6 +849,21 @@ class DependencyGanttBlockWidget(QWidget):
         self._canvas.set_format(self._block.chart_format)
         self._zoom_auto = True
         self._sync_auto_zoom()
+        self.refresh()
+
+    def _on_start_date_toggled(self, checked: bool) -> None:
+        """PATCH 91 — active/désactive le "Jour 0" (voir le commentaire
+        à la construction de la case à cocher)."""
+        self._start_date_edit.setEnabled(checked)
+        self._block.start_date = self._start_date_edit.date().toString("yyyy-MM-dd") if checked else ""
+        self._canvas.set_start_date(self._block.start_date)
+        self.refresh()
+
+    def _on_start_date_changed(self, qdate: QDate) -> None:
+        if not self._start_date_checkbox.isChecked():
+            return
+        self._block.start_date = qdate.toString("yyyy-MM-dd")
+        self._canvas.set_start_date(self._block.start_date)
         self.refresh()
 
     # -- Zoom (PATCH 71) --------------------------------------------------

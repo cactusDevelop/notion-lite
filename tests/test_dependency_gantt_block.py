@@ -260,6 +260,15 @@ def test_chart_format_defaults_to_micro_and_is_settable():
     assert block.chart_format == FORMAT_MICRO
 
 
+def test_start_date_defaults_to_empty_and_is_settable():
+    block = DependencyGanttBlock()
+    assert block.start_date == ""
+    block.start_date = "2026-08-17"
+    assert block.start_date == "2026-08-17"
+    block.start_date = ""
+    assert block.start_date == ""
+
+
 def test_format_duration_in_unit():
     assert format_duration_in_unit(30, UNIT_DAYS) == "30 j"
     assert format_duration_in_unit(30, UNIT_MONTHS) == "1 mois"
@@ -275,12 +284,14 @@ def test_roundtrip_via_registry_preserves_delta_column_and_chart_format():
         duration_column_id=duration_col["id"],
         delta_column_id=delta_col["id"],
         chart_format=FORMAT_MACRO,
+        start_date="2026-08-17",
     )
 
     rebuilt = block_from_dict(gantt.to_dict())
     assert isinstance(rebuilt, DependencyGanttBlock)
     assert rebuilt.delta_column_id == delta_col["id"]
     assert rebuilt.chart_format == FORMAT_MACRO
+    assert rebuilt.start_date == "2026-08-17"
 
 
 def test_available_delta_columns_are_number_columns():
