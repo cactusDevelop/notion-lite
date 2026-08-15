@@ -2,6 +2,17 @@
 
 ## Post-1.0
 
+- **88** — Corrige "Ouvrir un projet" (et les projets récents) pour un
+  projet "Modèle OG" : l'explorateur se rouvrait sur "client 1" (où
+  vit réellement le `.json` ouvert) au lieu de la racine du projet,
+  masquant "client 2" — l'arborescence ne montrait donc plus que des
+  fichiers, jamais de dossier. `.methodo-project.json` déménage à la
+  racine du projet (il décrit les deux dossiers clients, pas
+  "client 1" seul) ; `ProjectMeta.find_project_root`/`load_for_document`
+  remontent l'arborescence pour le retrouver quel que soit le
+  sous-dossier du document ouvert. L'icône des entrées "cachées" par
+  convention (nom préfixé d'un point) est désormais grisée en plus du
+  texte de leur libellé.
 - **87** — Fichier système `.methodo-project.json` du template "Modèle
   OG" : reste dans "client 1" (voir explication en session, il décrit
   ce document précis, pas "le projet" au sens du dossier parent avec

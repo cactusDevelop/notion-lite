@@ -29,7 +29,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from core.project_meta import ProjectMeta
+from core.project_meta import ProjectMeta, find_project_root
 from core.version import __version__
 from ui.i18n import tr
 
@@ -216,9 +216,14 @@ class WelcomeDialog(QDialog):
         fichier. PATCH 68 — Ajoute une petite croix pour retirer ce
         projet de la liste sans y toucher sur le disque. PATCH 82 —
         Affiche le nom "métier" du projet (fichier système), avec le
-        nom de dossier en repli pour les projets créés avant ce patch."""
-        project_folder = path.parent
-        meta = ProjectMeta.load(path)
+        nom de dossier en repli pour les projets créés avant ce patch.
+        PATCH 88 — Le dossier affiché/rouvert est la racine du projet
+        (remontée au besoin, voir find_project_root), pas forcément le
+        dossier parent immédiat du fichier : un document peut être
+        rangé dans un sous-dossier (ex. "client 1" du template "Modèle
+        OG")."""
+        project_folder = find_project_root(path)
+        meta = ProjectMeta.load_for_document(path)
         display_name = meta.name if meta is not None else project_folder.name
         item = QListWidgetItem()
         item.setToolTip(str(project_folder))

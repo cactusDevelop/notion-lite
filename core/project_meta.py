@@ -16,6 +16,13 @@ ne change plus le nom du projet.
 Ce fichier commence par un point : les explorateurs (dont celui de
 Méthodo OG, PATCH 81, basé sur QFileSystemModel) le masquent par
 défaut, comme le ferait un ".git" ou un ".vscode".
+
+PATCH 88 — Il n'est pas toujours à côté du document lui-même : le
+template "Modèle OG" range son document initial dans un sous-dossier
+("client 1") du dossier projet, tandis que la métadonnée décrit tout
+le projet (les deux dossiers clients) et vit donc à sa racine.
+`find_project_root`/`load_for_document` remontent l'arborescence pour
+la retrouver quel que soit le sous-dossier du document ouvert.
 """
 from __future__ import annotations
 
@@ -29,6 +36,13 @@ from typing import Any, Optional
 META_FORMAT_VERSION = 1
 META_FILENAME = ".methodo-project.json"
 
+# PATCH 88 — Profondeur maximale de remontée pour retrouver la racine
+# d'un projet dont le document n'est pas directement à sa racine (ex.
+# "client 1" du template "Modèle OG", un sous-dossier du dossier
+# projet). Largement suffisant pour cette imbrication à un niveau,
+# tout en bornant la remontée sur un chemin arbitraire.
+_MAX_ANCESTOR_SEARCH_DEPTH = 8
+
 
 def meta_path_for(document_path: Path) -> Path:
     """Chemin du fichier système de métadonnées associé au projet
@@ -36,6 +50,35 @@ def meta_path_for(document_path: Path) -> Path:
     66) : toujours ".methodo-project.json" dans ce même dossier, quel
     que soit le nom du fichier .json lui-même."""
     return document_path.parent / META_FILENAME
+
+
+def meta_path_in(folder: Path) -> Path:
+    """Comme `meta_path_for`, mais à partir d'un dossier directement
+    (PATCH 88 — utile quand ce dossier n'est pas le parent immédiat du
+    document, ex. la racine du projet "Modèle OG" qui contient "client
+    1"/"client 2")."""
+    return folder / META_FILENAME
+
+
+def find_project_root(document_path: Path, max_depth: int = _MAX_ANCESTOR_SEARCH_DEPTH) -> Path:
+    """PATCH 88 — Racine du projet contenant `document_path` : le
+    dossier le plus proche en remontant l'arborescence qui porte le
+    fichier système ".methodo-project.json", ou le dossier parent
+    immédiat du document si aucun n'est trouvé (repli : document
+    isolé, ou projet créé avant ce patch, sans métadonnées nulle
+    part). Gère ainsi aussi bien le cas historique (document à la
+    racine de son projet) que le template "Modèle OG" (document dans
+    un sous-dossier "client N" de la racine du projet)."""
+    folder = document_path.parent
+    candidate = folder
+    for _ in range(max_depth):
+        if (candidate / META_FILENAME).exists():
+            return candidate
+        parent = candidate.parent
+        if parent == candidate:
+            break
+        candidate = parent
+    return folder
 
 
 @dataclass
@@ -78,6 +121,14 @@ class ProjectMeta:
             json.dumps(self.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8"
         )
 
+    def save_to_folder(self, folder: Path) -> None:
+        """PATCH 88 — Comme `save`, mais à partir d'un dossier
+        directement (racine de projet, pas nécessairement le dossier
+        parent immédiat du document — ex. "Modèle OG")."""
+        meta_path_in(folder).write_text(
+            json.dumps(self.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+
     @classmethod
     def load(cls, document_path: Path) -> Optional["ProjectMeta"]:
         """Charge les métadonnées existantes du projet, ou None si le
@@ -90,6 +141,28 @@ class ProjectMeta:
             return cls.from_dict(json.loads(path.read_text(encoding="utf-8")))
         except (OSError, ValueError):
             return None
+
+    @classmethod
+    def load_from_folder(cls, folder: Path) -> Optional["ProjectMeta"]:
+        """PATCH 88 — Comme `load`, mais à partir d'un dossier
+        directement (voir `save_to_folder`)."""
+        path = meta_path_in(folder)
+        if not path.exists():
+            return None
+        try:
+            return cls.from_dict(json.loads(path.read_text(encoding="utf-8")))
+        except (OSError, ValueError):
+            return None
+
+    @classmethod
+    def load_for_document(cls, document_path: Path) -> Optional["ProjectMeta"]:
+        """PATCH 88 — Comme `load`, mais remonte l'arborescence si le
+        document n'est pas directement à la racine de son projet (voir
+        `find_project_root`) : c'est la fonction à utiliser pour
+        retrouver le projet auquel appartient un document ouvert,
+        contrairement à `load` qui ne regarde que son dossier parent
+        immédiat."""
+        return cls.load_from_folder(find_project_root(document_path))
 
     @classmethod
     def load_or_create(cls, document_path: Path, default_name: str | None = None) -> "ProjectMeta":

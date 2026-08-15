@@ -65,3 +65,47 @@ def test_rename_updates_name_only(tmp_path):
     reloaded = ProjectMeta.load(document_path)
     assert reloaded.name == "Nouveau nom"
     assert reloaded.id == meta.id
+
+
+def test_find_project_root_climbs_to_ancestor_with_meta(tmp_path):
+    """PATCH 88 — Un document rangé dans un sous-dossier du projet
+    (ex. "client 1" du template "Modèle OG") doit voir sa racine
+    retrouvée en remontant jusqu'au dossier qui porte la métadonnée."""
+    from core.project_meta import find_project_root
+
+    client1 = tmp_path / "client 1"
+    client1.mkdir()
+    document_path = client1 / "client 1.json"
+    document_path.write_text("{}", encoding="utf-8")
+
+    ProjectMeta.create("Mon projet").save_to_folder(tmp_path)
+
+    assert find_project_root(document_path) == tmp_path
+
+
+def test_find_project_root_falls_back_to_parent_without_meta(tmp_path):
+    """Sans métadonnée nulle part (document isolé), repli sur le
+    dossier parent immédiat du document — comportement historique."""
+    from core.project_meta import find_project_root
+
+    document_path = tmp_path / "isole.json"
+    document_path.write_text("{}", encoding="utf-8")
+
+    assert find_project_root(document_path) == tmp_path
+
+
+def test_load_for_document_finds_meta_in_ancestor(tmp_path):
+    """PATCH 88 — `load_for_document` doit retrouver la métadonnée même
+    quand elle n'est pas dans le dossier parent immédiat du document."""
+    client1 = tmp_path / "client 1"
+    client1.mkdir()
+    document_path = client1 / "client 1.json"
+    document_path.write_text("{}", encoding="utf-8")
+
+    ProjectMeta.create("Mon projet").save_to_folder(tmp_path)
+
+    reloaded = ProjectMeta.load_for_document(document_path)
+    assert reloaded is not None
+    assert reloaded.name == "Mon projet"
+    # `load` (sans remontée) ne le trouve pas dans "client 1" lui-même.
+    assert ProjectMeta.load(document_path) is None

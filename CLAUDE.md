@@ -82,9 +82,18 @@ pour ce qui est plus récent que cette section :
   du projet, ne supprime pas globalement — c'est le comportement
   voulu, pas un bug).
 - **`core/project_meta.py`** (`ProjectMeta`) — nom "métier" du projet
-  dans un fichier système caché `.methodo-project.json` à côté du
-  `.json`, indépendant du nom de fichier. Titre de fenêtre et projets
-  récents l'utilisent (`ui/main_window.py::_update_window_title`).
+  dans un fichier système caché `.methodo-project.json`, indépendant
+  du nom de fichier. Titre de fenêtre et projets récents l'utilisent
+  (`ui/main_window.py::_update_window_title`). PATCH 88 — Il n'est pas
+  toujours à côté du document ouvert : le template "Modèle OG" range
+  son document dans un sous-dossier ("client 1") alors que la
+  métadonnée décrit tout le projet et vit à sa racine. Toujours
+  utiliser `ProjectMeta.load_for_document`/`find_project_root` (qui
+  remontent l'arborescence) plutôt que `ProjectMeta.load`/
+  `meta_path_for` (dossier parent immédiat seulement) pour retrouver
+  le projet d'un document déjà ouvert — sinon l'explorateur se
+  rouvrira sur le mauvais dossier (régression du PATCH 86, corrigée
+  en 88).
 - **`Document.add_people_listener`/`remove_people_listener`** —
   observer pattern minimal pour garder les vues synchronisées
   (bloc "Effectif" ↔ popup "Personne" d'un tableau ↔ Gestionnaire de

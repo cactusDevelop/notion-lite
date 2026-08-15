@@ -10,7 +10,7 @@ import uuid
 from pathlib import Path
 
 from PySide6.QtCore import QEvent, QModelIndex, QPoint, QSettings, Qt, QTimer
-from PySide6.QtGui import QAction, QActionGroup, QColor, QKeySequence, QPalette, QTextCursor
+from PySide6.QtGui import QAction, QActionGroup, QColor, QIcon, QKeySequence, QPainter, QPalette, QTextCursor
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -57,7 +57,7 @@ from core.block_icons import icon_for_block
 from core.block_preview import preview_for_block
 from core.document import Document
 from core.history import UndoHistory
-from core.project_meta import ProjectMeta
+from core.project_meta import ProjectMeta, find_project_root
 from core.project_template import build_project_template
 from core.version import __version__
 from ui.blocks.block_container import BlockContainer
@@ -208,6 +208,27 @@ class _ExplorerHiddenFileDelegate(QStyledItemDelegate):
         super().initStyleOption(option, index)
         if self._model.fileName(index).startswith("."):
             option.palette.setColor(option.palette.currentColorGroup(), QPalette.Text, QColor(Qt.gray))
+            option.icon = self._faded_icon(option.icon, option.decorationSize)
+
+    @staticmethod
+    def _faded_icon(icon: QIcon, size) -> QIcon:
+        """PATCH 88 — Grise aussi la petite icône (dossier/fichier), pas
+        seulement le libellé texte : on redessine l'icône d'origine à
+        opacité réduite plutôt que de la remplacer, pour garder sa
+        forme (dossier vs fichier, type de fichier)."""
+        if icon.isNull():
+            return icon
+        icon_size = size if size.isValid() else icon.availableSizes()[0] if icon.availableSizes() else None
+        pixmap = icon.pixmap(icon_size) if icon_size is not None else icon.pixmap(16, 16)
+        if pixmap.isNull():
+            return icon
+        faded = pixmap.copy()
+        faded.fill(Qt.transparent)
+        painter = QPainter(faded)
+        painter.setOpacity(0.35)
+        painter.drawPixmap(0, 0, pixmap)
+        painter.end()
+        return QIcon(faded)
 
 
 class MainWindow(QMainWindow):
@@ -250,8 +271,12 @@ class MainWindow(QMainWindow):
         # PATCH 65 — Dossier projet imposé pour cette session (choisi à
         # l'écran d'accueil ou déduit du fichier ouvert), qui devient la
         # racine verrouillée de l'explorateur de fichiers.
+        # PATCH 88 — Remonte à la racine du projet (voir
+        # find_project_root) plutôt que de s'arrêter au dossier parent
+        # immédiat, pour la reprise de session (_load_startup_document)
+        # comme pour tout repli n'ayant pas déjà fixé ce dossier.
         if self._explorer_startup_folder is None and restored_path is not None:
-            self._explorer_startup_folder = restored_path.parent
+            self._explorer_startup_folder = find_project_root(restored_path)
 
         self._setup_ui()
         if restored_path is not None:
@@ -288,6 +313,13 @@ class MainWindow(QMainWindow):
         if dialog.result_action == WelcomeDialog.ACTION_OPEN and dialog.result_path is not None:
             try:
                 raw = json.loads(dialog.result_path.read_text(encoding="utf-8"))
+                # PATCH 88 — La racine de l'explorateur doit être celle
+                # du projet (remontée au besoin, voir find_project_root),
+                # pas seulement le dossier parent immédiat du fichier
+                # ouvert : sinon un document rangé dans un sous-dossier
+                # (ex. "client 1" du template "Modèle OG") masque ses
+                # dossiers frères ("client 2") dans l'explorateur.
+                self._explorer_startup_folder = find_project_root(dialog.result_path)
                 return Document.from_dict(raw), dialog.result_path
             except (OSError, ValueError, KeyError) as exc:
                 QMessageBox.critical(
@@ -362,7 +394,7 @@ class MainWindow(QMainWindow):
                 self, tr("error.generic_title"), f"{tr('error.create_project_file')}\n{exc}"
             )
             return None
-        ProjectMeta.create(project_name or folder.name).save(path)
+        ProjectMeta.create(project_name or folder.name).save_to_folder(folder)
         return path
 
     def _setup_ui(self) -> None:
@@ -1393,7 +1425,19 @@ class MainWindow(QMainWindow):
 
     def _set_current_file(self, path: Path | None) -> None:
         self._current_file = path
-        self._current_project_meta = ProjectMeta.load_or_create(path) if path is not None else None
+        # PATCH 88 — Recherche la métadonnée en remontant l'arborescence
+        # (voir ProjectMeta.load_for_document) : le document courant
+        # peut être rangé dans un sous-dossier de son projet (ex.
+        # "client 1" du template "Modèle OG"). Repli sur la création
+        # juste à côté du document si aucune métadonnée n'est trouvée
+        # nulle part (document isolé, projet créé avant PATCH 82).
+        if path is not None:
+            self._current_project_meta = ProjectMeta.load_for_document(path)
+            if self._current_project_meta is None:
+                self._current_project_meta = ProjectMeta.create(path.stem)
+                self._current_project_meta.save(path)
+        else:
+            self._current_project_meta = None
         self._update_window_title()
         # PATCH 52 — mémorise (ou oublie) le fichier courant pour la
         # reprise de session au prochain lancement.
