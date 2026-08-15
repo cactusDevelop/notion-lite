@@ -25,7 +25,9 @@ from ui.blocks.dependency_gantt_block_widget import (
     _MACRO_WEEKDAY_HEADER_H,
     _DependencyGanttCanvas,
     _clip_task_to_week,
+    _clip_task_to_week_business,
     _format_month_year,
+    _split_business_segments,
 )
 
 
@@ -271,3 +273,32 @@ def test_macro_calendar_weeks_accounts_for_skipped_weekends(qapp):
     canvas.set_work_weekends(False)
     _, weeks_off = canvas._macro_calendar_weeks()
     assert weeks_off >= weeks_work
+
+
+# PATCH 94 — _split_business_segments / _clip_task_to_week_business : le
+# rectangle peint ne doit plus traverser visuellement un weekend, même
+# quand les bornes converties l'enjambent déjà numériquement.
+
+
+def test_split_business_segments_breaks_at_weekend():
+    anchor = date(2026, 8, 17)  # lundi
+    # Segment jeudi(3)->mardi suivant(8), calendaire (après conversion) :
+    # doit se scinder en jeu-ven (3-5) et lundi-mardi (7-8), sans le
+    # week-end (5-7).
+    segments = list(_split_business_segments(3.0, 8.0, anchor, work_weekends=False))
+    assert segments == [(3.0, 5.0), (7.0, 8.0)]
+
+
+def test_split_business_segments_noop_when_work_weekends(qapp):
+    anchor = date(2026, 8, 17)
+    segments = list(_split_business_segments(3.0, 8.0, anchor, work_weekends=True))
+    assert segments == [(3.0, 8.0)]
+
+
+def test_clip_task_to_week_business_skips_weekend_columns():
+    anchor = date(2026, 8, 17)  # lundi, semaine = jours 0..7
+    task = _task(3, 8)  # jeu -> mardi suivant, comme ci-dessus
+    pieces = list(_clip_task_to_week_business(task, 0, 7, anchor, work_weekends=False))
+    # dans la semaine courante (0-7), seul jeu-ven (3-5) est produit :
+    # le lundi suivant tombe dans la semaine d'après.
+    assert pieces == [(3.0, 5.0, QColor(task["color"]))]

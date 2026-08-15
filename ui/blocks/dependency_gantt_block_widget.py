@@ -643,12 +643,67 @@ class _DependencyGanttCanvas(QWidget):
             for p_index, name in enumerate(self._people):
                 row_y = week_y + _MACRO_HEADER_H + p_index * _MACRO_PERSON_ROW_H
                 for task in tasks_by_person[name]:
-                    for x0, x1, color in _clip_task_to_week(task, week_start_day, week_start_day + 7):
+                    for x0, x1, color in _clip_task_to_week_business(
+                        task, week_start_day, week_start_day + 7, self._start_date, self._work_weekends
+                    ):
                         bar_rect = QRect(
                             day_x(x0), row_y + 3, max(day_x(x1) - day_x(x0), 2), _MACRO_PERSON_ROW_H - 6
                         )
                         painter.fillRect(bar_rect, color)
                         self._bar_rects.append((QRect(bar_rect), task))
+
+
+def _split_business_segments(day_start: float, day_end: float, anchor: date, work_weekends: bool):
+    """PATCH 94 — subdivise [day_start, day_end) (décalages calendaires
+    absolus depuis `anchor`) en sous-segments qui excluent les colonnes
+    de weekend, quand `work_weekends` est désactivé : sans ça, le
+    rectangle d'une barre reste continu et recouvre visuellement les
+    cases grisées du weekend même si ses bornes ont été calculées pour
+    les enjamber (voir _business_to_calendar_offset). Jours ouvrés
+    consécutifs fusionnés en un seul segment ; ne produit rien pour
+    work_weekends actif (segment unique inchangé, géré par l'appelant)."""
+    if work_weekends or day_end <= day_start:
+        yield (day_start, day_end)
+        return
+    day_idx = int(math.floor(day_start))
+    seg_start: float | None = None
+    seg_end = day_start
+    cur = day_start
+    while cur < day_end - 1e-9:
+        day_bound_end = min(day_idx + 1, day_end)
+        if (anchor + timedelta(days=day_idx)).weekday() < 5:
+            if seg_start is None:
+                seg_start = max(cur, float(day_idx))
+            seg_end = day_bound_end
+        elif seg_start is not None:
+            yield (seg_start, seg_end)
+            seg_start = None
+        cur = day_bound_end
+        day_idx += 1
+    if seg_start is not None:
+        yield (seg_start, seg_end)
+
+
+def _clip_task_to_week_business(
+    task: dict, week_start_day: float, week_end_day: float, anchor: date, work_weekends: bool
+):
+    """PATCH 94 — variante de `_clip_task_to_week` pour le calendrier
+    réaliste (mode macro avec "Jour 0") : découpe en plus chaque
+    segment clippé à la semaine par jour ouvré (voir
+    `_split_business_segments`) quand `work_weekends` est désactivé,
+    pour qu'aucun bâtonnet ne traverse visuellement un samedi/dimanche."""
+    segments = [(task["start"], task["end"], QColor(task["color"]))]
+    if task["delta"] > 0:
+        segments.append((task["end"], task["resolution"], _DELAY_COLOR))
+    elif task["delta"] < 0:
+        segments.append((task["resolution"], task["end"], _ADVANCE_COLOR))
+    for start, end, color in segments:
+        clipped_start = max(start, week_start_day)
+        clipped_end = min(end, week_end_day)
+        if clipped_end <= clipped_start:
+            continue
+        for seg_start, seg_end in _split_business_segments(clipped_start, clipped_end, anchor, work_weekends):
+            yield seg_start - week_start_day, seg_end - week_start_day, color
 
 
 def _clip_task_to_week(task: dict, week_start_day: float, week_end_day: float):

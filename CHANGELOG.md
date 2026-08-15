@@ -2,6 +2,17 @@
 
 ## Post-1.0
 
+- **94** — Gantt (dépendances), calendrier réaliste du mode macro
+  (suite PATCH 93) : la barre ne se contentait que de "sauter" par ses
+  bornes (début/fin recalculés pour tomber hors weekend), mais restait
+  peinte comme un unique rectangle continu qui recouvrait donc quand
+  même visuellement les cases de weekend traversées. `compute_schedule`
+  reste inchangé (toujours en jours ouvrés continus) ; c'est le
+  découpage à l'affichage (`_split_business_segments`,
+  `_clip_task_to_week_business`) qui scinde désormais chaque segment
+  en un rectangle par plage de jours ouvrés consécutifs, sans effet
+  quand "Travailler le weekend" est coché (segment unique, comportement
+  inchangé).
 - **93** — Gantt (dépendances), calendrier réaliste du mode macro
   (PATCH 91/92) :
   - Quand "Travailler le weekend" est décoché, les barres du
