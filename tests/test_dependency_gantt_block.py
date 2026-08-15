@@ -182,6 +182,21 @@ def test_roundtrip_via_registry_preserves_deltas():
     assert rebuilt.deltas == {"some-row": 4.0}
 
 
+def test_roundtrip_via_registry_preserves_phase_column_id():
+    """PATCH 89 — Régression : `block_from_dict` ne relisait jamais
+    `phase_column_id` (oubli dans blocks/registry.py), donc la colonne
+    "Phases" choisie à la création (ex. par le template "Modèle OG")
+    disparaissait dès la première réouverture du fichier."""
+    doc, table, label_col, person_col, duration_col, risk_col, dep_col = _build_document()
+    phase_col = table.add_column("Phases", col_type=COLUMN_TYPE_TEXT)
+    gantt = _make_block(table, label_col, person_col, duration_col, risk_col, dep_col)
+    gantt.data["phase_column_id"] = phase_col["id"]
+
+    rebuilt = block_from_dict(gantt.to_dict())
+    assert isinstance(rebuilt, DependencyGanttBlock)
+    assert rebuilt.phase_column_id == phase_col["id"]
+
+
 def row_label(table, row, label_col):
     return row["cells"].get(label_col["id"])
 

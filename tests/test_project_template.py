@@ -169,3 +169,19 @@ def test_template_document_roundtrips_through_json():
     assert len(restored.blocks) == len(document.blocks)
     assert [type(b) for b in restored.blocks] == [type(b) for b in document.blocks]
     assert len(restored.people) == 3
+
+
+def test_template_gantt_phase_column_survives_roundtrip():
+    """PATCH 89 — Régression : la colonne "Phases" du Gantt (dépendances)
+    du template "Modèle OG", bien sélectionnée à la création, était
+    perdue à chaque réouverture du fichier (`block_from_dict` oubliait
+    de relire `phase_column_id`)."""
+    document = build_project_template()
+    gantt = next(b for b in document.blocks if isinstance(b, DependencyGanttBlock))
+    tasks_table = document.find_block(gantt.table_block_id)
+    phase_col = next(c for c in tasks_table.columns if c["name"] == "Phases")
+    assert gantt.phase_column_id == phase_col["id"]
+
+    restored = document.__class__.from_dict(document.to_dict())
+    restored_gantt = next(b for b in restored.blocks if isinstance(b, DependencyGanttBlock))
+    assert restored_gantt.phase_column_id == phase_col["id"]

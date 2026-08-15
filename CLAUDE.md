@@ -59,6 +59,16 @@ core/   Logique pure (testable sans QApplication) : Document (source
         de vérité unique), Block, historique undo/redo, recherche,
         export/import, registre de personnes, métadonnées de projet.
 blocks/ Un module par type de bloc. blocks/registry.py = JSON -> classe.
+  PATCH 89 — piège vécu : `block_from_dict` reconstruit chaque bloc à
+  la main, champ par champ, en dupliquant la liste des paramètres du
+  constructeur. Ajouter un champ à un bloc (nouveau paramètre du
+  constructeur + entrée dans `self.data`, ex. `phase_column_id` de
+  `DependencyGanttBlock`) SANS l'ajouter aussi dans le bloc
+  `if block_type == ...` correspondant ici ne provoque aucune erreur :
+  le champ se sauvegarde très bien (Block.to_dict sérialise tout
+  `self.data`), mais se réinitialise silencieusement à sa valeur par
+  défaut à chaque relecture du JSON. Toujours vérifier `registry.py`
+  après avoir ajouté un paramètre à un bloc existant.
 ui/     Qt. main_window.py = chef d'orchestre, _render_document()
         reconstruit toute la colonne de widgets depuis self._document.
         ui/blocks/ = un widget par type de bloc. ui/i18n.py = tr().

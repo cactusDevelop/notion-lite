@@ -100,6 +100,17 @@ def block_from_dict(raw: dict[str, Any]) -> Block:
             delta_column_id=data.get("delta_column_id"),
             deltas=data.get("deltas", {}),
             time_unit=data.get("time_unit", "jours"),
+            # PATCH 89 — manquait à la reconstruction : le bloc était
+            # bien enregistré avec sa colonne "Phases" (voir
+            # DependencyGanttBlock.set_source / to_dict), mais elle
+            # était silencieusement perdue à chaque réouverture,
+            # puisque jamais relue ici.
+            # PATCH 89 — manquait à la reconstruction : le bloc était
+            # bien enregistré avec sa colonne "Phases" (voir
+            # DependencyGanttBlock.set_source / to_dict), mais elle
+            # était silencieusement perdue à chaque réouverture,
+            # puisque jamais relue ici.
+            phase_column_id=data.get("phase_column_id"),
             id=block_id,
         )
 

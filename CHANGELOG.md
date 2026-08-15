@@ -2,6 +2,13 @@
 
 ## Post-1.0
 
+- **89** — Corrige la colonne "Phases" du Gantt (dépendances) du
+  template "Modèle OG" (et de tout Gantt utilisant cette option) :
+  bien sélectionnée à la création, mais perdue dès la première
+  réouverture du fichier. `blocks/registry.py::block_from_dict`
+  oubliait de relire `phase_column_id` depuis le JSON pour
+  `DependencyGanttBlock` (déjà bien écrit à la sauvegarde — un simple
+  oubli à la reconstruction).
 - **88** — Corrige "Ouvrir un projet" (et les projets récents) pour un
   projet "Modèle OG" : l'explorateur se rouvrait sur "client 1" (où
   vit réellement le `.json` ouvert) au lieu de la racine du projet,
