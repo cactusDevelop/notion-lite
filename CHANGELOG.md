@@ -2,6 +2,10 @@
 
 ## Post-1.0
 
+- **101** — Test de non-régression supplémentaire pour PATCH 100 : le
+  cas piège du template "Modèle OG" (document dans "client 1", racine
+  du projet ailleurs) était en fait déjà correctement géré par
+  `find_project_root`, mais non couvert par un test dédié — ajouté.
 - **100** — Deux correctifs de l'explorateur de fichiers :
   - "Renommer" (clic droit ou F2) ne faisait rien : `QFileSystemModel`
     est en lecture seule par défaut dans Qt, donc `ItemIsEditable`
