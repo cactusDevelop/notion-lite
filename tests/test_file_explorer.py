@@ -132,6 +132,25 @@ def test_delete_cancelled_keeps_file(window, project_dir):
     assert target.exists()
 
 
+def test_rename_via_explorer_edit_actually_starts_editing(window, project_dir):
+    """PATCH 90 — régression : QFileSystemModel est en lecture seule par
+    défaut (Qt), donc sans `setReadOnly(False)` l'index n'a pas le flag
+    ItemIsEditable et `QTreeView.edit()` échoue silencieusement : F2 et
+    le menu "Renommer" ne faisaient rien."""
+    target = project_dir / "a_renommer.json"
+    target.write_text("{}", encoding="utf-8")
+    window._set_explorer_root(project_dir)
+
+    index = window._explorer_model.index(str(target))
+    assert index.flags() & Qt.ItemIsEditable
+
+    window._explorer_rename(index)
+
+    from PySide6.QtWidgets import QAbstractItemView
+
+    assert window._explorer_tree.state() == QAbstractItemView.State.EditingState
+
+
 def test_target_dir_is_parent_for_a_file(window, project_dir):
     target = project_dir / "un_fichier.json"
     target.write_text("{}", encoding="utf-8")

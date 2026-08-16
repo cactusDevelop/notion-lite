@@ -2,6 +2,16 @@
 
 ## Post-1.0
 
+- **100** — Deux correctifs de l'explorateur de fichiers :
+  - "Renommer" (clic droit ou F2) ne faisait rien : `QFileSystemModel`
+    est en lecture seule par défaut dans Qt, donc `ItemIsEditable`
+    était absent des flags et `QTreeView.edit()` échouait
+    silencieusement. `setReadOnly(False)` ajouté à la création du
+    modèle.
+  - "Sauvegarder sous" d'un document déjà sur disque ouvre désormais
+    directement sur la racine du projet courant
+    (`find_project_root(self._current_file)`) plutôt que sur le
+    dossier par défaut de Qt.
 - **99** — Deux ajustements du PATCH 98 (Gantt, calendrier réaliste du
   mode macro) :
   - Le clic droit ne vide plus la sélection après l'action choisie

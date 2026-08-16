@@ -687,6 +687,12 @@ class MainWindow(QMainWindow):
         layout.addLayout(header)
 
         self._explorer_model = QFileSystemModel(self)
+        # PATCH 90 — QFileSystemModel est en lecture seule par défaut
+        # (ItemIsEditable absent de flags()), ce qui rend tout appel à
+        # QTreeView.edit(index) silencieusement sans effet : le clic
+        # droit "Renommer"/F2 ne faisaient donc rien. Nécessaire pour
+        # que l'édition inline (renommage) fonctionne.
+        self._explorer_model.setReadOnly(False)
         # PATCH 81 — toute l'arborescence est affichée (plus de filtre
         # sur les ".json") : un vrai panneau de projet, pas une liste
         # de documents. Seul l'ouverture au double-clic reste limitée
@@ -1546,9 +1552,18 @@ class MainWindow(QMainWindow):
         self._write_document(self._current_file)
 
     def _save_document_as(self) -> None:
-        """PATCH 8 — Sauvegarder sous : demande toujours un nouveau fichier."""
+        """PATCH 8 — Sauvegarder sous : demande toujours un nouveau fichier.
+
+        PATCH 90 — si le document courant appartient déjà à un projet
+        (fichier déjà sauvegardé sur disque), le dialogue s'ouvre
+        directement sur la racine de ce projet (voir
+        `find_project_root`) plutôt que sur le dossier par défaut de
+        Qt, pour éviter d'avoir à re-naviguer jusqu'au projet à chaque
+        "Sauvegarder sous".
+        """
+        start_dir = str(find_project_root(self._current_file)) if self._current_file is not None else ""
         path_str, _ = QFileDialog.getSaveFileName(
-            self, tr("dialog.save_as"), "", "Méthodo OG (*.json)"
+            self, tr("dialog.save_as"), start_dir, "Méthodo OG (*.json)"
         )
         if not path_str:
             return
