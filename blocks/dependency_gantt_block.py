@@ -111,7 +111,6 @@ class DependencyGanttBlock(Block):
         work_weekends: bool = False,
         phase_column_id: Optional[str] = None,
         day_overrides: dict[str, bool] | None = None,
-        highlighted_days: list[str] | None = None,
         id: str | None = None,
     ) -> None:
         super().__init__(
@@ -152,10 +151,6 @@ class DependencyGanttBlock(Block):
                 # pour cette date-là uniquement. Sans effet sur
                 # compute_schedule (toujours en jours ouvrés continus).
                 "day_overrides": dict(day_overrides or {}),
-                # PATCH 95 — cases du calendrier surlignées en bleu
-                # (clic gauche sur une date, purement visuel, sans
-                # impact sur le planning) : liste de "AAAA-MM-JJ".
-                "highlighted_days": list(highlighted_days or []),
             },
             id=id or str(uuid.uuid4()),
         )
@@ -237,18 +232,6 @@ class DependencyGanttBlock(Block):
             self.day_overrides.pop(iso_date, None)
         else:
             self.day_overrides[iso_date] = bool(value)
-
-    @property
-    def highlighted_days(self) -> list[str]:
-        """PATCH 95 — voir le commentaire dans __init__."""
-        return self.data.setdefault("highlighted_days", [])
-
-    def toggle_highlighted_day(self, iso_date: str) -> None:
-        days = self.highlighted_days
-        if iso_date in days:
-            days.remove(iso_date)
-        else:
-            days.append(iso_date)
 
     def set_source(
         self,

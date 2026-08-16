@@ -131,7 +131,6 @@ _TODAY_BORDER_COLOR = QColor("#e53935")
 # PATCH 95 — surlignage bleu des cases du calendrier réaliste (clic
 # gauche) : translucide pour rester lisible par-dessus le grisé weekend
 # et la date affichée.
-_HIGHLIGHT_COLOR = QColor(33, 150, 243, 110)
 
 _WEEKDAY_KEYS = [
     "dep_gantt.weekday.mon",
@@ -239,18 +238,18 @@ class _DependencyGanttCanvas(QWidget):
         # correspondante) : si False (défaut), samedi/dimanche sont
         # grisés dans le calendrier réaliste (_paint_macro_calendar).
         self._work_weekends = False
-        # PATCH 95 — exceptions ponctuelles (clic droit) et cases
-        # surlignées en bleu (clic gauche) sur le calendrier réaliste.
-        # {"AAAA-MM-JJ": bool} / liste de "AAAA-MM-JJ" (voir
-        # set_day_overrides / set_highlighted_days).
+        # PATCH 95 — exceptions ponctuelles (clic droit) sur le
+        # calendrier réaliste. {"AAAA-MM-JJ": bool} (voir
+        # set_day_overrides). PATCH 97 — le surlignage bleu au clic
+        # gauche (purement visuel, sans effet sur le planning) a été
+        # retiré : il ne servait à rien et laissait croire à un bug
+        # (cases qui restaient "sélectionnées" indéfiniment).
         self._day_overrides: dict[str, bool] = {}
-        self._highlighted_days: set[str] = set()
         # PATCH 95 — rectangles des cases-date du calendrier réaliste,
         # reconstruits à chaque peinture (voir _paint_macro_calendar),
-        # utilisés pour la détection de clic (_day_at). Vide hors
+        # utilisés pour la détection de clic droit (_day_at). Vide hors
         # calendrier réaliste (mode macro sans "Jour 0", ou mode micro).
         self._day_cell_rects: list[tuple[QRect, date]] = []
-        self.on_day_left_clicked = None
         self.on_day_right_clicked = None
         # PATCH 72 — notifié à chaque changement de taille du canvas,
         # pour que la QScrollArea parente puisse copier sa hauteur
@@ -288,11 +287,6 @@ class _DependencyGanttCanvas(QWidget):
     def set_day_overrides(self, overrides: dict[str, bool]) -> None:
         """PATCH 95 — voir `_day_overrides`."""
         self._day_overrides = dict(overrides)
-        self.update()
-
-    def set_highlighted_days(self, days: list[str]) -> None:
-        """PATCH 95 — voir `_highlighted_days`."""
-        self._highlighted_days = set(days)
         self.update()
 
     def _is_working_day(self, d: date) -> bool:
@@ -432,14 +426,6 @@ class _DependencyGanttCanvas(QWidget):
     def mousePressEvent(self, event) -> None:  # noqa: N802
         if event.button() == Qt.LeftButton:
             task = self._bar_at(event.pos())
-            if task is None:
-                day = self._day_at(event.pos())
-                if day is not None:
-                    # PATCH 95 — case-date cliquée (pas un bâtonnet) :
-                    # bascule le surlignage bleu, purement visuel.
-                    if self.on_day_left_clicked is not None:
-                        self.on_day_left_clicked(day)
-                    return
             if task is not None:
                 if self._format == FORMAT_MACRO:
                     # PATCH 90 — pas de clic-glissé en mode macro : les
@@ -698,10 +684,6 @@ class _DependencyGanttCanvas(QWidget):
                 cell_rect = QRect(x, week_y, cell_w, week_h)
                 if not self._is_working_day(cell_date):
                     painter.fillRect(cell_rect, self._weekend_color())
-                if cell_date.isoformat() in self._highlighted_days:
-                    # PATCH 95 — surlignage bleu (clic gauche), superposé
-                    # en translucide pour garder la date lisible par-dessus.
-                    painter.fillRect(cell_rect, _HIGHLIGHT_COLOR)
                 painter.setPen(QPen(QColor("#cccccc"), 1))
                 painter.drawRect(cell_rect)
                 painter.setPen(QPen(self.palette().color(QPalette.WindowText)))
@@ -950,13 +932,11 @@ class DependencyGanttBlockWidget(QWidget):
         self._canvas.on_bar_clicked = self._on_bar_clicked
         self._canvas.on_bar_drag_moved = self._on_bar_drag_moved
         self._canvas.on_bar_drag_finished = self._on_bar_drag_finished
-        self._canvas.on_day_left_clicked = self._on_day_left_clicked
         self._canvas.on_day_right_clicked = self._on_day_right_clicked
         self._canvas.set_format(self._block.chart_format)
         self._canvas.set_start_date(self._block.start_date)
         self._canvas.set_work_weekends(self._block.work_weekends)
         self._canvas.set_day_overrides(self._block.day_overrides)
-        self._canvas.set_highlighted_days(self._block.highlighted_days)
         # PATCH 71 — zone de défilement STRICTEMENT horizontale : le
         # canvas garde toujours sa hauteur complète (jamais tronquée
         # verticalement), `widgetResizable=False` pour que sa largeur
@@ -1079,12 +1059,6 @@ class DependencyGanttBlockWidget(QWidget):
         self._block.work_weekends = checked
         self._canvas.set_work_weekends(checked)
         self.refresh()
-
-    def _on_day_left_clicked(self, day: date) -> None:
-        """PATCH 95 — clic gauche sur une case-date : surlignage bleu,
-        purement visuel (sans effet sur le planning)."""
-        self._block.toggle_highlighted_day(day.isoformat())
-        self._canvas.set_highlighted_days(self._block.highlighted_days)
 
     def _on_day_right_clicked(self, day: date, global_pos) -> None:
         """PATCH 95 — clic droit sur une case-date : force le jour comme

@@ -2,6 +2,24 @@
 
 ## Post-1.0
 
+- **97** — Deux contrôles sans effet réel retirés (signalés comme des
+  bugs par l'utilisateur) :
+  - Bloc "Courbes" : le champ "Échelle" (`x_max`) ne changeait jamais
+    le rendu (`compute_line_series` normalise toutes les coordonnées
+    par ce même `x_max`, donc l'effet s'annule toujours
+    mathématiquement) ; contrôle retiré de l'en-tête. `x_max` reste
+    dans le modèle (valeur fixe, non éditable) pour ne pas casser les
+    documents/tests existants.
+  - Gantt (dépendances), calendrier réaliste du mode macro : le
+    surlignage bleu au clic gauche sur une case-date (PATCH 95,
+    purement visuel, sans effet sur le planning) donnait l'impression
+    d'un bug (cases qui restaient indéfiniment "sélectionnées").
+    Retiré entièrement : `DependencyGanttBlock.highlighted_days`/
+    `toggle_highlighted_day`, le câblage clic gauche du canvas, et le
+    surlignage peint. Le clic droit (exceptions ouvré/non ouvré,
+    `day_overrides`, PATCH 95/96) est inchangé. D'anciens documents
+    JSON contenant encore la clé `highlighted_days` se rechargent sans
+    erreur (champ simplement ignoré).
 - **96** — Gantt (dépendances), menu contextuel des cases-date (suite
   PATCH 95) : un jour n'étant que ouvré OU non ouvré, remplace les deux
   actions mutuellement exclusives ("Marquer ouvré" / "Marquer non

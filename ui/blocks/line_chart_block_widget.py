@@ -30,7 +30,6 @@ from PySide6.QtWidgets import (
     QDoubleSpinBox,
     QGridLayout,
     QHBoxLayout,
-    QLabel,
     QLineEdit,
     QPushButton,
     QVBoxLayout,
@@ -176,7 +175,13 @@ class _TitleLikeLineEdit(QLineEdit):
 
 
 class LineChartBlockWidget(QWidget):
-    """Widget d'un LineChartBlock : titre, axes, échelle, séries éditables, courbes."""
+    """Widget d'un LineChartBlock : titre, axes, séries éditables, courbes.
+
+    PATCH 97 — le contrôle "Échelle" (x_max) a été retiré : il ne
+    changeait jamais le rendu (compute_line_series normalise toutes les
+    coordonnées par ce même x_max, donc l'effet s'annule toujours
+    mathématiquement), il ne servait à rien pour l'utilisateur.
+    """
 
     def __init__(self, block: LineChartBlock, document, parent=None) -> None:
         super().__init__(parent)
@@ -198,12 +203,6 @@ class LineChartBlockWidget(QWidget):
         self._y_axis_edit = _TitleLikeLineEdit(block.y_axis_label, tr("line_chart.y_axis"), _AXIS_STYLE, self)
         self._y_axis_edit.textChanged.connect(self._on_y_axis_changed)
         header.addWidget(self._y_axis_edit, 1)
-        header.addWidget(QLabel(tr("gantt.scale"), self))
-        self._x_max_spin = QDoubleSpinBox(self)
-        self._x_max_spin.setRange(0.01, 100000)
-        self._x_max_spin.setValue(block.x_max)
-        self._x_max_spin.valueChanged.connect(self._on_x_max_changed)
-        header.addWidget(self._x_max_spin)
         layout.addLayout(header)
 
         self._canvas = _LineChartCanvas(self)
@@ -305,10 +304,6 @@ class LineChartBlockWidget(QWidget):
     def _on_y_axis_changed(self, text: str) -> None:
         self._block.y_axis_label = text
         self._canvas.set_axis_labels(self._block.x_axis_label, self._block.y_axis_label)
-
-    def _on_x_max_changed(self, value: float) -> None:
-        self._block.x_max = value
-        self.refresh()
 
     def _on_add_series(self) -> None:
         self._block.add_series(name=f"{tr('line_chart.line')} {len(self._block.series) + 1}")

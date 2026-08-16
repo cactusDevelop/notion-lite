@@ -325,22 +325,25 @@ def test_day_overrides_default_empty_and_settable():
     assert block.day_overrides == {}
 
 
-def test_highlighted_days_default_empty_and_toggleable():
-    block = DependencyGanttBlock()
-    assert block.highlighted_days == []
-    block.toggle_highlighted_day("2026-08-17")
-    assert block.highlighted_days == ["2026-08-17"]
-    block.toggle_highlighted_day("2026-08-17")
-    assert block.highlighted_days == []
+def test_old_json_with_highlighted_days_field_still_loads():
+    """PATCH 97 — un document sauvegardé avant le retrait du surlignage
+    bleu (clé "highlighted_days" dans le JSON) doit continuer à se
+    recharger sans erreur ; le champ est simplement ignoré."""
+    doc, table, label_col, person_col, duration_col, risk_col, dep_col = _build_document()
+    gantt = DependencyGanttBlock(table_block_id=table.id)
+    data = gantt.to_dict()
+    data["highlighted_days"] = ["2026-08-17"]
+
+    rebuilt = block_from_dict(data)
+    assert isinstance(rebuilt, DependencyGanttBlock)
+    assert not hasattr(rebuilt, "highlighted_days")
 
 
-def test_roundtrip_via_registry_preserves_day_overrides_and_highlighted_days():
+def test_roundtrip_via_registry_preserves_day_overrides():
     doc, table, label_col, person_col, duration_col, risk_col, dep_col = _build_document()
     gantt = DependencyGanttBlock(table_block_id=table.id)
     gantt.set_day_override("2026-08-22", True)
-    gantt.toggle_highlighted_day("2026-08-17")
 
     rebuilt = block_from_dict(gantt.to_dict())
     assert isinstance(rebuilt, DependencyGanttBlock)
     assert rebuilt.day_overrides == {"2026-08-22": True}
-    assert rebuilt.highlighted_days == ["2026-08-17"]

@@ -1,7 +1,8 @@
-"""PATCH 96 — clic gauche = surlignage bleu (visuel), clic droit = une
-seule case à cocher "Jour ouvré" (un jour n'est que ouvré OU non ouvré),
-plus "Réinitialiser" si une exception ponctuelle existe déjà, sur les
-cases-date du calendrier réaliste du mode macro.
+"""PATCH 96 — clic droit = une seule case à cocher "Jour ouvré" (un
+jour n'est que ouvré OU non ouvré), plus "Réinitialiser" si une
+exception ponctuelle existe déjà, sur les cases-date du calendrier
+réaliste du mode macro. PATCH 97 — le clic gauche (ex-surlignage bleu,
+purement visuel et sans effet, retiré) n'est plus testé ici.
 """
 from __future__ import annotations
 
@@ -38,17 +39,6 @@ def _build_document_and_block():
     )
     doc.add_block(block)
     return doc, block
-
-
-def test_on_day_left_clicked_toggles_highlight(qapp):
-    doc, block = _build_document_and_block()
-    widget = DependencyGanttBlockWidget(block, doc)
-    widget._on_day_left_clicked(date(2026, 8, 17))
-    assert block.highlighted_days == ["2026-08-17"]
-    assert widget._canvas._highlighted_days == {"2026-08-17"}
-    widget._on_day_left_clicked(date(2026, 8, 17))
-    assert block.highlighted_days == []
-    assert widget._canvas._highlighted_days == set()
 
 
 def test_toggle_action_reflects_default_state_and_flips_it(qapp):
@@ -101,6 +91,18 @@ def test_reset_action_only_offered_with_existing_override(qapp):
         saturday.isoformat(), reset_action, toggle_action, reset_action, effective
     )
     assert block.day_overrides == {}
+
+
+def test_left_click_on_day_cell_has_no_visible_effect(qapp):
+    """PATCH 97 — régression : un clic gauche sur une case-date ne doit
+    plus rien surligner (l'ancien surlignage bleu, purement visuel et
+    sans effet sur le planning, a été retiré)."""
+    doc, block = _build_document_and_block()
+    block.start_date = "2026-08-17"
+    widget = DependencyGanttBlockWidget(block, doc)
+    assert not hasattr(widget, "_on_day_left_clicked")
+    assert not hasattr(widget._canvas, "on_day_left_clicked")
+    assert not hasattr(widget._canvas, "_highlighted_days")
 
 
 def test_no_reset_action_without_existing_override(qapp):
