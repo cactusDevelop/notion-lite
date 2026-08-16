@@ -128,6 +128,10 @@ _MACRO_WEEK_GAP = 6
 # de la grille (voir _paint_macro_calendar).
 _MACRO_WEEKDAY_HEADER_H = 20
 _TODAY_BORDER_COLOR = QColor("#e53935")
+# PATCH 98 — surlignage des cases-date sélectionnées (voir
+# _DependencyGanttCanvas._select_day) ; translucide pour garder la
+# date lisible par-dessus.
+_SELECTION_COLOR = QColor(33, 150, 243, 110)
 # PATCH 95 — surlignage bleu des cases du calendrier réaliste (clic
 # gauche) : translucide pour rester lisible par-dessus le grisé weekend
 # et la date affichée.
@@ -240,17 +244,33 @@ class _DependencyGanttCanvas(QWidget):
         self._work_weekends = False
         # PATCH 95 — exceptions ponctuelles (clic droit) sur le
         # calendrier réaliste. {"AAAA-MM-JJ": bool} (voir
-        # set_day_overrides). PATCH 97 — le surlignage bleu au clic
-        # gauche (purement visuel, sans effet sur le planning) a été
-        # retiré : il ne servait à rien et laissait croire à un bug
-        # (cases qui restaient "sélectionnées" indéfiniment).
+        # set_day_overrides).
         self._day_overrides: dict[str, bool] = {}
+        # PATCH 98 — sélection de cases-date (clic gauche), à l'instar
+        # d'un explorateur de fichiers : clic seul = sélectionne
+        # uniquement cette case (remplace la sélection précédente),
+        # Ctrl+clic = ajoute/retire cette case, Maj+clic = étend la
+        # sélection depuis la dernière case cliquée (`_selection_anchor`)
+        # jusqu'à celle-ci (plage calendaire contiguë). Remplace le
+        # surlignage PATCH 95 (pur toggle, jamais remplacé ni effacé —
+        # d'où le bug signalé : les cases restaient "sélectionnées"
+        # même en cliquant ailleurs). Purement local à ce widget, non
+        # persisté dans le document (c'est une sélection de travail,
+        # pas un réglage) ; effacée dès qu'on interagit ailleurs (voir
+        # `focusOutEvent`, `clear_selection`).
+        self._selected_days: set[str] = set()
+        self._selection_anchor: date | None = None
         # PATCH 95 — rectangles des cases-date du calendrier réaliste,
         # reconstruits à chaque peinture (voir _paint_macro_calendar),
-        # utilisés pour la détection de clic droit (_day_at). Vide hors
+        # utilisés pour la détection de clic (_day_at). Vide hors
         # calendrier réaliste (mode macro sans "Jour 0", ou mode micro).
         self._day_cell_rects: list[tuple[QRect, date]] = []
         self.on_day_right_clicked = None
+        # PATCH 98 — la sélection doit s'effacer dès qu'on interagit
+        # avec un autre contrôle (case à cocher, combo, autre bloc...) :
+        # focus au clic pour que ces interactions déclenchent bien
+        # `focusOutEvent`.
+        self.setFocusPolicy(Qt.StrongFocus)
         # PATCH 72 — notifié à chaque changement de taille du canvas,
         # pour que la QScrollArea parente puisse copier sa hauteur
         # (elle ne le fait pas toute seule quand `widgetResizable` est
@@ -287,6 +307,40 @@ class _DependencyGanttCanvas(QWidget):
     def set_day_overrides(self, overrides: dict[str, bool]) -> None:
         """PATCH 95 — voir `_day_overrides`."""
         self._day_overrides = dict(overrides)
+        self.update()
+
+    def clear_selection(self) -> None:
+        """PATCH 98 — efface la sélection de cases-date sans y toucher
+        si elle est déjà vide (évite un repaint inutile)."""
+        if not self._selected_days:
+            return
+        self._selected_days = set()
+        self._selection_anchor = None
+        self.update()
+
+    def _select_day(self, day: date, modifiers) -> None:
+        """PATCH 98 — clic seul = sélection unique (remplace), Ctrl =
+        ajoute/retire, Maj = étend depuis `_selection_anchor` (plage
+        calendaire contiguë, jours non ouvrés inclus)."""
+        iso = day.isoformat()
+        if modifiers & Qt.ControlModifier:
+            if iso in self._selected_days:
+                self._selected_days.discard(iso)
+            else:
+                self._selected_days.add(iso)
+            self._selection_anchor = day
+        elif modifiers & Qt.ShiftModifier and self._selection_anchor is not None:
+            start, end = sorted((self._selection_anchor, day))
+            span = (end - start).days
+            self._selected_days = {
+                (start + timedelta(days=i)).isoformat() for i in range(span + 1)
+            }
+            # PATCH 98 — l'ancre ne bouge pas : un Maj+clic suivant
+            # réétend depuis la même origine, comme un explorateur de
+            # fichiers.
+        else:
+            self._selected_days = {iso}
+            self._selection_anchor = day
         self.update()
 
     def _is_working_day(self, d: date) -> bool:
@@ -427,6 +481,9 @@ class _DependencyGanttCanvas(QWidget):
         if event.button() == Qt.LeftButton:
             task = self._bar_at(event.pos())
             if task is not None:
+                # PATCH 98 — cliquer un bâtonnet (autre élément du même
+                # graphe) efface la sélection de cases-date en cours.
+                self.clear_selection()
                 if self._format == FORMAT_MACRO:
                     # PATCH 90 — pas de clic-glissé en mode macro : les
                     # échelles ne sont pas uniformes (semaine par semaine),
@@ -441,12 +498,30 @@ class _DependencyGanttCanvas(QWidget):
                 self._drag_moved = False
                 self.setCursor(Qt.SizeHorCursor)
                 return
+            day = self._day_at(event.pos())
+            if day is not None:
+                self.setFocus(Qt.MouseFocusReason)
+                self._select_day(day, event.modifiers())
+                return
+            # PATCH 98 — clic dans une zone vide du graphe (ni bâtonnet,
+            # ni case-date) : efface aussi la sélection.
+            self.clear_selection()
         super().mousePressEvent(event)
+
+    def focusOutEvent(self, event) -> None:  # noqa: N802
+        """PATCH 98 — la sélection de cases-date est un état de travail
+        transitoire : interagir avec un autre contrôle (case à cocher,
+        combo, un autre bloc...) l'efface, plutôt que de la laisser
+        "collée" indéfiniment (bug signalé)."""
+        self.clear_selection()
+        super().focusOutEvent(event)
 
     def contextMenuEvent(self, event) -> None:  # noqa: N802
         """PATCH 95 — clic droit sur une case-date du calendrier
-        réaliste : forcer/déforcer le jour comme ouvré (voir
-        DependencyGanttBlockWidget._on_day_right_clicked)."""
+        réaliste : forcer/déforcer le(s) jour(s) comme ouvré(s) (voir
+        DependencyGanttBlockWidget._on_day_right_clicked). PATCH 98 —
+        s'applique à toute la sélection courante si la case cliquée en
+        fait partie."""
         day = self._day_at(event.pos())
         if day is not None and self.on_day_right_clicked is not None:
             self.on_day_right_clicked(day, event.globalPos())
@@ -684,6 +759,8 @@ class _DependencyGanttCanvas(QWidget):
                 cell_rect = QRect(x, week_y, cell_w, week_h)
                 if not self._is_working_day(cell_date):
                     painter.fillRect(cell_rect, self._weekend_color())
+                if cell_date.isoformat() in self._selected_days:
+                    painter.fillRect(cell_rect, _SELECTION_COLOR)
                 painter.setPen(QPen(QColor("#cccccc"), 1))
                 painter.drawRect(cell_rect)
                 painter.setPen(QPen(self.palette().color(QPalette.WindowText)))
@@ -1061,24 +1138,32 @@ class DependencyGanttBlockWidget(QWidget):
         self.refresh()
 
     def _on_day_right_clicked(self, day: date, global_pos) -> None:
-        """PATCH 95 — clic droit sur une case-date : force le jour comme
-        ouvré/non ouvré (exception ponctuelle, voir
+        """PATCH 95 — clic droit sur une case-date : force le(s) jour(s)
+        comme ouvré(s)/non ouvré(s) (exception ponctuelle, voir
         DependencyGanttBlock.day_overrides), ou réinitialise au
-        comportement par défaut."""
+        comportement par défaut. PATCH 98 — si la case cliquée fait
+        partie de la sélection courante (Ctrl/Maj+clic), l'action
+        s'applique à toute la sélection, pas seulement à cette case."""
         iso = day.isoformat()
-        menu, toggle_action, reset_action, effective = self._build_day_context_menu(day)
+        selection = self._canvas._selected_days
+        days = set(selection) if iso in selection and len(selection) > 1 else {iso}
+        menu, toggle_action, reset_action, effective = self._build_day_context_menu(day, days)
         chosen = menu.exec(global_pos)
-        self._apply_day_context_menu_choice(iso, chosen, toggle_action, reset_action, effective)
+        self._apply_day_context_menu_choice(days, chosen, toggle_action, reset_action, effective)
 
-    def _build_day_context_menu(self, day: date):
+    def _build_day_context_menu(self, day: date, days: set[str] | None = None):
         """PATCH 96 — un jour n'étant que ouvré OU non ouvré, une seule
         case à cocher ("Jour ouvré") suffit, plutôt que deux actions
-        mutuellement exclusives. Cochée = état effectif actuel
-        (exception existante, sinon calcul par défaut via
-        `_canvas.is_working_day`) ; la cocher/décocher pose l'exception
-        inverse. Construction séparée de l'affichage (menu.exec, modal
-        et bloquant) pour rester testable sans simuler une interaction
-        utilisateur réelle."""
+        mutuellement exclusives. Cochée = état effectif actuel de la
+        case cliquée (exception existante, sinon calcul par défaut via
+        `_canvas.is_working_day`) ; la cocher/décocher pose la même
+        exception sur tout le groupe `days` (PATCH 98, une sélection
+        multiple s'il y en a une, sinon juste cette case). "Réinitialiser"
+        proposé si au moins une case du groupe a déjà une exception, et
+        les réinitialise toutes. Construction séparée de l'affichage
+        (menu.exec, modal et bloquant) pour rester testable sans simuler
+        une interaction utilisateur réelle."""
+        days = days or {day.isoformat()}
         iso = day.isoformat()
         current = self._block.day_overrides.get(iso)
         effective = current if current is not None else self._canvas.is_working_day(day)
@@ -1086,20 +1171,27 @@ class DependencyGanttBlockWidget(QWidget):
         toggle_action = menu.addAction(tr("dep_gantt.working_day"))
         toggle_action.setCheckable(True)
         toggle_action.setChecked(effective)
-        reset_action = menu.addAction(tr("dep_gantt.reset_day")) if current is not None else None
+        has_override = any(d in self._block.day_overrides for d in days)
+        reset_action = menu.addAction(tr("dep_gantt.reset_day")) if has_override else None
         return menu, toggle_action, reset_action, effective
 
-    def _apply_day_context_menu_choice(self, iso: str, chosen, toggle_action, reset_action, effective: bool) -> None:
+    def _apply_day_context_menu_choice(
+        self, days: set[str], chosen, toggle_action, reset_action, effective: bool
+    ) -> None:
         if chosen is None:
             return
         if chosen is toggle_action:
             # PATCH 96 — `effective` est l'état AVANT clic (capturé à la
             # construction du menu) : la case à cocher pose l'exception
             # inverse, qu'importe l'éventuel (dé)cochage interne de Qt.
-            self._block.set_day_override(iso, not effective)
+            # PATCH 98 — appliquée à tout le groupe `days` d'un coup.
+            for iso in days:
+                self._block.set_day_override(iso, not effective)
         elif chosen is reset_action:
-            self._block.set_day_override(iso, None)
+            for iso in days:
+                self._block.set_day_override(iso, None)
         self._canvas.set_day_overrides(self._block.day_overrides)
+        self._canvas.clear_selection()
         self.refresh()
 
     # -- Zoom (PATCH 71) --------------------------------------------------

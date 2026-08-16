@@ -1,8 +1,11 @@
 """PATCH 96 — clic droit = une seule case à cocher "Jour ouvré" (un
 jour n'est que ouvré OU non ouvré), plus "Réinitialiser" si une
 exception ponctuelle existe déjà, sur les cases-date du calendrier
-réaliste du mode macro. PATCH 97 — le clic gauche (ex-surlignage bleu,
-purement visuel et sans effet, retiré) n'est plus testé ici.
+réaliste du mode macro. PATCH 98 — clic gauche = sélection (façon
+explorateur de fichiers : clic seul remplace, Ctrl ajoute/retire, Maj
+étend une plage), effacée dès qu'on interagit ailleurs ; le clic droit
+sur une case appartenant à la sélection applique l'action à tout le
+groupe.
 """
 from __future__ import annotations
 
@@ -13,6 +16,8 @@ from datetime import date
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
+from PySide6.QtCore import QEvent, Qt
+from PySide6.QtGui import QFocusEvent
 from PySide6.QtWidgets import QApplication
 
 from blocks.dependency_gantt_block import DependencyGanttBlock
@@ -54,7 +59,7 @@ def test_toggle_action_reflects_default_state_and_flips_it(qapp):
     assert toggle_action.isChecked() is False
     assert reset_action is None
 
-    widget._apply_day_context_menu_choice(saturday.isoformat(), toggle_action, toggle_action, reset_action, effective)
+    widget._apply_day_context_menu_choice({"2026-08-22"}, toggle_action, toggle_action, reset_action, effective)
     assert block.day_overrides == {"2026-08-22": True}
     assert widget._canvas._day_overrides == {"2026-08-22": True}
 
@@ -71,7 +76,7 @@ def test_toggle_action_on_working_day_forces_it_off(qapp):
     assert effective is True
     assert toggle_action.isChecked() is True
 
-    widget._apply_day_context_menu_choice(monday.isoformat(), toggle_action, toggle_action, reset_action, effective)
+    widget._apply_day_context_menu_choice({"2026-08-17"}, toggle_action, toggle_action, reset_action, effective)
     assert block.day_overrides == {"2026-08-17": False}
 
 
@@ -88,21 +93,9 @@ def test_reset_action_only_offered_with_existing_override(qapp):
     assert toggle_action.isChecked() is True
 
     widget._apply_day_context_menu_choice(
-        saturday.isoformat(), reset_action, toggle_action, reset_action, effective
+        {"2026-08-22"}, reset_action, toggle_action, reset_action, effective
     )
     assert block.day_overrides == {}
-
-
-def test_left_click_on_day_cell_has_no_visible_effect(qapp):
-    """PATCH 97 — régression : un clic gauche sur une case-date ne doit
-    plus rien surligner (l'ancien surlignage bleu, purement visuel et
-    sans effet sur le planning, a été retiré)."""
-    doc, block = _build_document_and_block()
-    block.start_date = "2026-08-17"
-    widget = DependencyGanttBlockWidget(block, doc)
-    assert not hasattr(widget, "_on_day_left_clicked")
-    assert not hasattr(widget._canvas, "on_day_left_clicked")
-    assert not hasattr(widget._canvas, "_highlighted_days")
 
 
 def test_no_reset_action_without_existing_override(qapp):
@@ -112,3 +105,115 @@ def test_no_reset_action_without_existing_override(qapp):
 
     _, _, reset_action, _ = widget._build_day_context_menu(date(2026, 8, 17))
     assert reset_action is None
+
+
+# -- PATCH 98 — sélection (clic gauche) --------------------------------
+
+
+def test_plain_click_selects_only_that_day_replacing_previous(qapp):
+    doc, block = _build_document_and_block()
+    block.start_date = "2026-08-17"
+    widget = DependencyGanttBlockWidget(block, doc)
+    canvas = widget._canvas
+
+    canvas._select_day(date(2026, 8, 17), Qt.NoModifier)
+    assert canvas._selected_days == {"2026-08-17"}
+    canvas._select_day(date(2026, 8, 18), Qt.NoModifier)
+    assert canvas._selected_days == {"2026-08-18"}
+
+
+def test_ctrl_click_toggles_day_in_and_out_of_selection(qapp):
+    doc, block = _build_document_and_block()
+    block.start_date = "2026-08-17"
+    widget = DependencyGanttBlockWidget(block, doc)
+    canvas = widget._canvas
+
+    canvas._select_day(date(2026, 8, 17), Qt.NoModifier)
+    canvas._select_day(date(2026, 8, 19), Qt.ControlModifier)
+    assert canvas._selected_days == {"2026-08-17", "2026-08-19"}
+    canvas._select_day(date(2026, 8, 17), Qt.ControlModifier)
+    assert canvas._selected_days == {"2026-08-19"}
+
+
+def test_shift_click_extends_range_from_anchor(qapp):
+    doc, block = _build_document_and_block()
+    block.start_date = "2026-08-17"
+    widget = DependencyGanttBlockWidget(block, doc)
+    canvas = widget._canvas
+
+    canvas._select_day(date(2026, 8, 17), Qt.NoModifier)
+    canvas._select_day(date(2026, 8, 20), Qt.ShiftModifier)
+    assert canvas._selected_days == {
+        "2026-08-17",
+        "2026-08-18",
+        "2026-08-19",
+        "2026-08-20",
+    }
+    # Un second Maj+clic réétend depuis la même ancre (17), pas depuis
+    # le dernier point de la plage précédente (20).
+    canvas._select_day(date(2026, 8, 18), Qt.ShiftModifier)
+    assert canvas._selected_days == {"2026-08-17", "2026-08-18"}
+
+
+def test_clear_selection_empties_it(qapp):
+    doc, block = _build_document_and_block()
+    block.start_date = "2026-08-17"
+    widget = DependencyGanttBlockWidget(block, doc)
+    canvas = widget._canvas
+
+    canvas._selected_days = {"2026-08-17"}
+    canvas.clear_selection()
+    assert canvas._selected_days == set()
+
+
+def test_focus_out_clears_selection(qapp):
+    """PATCH 98 — régression du bug signalé : interagir avec un autre
+    contrôle (perte de focus du graphe) ne doit plus laisser la
+    sélection "collée"."""
+    doc, block = _build_document_and_block()
+    block.start_date = "2026-08-17"
+    widget = DependencyGanttBlockWidget(block, doc)
+    canvas = widget._canvas
+
+    canvas._selected_days = {"2026-08-17"}
+    canvas.focusOutEvent(QFocusEvent(QEvent.FocusOut, Qt.MouseFocusReason))
+    assert canvas._selected_days == set()
+
+
+def test_right_click_on_selected_day_applies_to_whole_selection(qapp):
+    """PATCH 98 — un clic droit sur une case faisant partie de la
+    sélection courante coche/décoche "Jour ouvré" pour tout le
+    groupe en une fois."""
+    doc, block = _build_document_and_block()
+    block.start_date = "2026-08-17"  # lundi
+    widget = DependencyGanttBlockWidget(block, doc)
+    canvas = widget._canvas
+    canvas._selected_days = {"2026-08-17", "2026-08-18", "2026-08-19"}
+
+    menu, toggle_action, reset_action, effective = widget._build_day_context_menu(
+        date(2026, 8, 17), {"2026-08-17", "2026-08-18", "2026-08-19"}
+    )
+    widget._apply_day_context_menu_choice(
+        {"2026-08-17", "2026-08-18", "2026-08-19"}, toggle_action, toggle_action, reset_action, effective
+    )
+    assert block.day_overrides == {
+        "2026-08-17": False,
+        "2026-08-18": False,
+        "2026-08-19": False,
+    }
+    # PATCH 98 — l'action appliquée efface aussi la sélection.
+    assert canvas._selected_days == set()
+
+
+def test_right_click_on_day_outside_selection_only_affects_that_day(qapp):
+    doc, block = _build_document_and_block()
+    block.start_date = "2026-08-17"
+    widget = DependencyGanttBlockWidget(block, doc)
+    canvas = widget._canvas
+    canvas._selected_days = {"2026-08-17", "2026-08-18"}
+
+    # 2026-08-25 n'est pas dans la sélection : seul lui est concerné.
+    iso = "2026-08-25"
+    selection = canvas._selected_days
+    days = set(selection) if iso in selection and len(selection) > 1 else {iso}
+    assert days == {"2026-08-25"}

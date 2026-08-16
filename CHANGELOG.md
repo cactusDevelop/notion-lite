@@ -2,24 +2,35 @@
 
 ## Post-1.0
 
-- **97** — Deux contrôles sans effet réel retirés (signalés comme des
-  bugs par l'utilisateur) :
-  - Bloc "Courbes" : le champ "Échelle" (`x_max`) ne changeait jamais
-    le rendu (`compute_line_series` normalise toutes les coordonnées
-    par ce même `x_max`, donc l'effet s'annule toujours
-    mathématiquement) ; contrôle retiré de l'en-tête. `x_max` reste
-    dans le modèle (valeur fixe, non éditable) pour ne pas casser les
-    documents/tests existants.
-  - Gantt (dépendances), calendrier réaliste du mode macro : le
-    surlignage bleu au clic gauche sur une case-date (PATCH 95,
-    purement visuel, sans effet sur le planning) donnait l'impression
-    d'un bug (cases qui restaient indéfiniment "sélectionnées").
-    Retiré entièrement : `DependencyGanttBlock.highlighted_days`/
-    `toggle_highlighted_day`, le câblage clic gauche du canvas, et le
-    surlignage peint. Le clic droit (exceptions ouvré/non ouvré,
-    `day_overrides`, PATCH 95/96) est inchangé. D'anciens documents
-    JSON contenant encore la clé `highlighted_days` se rechargent sans
-    erreur (champ simplement ignoré).
+- **98** — Retour sur le retrait du PATCH 97 : le surlignage bleu au
+  clic gauche sur une case-date du calendrier réaliste (mode macro)
+  n'était pas inutile, il était juste mal fini — corrigé plutôt que
+  supprimé.
+  - Devient une vraie **sélection**, façon explorateur de fichiers :
+    clic seul = sélectionne uniquement cette case (remplace la
+    sélection précédente — c'était le bug signalé : cliquer une autre
+    case s'ajoutait à l'ancienne sans jamais la remplacer) ; Ctrl+clic
+    = ajoute/retire cette case ; Maj+clic = étend une plage contiguë
+    depuis la dernière case cliquée sans Ctrl/Maj.
+  - Se réinitialise (`clear_selection`) dès qu'on interagit ailleurs :
+    clic sur un bâtonnet, sur une zone vide du graphe, ou perte de
+    focus du canvas (autre case à cocher, combo, autre bloc...) —
+    c'était le second symptôme du bug (sélection "collée" même en
+    travaillant ailleurs).
+  - Le clic droit ("Jour ouvré" / "Réinitialiser") s'applique
+    désormais à **toute la sélection** si la case cliquée en fait
+    partie (plusieurs jours à la fois), sinon à cette seule case comme
+    avant ; l'action efface ensuite la sélection.
+  - Purement une sélection de travail, non persistée dans le document
+    (contrairement à l'ancien `highlighted_days` du PATCH 95/96, qui
+    était sauvegardé en JSON sans jamais servir à rien d'autre que
+    visuel — ce champ a disparu du modèle au PATCH 97 et reste retiré).
+- **97** — Le champ "Échelle" (`x_max`) du bloc "Courbes" ne changeait
+  jamais le rendu (`compute_line_series` normalise toutes les
+  coordonnées par ce même `x_max`, donc l'effet s'annule toujours
+  mathématiquement) ; contrôle retiré de l'en-tête. `x_max` reste dans
+  le modèle (valeur fixe, non éditable) pour ne pas casser les
+  documents/tests existants.
 - **96** — Gantt (dépendances), menu contextuel des cases-date (suite
   PATCH 95) : un jour n'étant que ouvré OU non ouvré, remplace les deux
   actions mutuellement exclusives ("Marquer ouvré" / "Marquer non
