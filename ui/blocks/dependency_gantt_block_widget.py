@@ -132,6 +132,14 @@ _TODAY_BORDER_COLOR = QColor("#e53935")
 # _DependencyGanttCanvas._select_day) ; translucide pour garder la
 # date lisible par-dessus.
 _SELECTION_COLOR = QColor(33, 150, 243, 110)
+# PATCH 99 — navigation clavier sur le calendrier réaliste (voir
+# _DependencyGanttCanvas.keyPressEvent).
+_ARROW_KEY_DELTAS = {
+    Qt.Key_Left: -1,
+    Qt.Key_Right: 1,
+    Qt.Key_Up: -7,
+    Qt.Key_Down: 7,
+}
 # PATCH 95 — surlignage bleu des cases du calendrier réaliste (clic
 # gauche) : translucide pour rester lisible par-dessus le grisé weekend
 # et la date affichée.
@@ -260,12 +268,22 @@ class _DependencyGanttCanvas(QWidget):
         # `focusOutEvent`, `clear_selection`).
         self._selected_days: set[str] = set()
         self._selection_anchor: date | None = None
+        # PATCH 99 — dernière case atteinte (clic ou flèche), sert de
+        # point de départ au calcul de la case suivante lors d'une
+        # navigation au clavier ; distincte de `_selection_anchor` qui
+        # reste fixe pendant une plage Maj+flèche/clic (pour pouvoir
+        # l'étendre pas à pas sans revenir sans cesse à son origine).
+        self._selection_cursor: date | None = None
         # PATCH 95 — rectangles des cases-date du calendrier réaliste,
         # reconstruits à chaque peinture (voir _paint_macro_calendar),
         # utilisés pour la détection de clic (_day_at). Vide hors
         # calendrier réaliste (mode macro sans "Jour 0", ou mode micro).
         self._day_cell_rects: list[tuple[QRect, date]] = []
         self.on_day_right_clicked = None
+        # PATCH 99 — référence optionnelle vers la QScrollArea parente
+        # (câblée par DependencyGanttBlockWidget), pour faire défiler la
+        # case atteinte au clavier dans la zone visible.
+        self._scroll_area = None
         # PATCH 98 — la sélection doit s'effacer dès qu'on interagit
         # avec un autre contrôle (case à cocher, combo, autre bloc...) :
         # focus au clic pour que ces interactions déclenchent bien
@@ -316,12 +334,17 @@ class _DependencyGanttCanvas(QWidget):
             return
         self._selected_days = set()
         self._selection_anchor = None
+        self._selection_cursor = None
         self.update()
 
     def _select_day(self, day: date, modifiers) -> None:
         """PATCH 98 — clic seul = sélection unique (remplace), Ctrl =
         ajoute/retire, Maj = étend depuis `_selection_anchor` (plage
-        calendaire contiguë, jours non ouvrés inclus)."""
+        calendaire contiguë, jours non ouvrés inclus). PATCH 99 —
+        `_selection_cursor` (case atteinte) avance à chaque appel, y
+        compris en Maj, pour que des flèches Maj+← / Maj+→ successives
+        étendent la plage pas à pas plutôt que de repartir de l'ancre à
+        chaque fois."""
         iso = day.isoformat()
         if modifiers & Qt.ControlModifier:
             if iso in self._selected_days:
@@ -341,6 +364,7 @@ class _DependencyGanttCanvas(QWidget):
         else:
             self._selected_days = {iso}
             self._selection_anchor = day
+        self._selection_cursor = day
         self.update()
 
     def _is_working_day(self, d: date) -> bool:
@@ -515,6 +539,32 @@ class _DependencyGanttCanvas(QWidget):
         "collée" indéfiniment (bug signalé)."""
         self.clear_selection()
         super().focusOutEvent(event)
+
+    def keyPressEvent(self, event) -> None:  # noqa: N802
+        """PATCH 99 — navigation au clavier sur le calendrier réaliste
+        du mode macro : ← / → avance/recule d'un jour, ↑ / ↓ d'une
+        semaine (7 jours). Déplace/redéfinit la sélection comme un
+        clic (Ctrl et Maj fonctionnent aussi ici : Ctrl+flèche ajoute
+        la nouvelle case sans désélectionner, Maj+flèche étend une
+        plage depuis la dernière case cliquée sans modificateur)."""
+        delta = _ARROW_KEY_DELTAS.get(event.key())
+        if delta is None or not self._day_cell_rects:
+            super().keyPressEvent(event)
+            return
+        available = [d for _, d in self._day_cell_rects]
+        current = self._selection_cursor or self._selection_anchor or available[0]
+        candidate = current + timedelta(days=delta)
+        candidate = max(min(available), min(candidate, max(available)))
+        self._select_day(candidate, event.modifiers())
+        self._scroll_day_into_view(candidate)
+
+    def _scroll_day_into_view(self, day: date) -> None:
+        if self._scroll_area is None:
+            return
+        for rect, cell_date in self._day_cell_rects:
+            if cell_date == day:
+                self._scroll_area.ensureVisible(rect.left(), rect.top(), 24, 8)
+                return
 
     def contextMenuEvent(self, event) -> None:  # noqa: N802
         """PATCH 95 — clic droit sur une case-date du calendrier
@@ -1026,6 +1076,9 @@ class DependencyGanttBlockWidget(QWidget):
         self._scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self._scroll_area.setWidget(self._canvas)
         layout.addWidget(self._scroll_area)
+        # PATCH 99 — pour que la navigation au clavier (flèches) fasse
+        # défiler la case atteinte dans la zone visible.
+        self._canvas._scroll_area = self._scroll_area
         # PATCH 72 — `widgetResizable=False` ne fait pas suivre à la
         # QScrollArea la hauteur de son contenu toute seule : sans ce
         # câblage elle gardait sa hauteur par défaut (~192 px), ce qui
@@ -1143,10 +1196,20 @@ class DependencyGanttBlockWidget(QWidget):
         DependencyGanttBlock.day_overrides), ou réinitialise au
         comportement par défaut. PATCH 98 — si la case cliquée fait
         partie de la sélection courante (Ctrl/Maj+clic), l'action
-        s'applique à toute la sélection, pas seulement à cette case."""
+        s'applique à toute la sélection, pas seulement à cette case.
+        PATCH 99 — la/les case(s) concernée(s) restent surlignées
+        pendant ET après le choix (pas de `clear_selection` ici), pour
+        que l'utilisateur voie ce qu'il est en train de changer ; si la
+        case cliquée n'était pas déjà sélectionnée, elle l'est le temps
+        du menu."""
         iso = day.isoformat()
         selection = self._canvas._selected_days
-        days = set(selection) if iso in selection and len(selection) > 1 else {iso}
+        if iso in selection and len(selection) > 1:
+            days = set(selection)
+        else:
+            days = {iso}
+            self._canvas._selected_days = days
+            self._canvas.update()
         menu, toggle_action, reset_action, effective = self._build_day_context_menu(day, days)
         chosen = menu.exec(global_pos)
         self._apply_day_context_menu_choice(days, chosen, toggle_action, reset_action, effective)
@@ -1191,7 +1254,6 @@ class DependencyGanttBlockWidget(QWidget):
             for iso in days:
                 self._block.set_day_override(iso, None)
         self._canvas.set_day_overrides(self._block.day_overrides)
-        self._canvas.clear_selection()
         self.refresh()
 
     # -- Zoom (PATCH 71) --------------------------------------------------

@@ -2,6 +2,19 @@
 
 ## Post-1.0
 
+- **99** — Deux ajustements du PATCH 98 (Gantt, calendrier réaliste du
+  mode macro) :
+  - Le clic droit ne vide plus la sélection après l'action choisie
+    ("Jour ouvré" / "Réinitialiser") : la ou les case(s) concernée(s)
+    restent surlignées pour que l'utilisateur voie ce qu'il vient de
+    changer. Une case cliquée-droit hors de toute sélection est
+    surlignée elle aussi le temps du menu.
+  - Navigation au clavier sur les cases-date : ← / → avancent/reculent
+    d'un jour, ↑ / ↓ d'une semaine (7 jours) ; Ctrl et Maj fonctionnent
+    aussi avec les flèches (ajout à la sélection / extension de plage,
+    comme au clic). La case atteinte défile automatiquement dans la
+    zone visible. Hors calendrier réaliste (mode macro sans "Jour 0"),
+    les flèches ne font rien de spécial.
 - **98** — Retour sur le retrait du PATCH 97 : le surlignage bleu au
   clic gauche sur une case-date du calendrier réaliste (mode macro)
   n'était pas inutile, il était juste mal fini — corrigé plutôt que

@@ -17,13 +17,13 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
 from PySide6.QtCore import QEvent, Qt
-from PySide6.QtGui import QFocusEvent
+from PySide6.QtGui import QFocusEvent, QKeyEvent
 from PySide6.QtWidgets import QApplication
 
 from blocks.dependency_gantt_block import DependencyGanttBlock
 from blocks.table_block import COLUMN_TYPE_NUMBER, COLUMN_TYPE_TEXT, TableBlock
 from core.document import Document
-from ui.blocks.dependency_gantt_block_widget import DependencyGanttBlockWidget
+from ui.blocks.dependency_gantt_block_widget import DependencyGanttBlockWidget, FORMAT_MACRO
 
 
 @pytest.fixture(scope="module")
@@ -31,11 +31,18 @@ def qapp():
     yield QApplication.instance() or QApplication(sys.argv)
 
 
-def _build_document_and_block():
+def _build_document_and_block(with_task_days: int = 0):
+    """`with_task_days` > 0 ajoute une sous-tâche de cette durée, pour
+    que le calendrier réaliste (mode macro) affiche plusieurs
+    cases-date (nécessaire pour les tests de navigation au clavier)."""
     doc = Document()
     table = TableBlock()
     label_col = table.add_column("Sous-tâches", col_type=COLUMN_TYPE_TEXT)
     duration_col = table.add_column("Durée", col_type=COLUMN_TYPE_NUMBER)
+    if with_task_days:
+        row = table.add_row()
+        table.set_cell(row["id"], label_col["id"], "Tâche 1")
+        table.set_cell(row["id"], duration_col["id"], with_task_days)
     doc.add_block(table)
     block = DependencyGanttBlock(
         table_block_id=table.id,
@@ -201,8 +208,10 @@ def test_right_click_on_selected_day_applies_to_whole_selection(qapp):
         "2026-08-18": False,
         "2026-08-19": False,
     }
-    # PATCH 98 — l'action appliquée efface aussi la sélection.
-    assert canvas._selected_days == set()
+    # PATCH 99 — la sélection reste visible après l'action (pour que
+    # l'utilisateur voie ce qu'il vient de changer), elle ne s'efface
+    # plus automatiquement ici.
+    assert canvas._selected_days == {"2026-08-17", "2026-08-18", "2026-08-19"}
 
 
 def test_right_click_on_day_outside_selection_only_affects_that_day(qapp):
@@ -217,3 +226,99 @@ def test_right_click_on_day_outside_selection_only_affects_that_day(qapp):
     selection = canvas._selected_days
     days = set(selection) if iso in selection and len(selection) > 1 else {iso}
     assert days == {"2026-08-25"}
+
+
+def test_right_click_highlights_the_day_even_without_prior_selection(qapp):
+    """PATCH 99 — un clic droit sur une case pas encore sélectionnée la
+    surligne quand même le temps du menu, pour montrer ce qui va
+    changer."""
+    doc, block = _build_document_and_block()
+    block.start_date = "2026-08-17"
+    widget = DependencyGanttBlockWidget(block, doc)
+    canvas = widget._canvas
+    assert canvas._selected_days == set()
+
+    menu, toggle_action, reset_action, effective = widget._build_day_context_menu(
+        date(2026, 8, 20)
+    )
+    # Simule ce que fait _on_day_right_clicked avant d'ouvrir le menu.
+    canvas._selected_days = {"2026-08-20"}
+    assert canvas._selected_days == {"2026-08-20"}
+
+
+# -- PATCH 99 — navigation au clavier -----------------------------------
+
+
+def _render_and_get_rects(widget):
+    from PySide6.QtGui import QPixmap
+
+    canvas = widget._canvas
+    widget.refresh()
+    pix = QPixmap(max(canvas.width(), 1), max(canvas.height(), 1))
+    canvas.render(pix)
+    return canvas._day_cell_rects
+
+
+def test_arrow_right_moves_selection_by_one_day(qapp):
+    doc, block = _build_document_and_block(with_task_days=14)
+    block.start_date = "2026-08-17"
+    block.chart_format = FORMAT_MACRO
+    widget = DependencyGanttBlockWidget(block, doc)
+    canvas = widget._canvas
+    _render_and_get_rects(widget)
+
+    canvas._select_day(date(2026, 8, 17), Qt.NoModifier)
+    canvas.keyPressEvent(QKeyEvent(QEvent.KeyPress, Qt.Key_Right, Qt.NoModifier))
+    assert canvas._selected_days == {"2026-08-18"}
+
+
+def test_arrow_down_moves_selection_by_one_week(qapp):
+    doc, block = _build_document_and_block(with_task_days=14)
+    block.start_date = "2026-08-17"
+    block.chart_format = FORMAT_MACRO
+    widget = DependencyGanttBlockWidget(block, doc)
+    canvas = widget._canvas
+    _render_and_get_rects(widget)
+
+    canvas._select_day(date(2026, 8, 17), Qt.NoModifier)
+    canvas.keyPressEvent(QKeyEvent(QEvent.KeyPress, Qt.Key_Down, Qt.NoModifier))
+    assert canvas._selected_days == {"2026-08-24"}
+
+
+def test_arrow_navigation_clamps_to_visible_range(qapp):
+    doc, block = _build_document_and_block(with_task_days=14)
+    block.start_date = "2026-08-17"
+    block.chart_format = FORMAT_MACRO
+    widget = DependencyGanttBlockWidget(block, doc)
+    canvas = widget._canvas
+    rects = _render_and_get_rects(widget)
+    first_day = min(d for _, d in rects)
+
+    canvas._select_day(first_day, Qt.NoModifier)
+    canvas.keyPressEvent(QKeyEvent(QEvent.KeyPress, Qt.Key_Left, Qt.NoModifier))
+    assert canvas._selected_days == {first_day.isoformat()}
+
+
+def test_arrow_with_shift_extends_range(qapp):
+    doc, block = _build_document_and_block(with_task_days=14)
+    block.start_date = "2026-08-17"
+    block.chart_format = FORMAT_MACRO
+    widget = DependencyGanttBlockWidget(block, doc)
+    canvas = widget._canvas
+    _render_and_get_rects(widget)
+
+    canvas._select_day(date(2026, 8, 17), Qt.NoModifier)
+    canvas.keyPressEvent(QKeyEvent(QEvent.KeyPress, Qt.Key_Right, Qt.ShiftModifier))
+    canvas.keyPressEvent(QKeyEvent(QEvent.KeyPress, Qt.Key_Right, Qt.ShiftModifier))
+    assert canvas._selected_days == {"2026-08-17", "2026-08-18", "2026-08-19"}
+
+
+def test_arrow_ignored_outside_realistic_calendar(qapp):
+    """Hors calendrier réaliste (pas de 'Jour 0'), les flèches ne font
+    rien de spécial (pas de _day_cell_rects)."""
+    doc, block = _build_document_and_block()
+    widget = DependencyGanttBlockWidget(block, doc)
+    canvas = widget._canvas
+    assert canvas._day_cell_rects == []
+    canvas.keyPressEvent(QKeyEvent(QEvent.KeyPress, Qt.Key_Right, Qt.NoModifier))
+    assert canvas._selected_days == set()
