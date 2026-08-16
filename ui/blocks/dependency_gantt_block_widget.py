@@ -306,6 +306,12 @@ class _DependencyGanttCanvas(QWidget):
             return True
         return d.weekday() < 5
 
+    def is_working_day(self, d: date) -> bool:
+        """PATCH 96 — variante publique de `_is_working_day`, pour que
+        DependencyGanttBlockWidget puisse déterminer l'état effectif
+        d'une date sans accéder aux membres privés du canvas."""
+        return self._is_working_day(d)
+
     def _day_at(self, pos) -> date | None:
         for rect, day in self._day_cell_rects:
             if rect.contains(pos):
@@ -1086,28 +1092,37 @@ class DependencyGanttBlockWidget(QWidget):
         DependencyGanttBlock.day_overrides), ou réinitialise au
         comportement par défaut."""
         iso = day.isoformat()
-        menu, mark_working, mark_off, reset_action = self._build_day_context_menu(iso)
+        menu, toggle_action, reset_action, effective = self._build_day_context_menu(day)
         chosen = menu.exec(global_pos)
-        self._apply_day_context_menu_choice(iso, chosen, mark_working, mark_off, reset_action)
+        self._apply_day_context_menu_choice(iso, chosen, toggle_action, reset_action, effective)
 
-    def _build_day_context_menu(self, iso: str):
-        """PATCH 95 — construction du menu contextuel séparée de son
-        affichage (menu.exec, modal et bloquant) pour rester testable
-        sans devoir simuler une interaction utilisateur réelle."""
+    def _build_day_context_menu(self, day: date):
+        """PATCH 96 — un jour n'étant que ouvré OU non ouvré, une seule
+        case à cocher ("Jour ouvré") suffit, plutôt que deux actions
+        mutuellement exclusives. Cochée = état effectif actuel
+        (exception existante, sinon calcul par défaut via
+        `_canvas.is_working_day`) ; la cocher/décocher pose l'exception
+        inverse. Construction séparée de l'affichage (menu.exec, modal
+        et bloquant) pour rester testable sans simuler une interaction
+        utilisateur réelle."""
+        iso = day.isoformat()
         current = self._block.day_overrides.get(iso)
+        effective = current if current is not None else self._canvas.is_working_day(day)
         menu = QMenu(self)
-        mark_working = menu.addAction(tr("dep_gantt.mark_working_day"))
-        mark_off = menu.addAction(tr("dep_gantt.mark_non_working_day"))
+        toggle_action = menu.addAction(tr("dep_gantt.working_day"))
+        toggle_action.setCheckable(True)
+        toggle_action.setChecked(effective)
         reset_action = menu.addAction(tr("dep_gantt.reset_day")) if current is not None else None
-        return menu, mark_working, mark_off, reset_action
+        return menu, toggle_action, reset_action, effective
 
-    def _apply_day_context_menu_choice(self, iso: str, chosen, mark_working, mark_off, reset_action) -> None:
+    def _apply_day_context_menu_choice(self, iso: str, chosen, toggle_action, reset_action, effective: bool) -> None:
         if chosen is None:
             return
-        if chosen is mark_working:
-            self._block.set_day_override(iso, True)
-        elif chosen is mark_off:
-            self._block.set_day_override(iso, False)
+        if chosen is toggle_action:
+            # PATCH 96 — `effective` est l'état AVANT clic (capturé à la
+            # construction du menu) : la case à cocher pose l'exception
+            # inverse, qu'importe l'éventuel (dé)cochage interne de Qt.
+            self._block.set_day_override(iso, not effective)
         elif chosen is reset_action:
             self._block.set_day_override(iso, None)
         self._canvas.set_day_overrides(self._block.day_overrides)

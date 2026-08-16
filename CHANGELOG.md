@@ -2,6 +2,14 @@
 
 ## Post-1.0
 
+- **96** — Gantt (dépendances), menu contextuel des cases-date (suite
+  PATCH 95) : un jour n'étant que ouvré OU non ouvré, remplace les deux
+  actions mutuellement exclusives ("Marquer ouvré" / "Marquer non
+  ouvré") par une unique case à cocher "Jour ouvré" — cochée selon
+  l'état effectif actuel (exception existante, sinon le calcul par
+  défaut via `_DependencyGanttCanvas.is_working_day`, désormais public),
+  la (dé)cocher pose l'exception inverse. "Réinitialiser (auto)" reste
+  proposé séparément si une exception existe déjà sur la date.
 - **95** — Gantt (dépendances), calendrier réaliste du mode macro :
   clic gauche sur une case-date pour la surligner en bleu (purement
   visuel, `DependencyGanttBlock.highlighted_days`/`toggle_highlighted_day`) ;

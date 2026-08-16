@@ -1,6 +1,7 @@
-"""PATCH 95 — clic gauche = surlignage bleu (visuel), clic droit = force
-le jour comme ouvré/non ouvré (exception ponctuelle), sur les cases-date
-du calendrier réaliste du mode macro.
+"""PATCH 96 — clic gauche = surlignage bleu (visuel), clic droit = une
+seule case à cocher "Jour ouvré" (un jour n'est que ouvré OU non ouvré),
+plus "Réinitialiser" si une exception ponctuelle existe déjà, sur les
+cases-date du calendrier réaliste du mode macro.
 """
 from __future__ import annotations
 
@@ -50,44 +51,62 @@ def test_on_day_left_clicked_toggles_highlight(qapp):
     assert widget._canvas._highlighted_days == set()
 
 
-def test_on_day_right_clicked_marks_working_day(qapp):
+def test_toggle_action_reflects_default_state_and_flips_it(qapp):
+    """Samedi, sans exception : la case part décochée (non ouvré par
+    défaut) ; la cocher force le jour comme ouvré."""
     doc, block = _build_document_and_block()
-    block.start_date = "2026-08-17"
+    block.start_date = "2026-08-17"  # lundi
     widget = DependencyGanttBlockWidget(block, doc)
+    saturday = date(2026, 8, 22)
 
-    menu, mark_working, mark_off, reset_action = widget._build_day_context_menu("2026-08-22")
+    menu, toggle_action, reset_action, effective = widget._build_day_context_menu(saturday)
+    assert effective is False
+    assert toggle_action.isChecked() is False
     assert reset_action is None
-    widget._apply_day_context_menu_choice("2026-08-22", mark_working, mark_working, mark_off, reset_action)
+
+    widget._apply_day_context_menu_choice(saturday.isoformat(), toggle_action, toggle_action, reset_action, effective)
     assert block.day_overrides == {"2026-08-22": True}
     assert widget._canvas._day_overrides == {"2026-08-22": True}
 
 
-def test_on_day_right_clicked_marks_non_working_day(qapp):
+def test_toggle_action_on_working_day_forces_it_off(qapp):
+    """Lundi, sans exception : la case part cochée (ouvré par défaut) ;
+    la décocher force le jour comme non ouvré."""
     doc, block = _build_document_and_block()
-    block.start_date = "2026-08-17"
+    block.start_date = "2026-08-17"  # lundi
     widget = DependencyGanttBlockWidget(block, doc)
+    monday = date(2026, 8, 17)
 
-    menu, mark_working, mark_off, reset_action = widget._build_day_context_menu("2026-08-17")
-    widget._apply_day_context_menu_choice("2026-08-17", mark_off, mark_working, mark_off, reset_action)
+    menu, toggle_action, reset_action, effective = widget._build_day_context_menu(monday)
+    assert effective is True
+    assert toggle_action.isChecked() is True
+
+    widget._apply_day_context_menu_choice(monday.isoformat(), toggle_action, toggle_action, reset_action, effective)
     assert block.day_overrides == {"2026-08-17": False}
 
 
-def test_on_day_right_clicked_reset_only_offered_with_existing_override(qapp):
+def test_reset_action_only_offered_with_existing_override(qapp):
     doc, block = _build_document_and_block()
     block.start_date = "2026-08-17"
     block.set_day_override("2026-08-22", True)
     widget = DependencyGanttBlockWidget(block, doc)
+    saturday = date(2026, 8, 22)
 
-    menu, mark_working, mark_off, reset_action = widget._build_day_context_menu("2026-08-22")
+    menu, toggle_action, reset_action, effective = widget._build_day_context_menu(saturday)
     assert reset_action is not None
-    widget._apply_day_context_menu_choice("2026-08-22", reset_action, mark_working, mark_off, reset_action)
+    assert effective is True
+    assert toggle_action.isChecked() is True
+
+    widget._apply_day_context_menu_choice(
+        saturday.isoformat(), reset_action, toggle_action, reset_action, effective
+    )
     assert block.day_overrides == {}
 
 
-def test_on_day_right_clicked_no_reset_action_without_existing_override(qapp):
+def test_no_reset_action_without_existing_override(qapp):
     doc, block = _build_document_and_block()
     block.start_date = "2026-08-17"
     widget = DependencyGanttBlockWidget(block, doc)
 
-    _, _, _, reset_action = widget._build_day_context_menu("2026-08-17")
+    _, _, reset_action, _ = widget._build_day_context_menu(date(2026, 8, 17))
     assert reset_action is None
