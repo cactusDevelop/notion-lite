@@ -12,6 +12,7 @@ import sys
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
+from PySide6.QtCore import QPoint, QRect
 from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import QApplication
 
@@ -285,20 +286,90 @@ def test_split_business_segments_breaks_at_weekend():
     # Segment jeudi(3)->mardi suivant(8), calendaire (après conversion) :
     # doit se scinder en jeu-ven (3-5) et lundi-mardi (7-8), sans le
     # week-end (5-7).
-    segments = list(_split_business_segments(3.0, 8.0, anchor, work_weekends=False))
+    is_working_day = lambda d: d.weekday() < 5
+    segments = list(_split_business_segments(3.0, 8.0, anchor, is_working_day))
     assert segments == [(3.0, 5.0), (7.0, 8.0)]
 
 
 def test_split_business_segments_noop_when_work_weekends(qapp):
     anchor = date(2026, 8, 17)
-    segments = list(_split_business_segments(3.0, 8.0, anchor, work_weekends=True))
+    segments = list(_split_business_segments(3.0, 8.0, anchor, lambda d: True))
     assert segments == [(3.0, 8.0)]
 
 
 def test_clip_task_to_week_business_skips_weekend_columns():
     anchor = date(2026, 8, 17)  # lundi, semaine = jours 0..7
     task = _task(3, 8)  # jeu -> mardi suivant, comme ci-dessus
-    pieces = list(_clip_task_to_week_business(task, 0, 7, anchor, work_weekends=False))
+    is_working_day = lambda d: d.weekday() < 5
+    pieces = list(_clip_task_to_week_business(task, 0, 7, anchor, is_working_day))
     # dans la semaine courante (0-7), seul jeu-ven (3-5) est produit :
     # le lundi suivant tombe dans la semaine d'après.
     assert pieces == [(3.0, 5.0, QColor(task["color"]))]
+
+
+def test_split_business_segments_respects_day_override():
+    """PATCH 95 — une exception ponctuelle (jour normalement ouvré
+    marqué comme non ouvré) doit couper le bâtonnet, même en semaine."""
+    anchor = date(2026, 8, 17)  # lundi
+
+    def is_working_day(d):
+        return d != date(2026, 8, 19)  # mercredi forcé non ouvré
+
+    segments = list(_split_business_segments(0.0, 4.0, anchor, is_working_day))
+    assert segments == [(0.0, 2.0), (3.0, 4.0)]
+
+
+# PATCH 95 — exceptions ponctuelles (clic droit) et surlignage bleu
+# (clic gauche) sur les cases-date du calendrier réaliste.
+
+
+def test_is_working_day_default_follows_work_weekends(qapp):
+    canvas = _DependencyGanttCanvas()
+    canvas.set_start_date("2026-08-17")  # lundi
+    canvas.set_work_weekends(False)
+    assert canvas._is_working_day(date(2026, 8, 21)) is True  # vendredi
+    assert canvas._is_working_day(date(2026, 8, 22)) is False  # samedi
+    canvas.set_work_weekends(True)
+    assert canvas._is_working_day(date(2026, 8, 22)) is True
+
+
+def test_is_working_day_override_wins_over_weekday(qapp):
+    canvas = _DependencyGanttCanvas()
+    canvas.set_start_date("2026-08-17")  # lundi
+    canvas.set_work_weekends(False)
+    # Samedi normalement non ouvré, forcé ouvré par override.
+    canvas.set_day_overrides({"2026-08-22": True})
+    assert canvas._is_working_day(date(2026, 8, 22)) is True
+    # Un lundi normalement ouvré, forcé non ouvré.
+    canvas.set_day_overrides({"2026-08-17": False})
+    assert canvas._is_working_day(date(2026, 8, 17)) is False
+
+
+def test_day_at_returns_matching_cell_date(qapp):
+    canvas = _DependencyGanttCanvas()
+    canvas._day_cell_rects = [(QRect(0, 0, 10, 10), date(2026, 8, 17))]
+    assert canvas._day_at(QPoint(5, 5)) == date(2026, 8, 17)
+    assert canvas._day_at(QPoint(50, 50)) is None
+
+
+def test_paint_macro_calendar_populates_day_cell_rects(qapp):
+    canvas = _DependencyGanttCanvas()
+    canvas.set_start_date("2026-08-17")
+    canvas.set_format(FORMAT_MACRO)
+    canvas.set_schedule(
+        [
+            {
+                "row_id": "r1",
+                "label": "Tâche 1",
+                "person_names": ["Alice"],
+                "start": 0.0,
+                "end": 3.0,
+                "resolution": 3.0,
+                "delta": 0.0,
+                "color": "#4db6ac",
+            }
+        ]
+    )
+    canvas.grab()  # force un paintEvent
+    assert len(canvas._day_cell_rects) > 0
+    assert all(isinstance(day, date) for _, day in canvas._day_cell_rects)

@@ -113,6 +113,8 @@ def block_from_dict(raw: dict[str, Any]) -> Block:
             # était silencieusement perdue à chaque réouverture,
             # puisque jamais relue ici.
             phase_column_id=data.get("phase_column_id"),
+            day_overrides=data.get("day_overrides", {}),
+            highlighted_days=data.get("highlighted_days", []),
             id=block_id,
         )
 

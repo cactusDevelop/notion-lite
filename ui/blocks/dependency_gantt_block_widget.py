@@ -60,6 +60,7 @@ from PySide6.QtWidgets import (
     QDoubleSpinBox,
     QHBoxLayout,
     QLabel,
+    QMenu,
     QPushButton,
     QScrollArea,
     QSlider,
@@ -127,6 +128,10 @@ _MACRO_WEEK_GAP = 6
 # de la grille (voir _paint_macro_calendar).
 _MACRO_WEEKDAY_HEADER_H = 20
 _TODAY_BORDER_COLOR = QColor("#e53935")
+# PATCH 95 — surlignage bleu des cases du calendrier réaliste (clic
+# gauche) : translucide pour rester lisible par-dessus le grisé weekend
+# et la date affichée.
+_HIGHLIGHT_COLOR = QColor(33, 150, 243, 110)
 
 _WEEKDAY_KEYS = [
     "dep_gantt.weekday.mon",
@@ -234,6 +239,19 @@ class _DependencyGanttCanvas(QWidget):
         # correspondante) : si False (défaut), samedi/dimanche sont
         # grisés dans le calendrier réaliste (_paint_macro_calendar).
         self._work_weekends = False
+        # PATCH 95 — exceptions ponctuelles (clic droit) et cases
+        # surlignées en bleu (clic gauche) sur le calendrier réaliste.
+        # {"AAAA-MM-JJ": bool} / liste de "AAAA-MM-JJ" (voir
+        # set_day_overrides / set_highlighted_days).
+        self._day_overrides: dict[str, bool] = {}
+        self._highlighted_days: set[str] = set()
+        # PATCH 95 — rectangles des cases-date du calendrier réaliste,
+        # reconstruits à chaque peinture (voir _paint_macro_calendar),
+        # utilisés pour la détection de clic (_day_at). Vide hors
+        # calendrier réaliste (mode macro sans "Jour 0", ou mode micro).
+        self._day_cell_rects: list[tuple[QRect, date]] = []
+        self.on_day_left_clicked = None
+        self.on_day_right_clicked = None
         # PATCH 72 — notifié à chaque changement de taille du canvas,
         # pour que la QScrollArea parente puisse copier sa hauteur
         # (elle ne le fait pas toute seule quand `widgetResizable` est
@@ -267,6 +285,33 @@ class _DependencyGanttCanvas(QWidget):
         self._work_weekends = work_weekends
         self.update()
 
+    def set_day_overrides(self, overrides: dict[str, bool]) -> None:
+        """PATCH 95 — voir `_day_overrides`."""
+        self._day_overrides = dict(overrides)
+        self.update()
+
+    def set_highlighted_days(self, days: list[str]) -> None:
+        """PATCH 95 — voir `_highlighted_days`."""
+        self._highlighted_days = set(days)
+        self.update()
+
+    def _is_working_day(self, d: date) -> bool:
+        """PATCH 95 — jour ouvré effectif d'une date donnée : une
+        exception ponctuelle (`_day_overrides`, clic droit) l'emporte
+        toujours ; à défaut, weekend selon `_work_weekends`."""
+        override = self._day_overrides.get(d.isoformat())
+        if override is not None:
+            return override
+        if self._work_weekends:
+            return True
+        return d.weekday() < 5
+
+    def _day_at(self, pos) -> date | None:
+        for rect, day in self._day_cell_rects:
+            if rect.contains(pos):
+                return day
+        return None
+
     def _macro_calendar_weeks(self) -> tuple[date, int]:
         """PATCH 91 — pour le mode macro calendaire : (lundi de la
         semaine du "Jour 0", nombre de semaines nécessaires pour
@@ -289,11 +334,9 @@ class _DependencyGanttCanvas(QWidget):
         """PATCH 93 — convertit un décalage en jours ouvrés (tel que
         stocké par `compute_schedule`, qui ignore toujours les weekends)
         en décalage calendaire réel depuis le "Jour 0", en sautant les
-        samedis/dimanches quand `work_weekends` est désactivé. Sans
-        effet si `work_weekends` est actif (jour ouvré == jour
-        calendaire) : le planning reprend alors son comportement
-        historique, continu."""
-        if self._work_weekends or self._start_date is None or day <= 0:
+        jours non ouvrés (`_is_working_day`, PATCH 95 : weekend selon
+        `work_weekends`, sauf exception ponctuelle `_day_overrides`)."""
+        if self._start_date is None or day <= 0:
             return day
         anchor = self._start_date
         whole = int(math.floor(day))
@@ -301,11 +344,11 @@ class _DependencyGanttCanvas(QWidget):
         offset = 0
         counted = 0
         while counted < whole:
-            if (anchor + timedelta(days=offset)).weekday() < 5:
+            if self._is_working_day(anchor + timedelta(days=offset)):
                 counted += 1
             offset += 1
         if frac > 1e-9:
-            while (anchor + timedelta(days=offset)).weekday() >= 5:
+            while not self._is_working_day(anchor + timedelta(days=offset)):
                 offset += 1
         return offset + frac
 
@@ -383,6 +426,14 @@ class _DependencyGanttCanvas(QWidget):
     def mousePressEvent(self, event) -> None:  # noqa: N802
         if event.button() == Qt.LeftButton:
             task = self._bar_at(event.pos())
+            if task is None:
+                day = self._day_at(event.pos())
+                if day is not None:
+                    # PATCH 95 — case-date cliquée (pas un bâtonnet) :
+                    # bascule le surlignage bleu, purement visuel.
+                    if self.on_day_left_clicked is not None:
+                        self.on_day_left_clicked(day)
+                    return
             if task is not None:
                 if self._format == FORMAT_MACRO:
                     # PATCH 90 — pas de clic-glissé en mode macro : les
@@ -399,6 +450,16 @@ class _DependencyGanttCanvas(QWidget):
                 self.setCursor(Qt.SizeHorCursor)
                 return
         super().mousePressEvent(event)
+
+    def contextMenuEvent(self, event) -> None:  # noqa: N802
+        """PATCH 95 — clic droit sur une case-date du calendrier
+        réaliste : forcer/déforcer le jour comme ouvré (voir
+        DependencyGanttBlockWidget._on_day_right_clicked)."""
+        day = self._day_at(event.pos())
+        if day is not None and self.on_day_right_clicked is not None:
+            self.on_day_right_clicked(day, event.globalPos())
+            return
+        super().contextMenuEvent(event)
 
     def mouseMoveEvent(self, event) -> None:  # noqa: N802
         if self._drag_task is None:
@@ -431,6 +492,7 @@ class _DependencyGanttCanvas(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
         self._bar_rects = []
+        self._day_cell_rects = []
 
         if not self._people:
             painter.setPen(QPen(self.palette().color(QPalette.WindowText)))
@@ -609,6 +671,7 @@ class _DependencyGanttCanvas(QWidget):
         }
 
         last_month: tuple[int, int] | None = None
+        self._day_cell_rects = []
         for week in range(weeks):
             week_y = top + week * (week_h + _MACRO_WEEK_GAP)
             week_start_date = calendar_start + timedelta(weeks=week)
@@ -627,8 +690,12 @@ class _DependencyGanttCanvas(QWidget):
                 cell_date = week_start_date + timedelta(days=d)
                 x = day_x(d)
                 cell_rect = QRect(x, week_y, cell_w, week_h)
-                if cell_date.weekday() >= 5 and not self._work_weekends:
+                if not self._is_working_day(cell_date):
                     painter.fillRect(cell_rect, self._weekend_color())
+                if cell_date.isoformat() in self._highlighted_days:
+                    # PATCH 95 — surlignage bleu (clic gauche), superposé
+                    # en translucide pour garder la date lisible par-dessus.
+                    painter.fillRect(cell_rect, _HIGHLIGHT_COLOR)
                 painter.setPen(QPen(QColor("#cccccc"), 1))
                 painter.drawRect(cell_rect)
                 painter.setPen(QPen(self.palette().color(QPalette.WindowText)))
@@ -639,12 +706,13 @@ class _DependencyGanttCanvas(QWidget):
                 if cell_date == today:
                     painter.setPen(QPen(_TODAY_BORDER_COLOR, 2))
                     painter.drawRect(cell_rect.adjusted(1, 1, -1, -1))
+                self._day_cell_rects.append((QRect(cell_rect), cell_date))
 
             for p_index, name in enumerate(self._people):
                 row_y = week_y + _MACRO_HEADER_H + p_index * _MACRO_PERSON_ROW_H
                 for task in tasks_by_person[name]:
                     for x0, x1, color in _clip_task_to_week_business(
-                        task, week_start_day, week_start_day + 7, self._start_date, self._work_weekends
+                        task, week_start_day, week_start_day + 7, self._start_date, self._is_working_day
                     ):
                         bar_rect = QRect(
                             day_x(x0), row_y + 3, max(day_x(x1) - day_x(x0), 2), _MACRO_PERSON_ROW_H - 6
@@ -653,16 +721,15 @@ class _DependencyGanttCanvas(QWidget):
                         self._bar_rects.append((QRect(bar_rect), task))
 
 
-def _split_business_segments(day_start: float, day_end: float, anchor: date, work_weekends: bool):
+def _split_business_segments(day_start: float, day_end: float, anchor: date, is_working_day):
     """PATCH 94 — subdivise [day_start, day_end) (décalages calendaires
     absolus depuis `anchor`) en sous-segments qui excluent les colonnes
-    de weekend, quand `work_weekends` est désactivé : sans ça, le
-    rectangle d'une barre reste continu et recouvre visuellement les
-    cases grisées du weekend même si ses bornes ont été calculées pour
-    les enjamber (voir _business_to_calendar_offset). Jours ouvrés
-    consécutifs fusionnés en un seul segment ; ne produit rien pour
-    work_weekends actif (segment unique inchangé, géré par l'appelant)."""
-    if work_weekends or day_end <= day_start:
+    de jour non ouvré (selon `is_working_day(date) -> bool`, PATCH 95) :
+    sans ça, le rectangle d'une barre reste continu et recouvre
+    visuellement les cases grisées du weekend même si ses bornes ont
+    été calculées pour les enjamber (voir _business_to_calendar_offset).
+    Jours ouvrés consécutifs fusionnés en un seul segment."""
+    if day_end <= day_start:
         yield (day_start, day_end)
         return
     day_idx = int(math.floor(day_start))
@@ -671,7 +738,7 @@ def _split_business_segments(day_start: float, day_end: float, anchor: date, wor
     cur = day_start
     while cur < day_end - 1e-9:
         day_bound_end = min(day_idx + 1, day_end)
-        if (anchor + timedelta(days=day_idx)).weekday() < 5:
+        if is_working_day(anchor + timedelta(days=day_idx)):
             if seg_start is None:
                 seg_start = max(cur, float(day_idx))
             seg_end = day_bound_end
@@ -685,13 +752,14 @@ def _split_business_segments(day_start: float, day_end: float, anchor: date, wor
 
 
 def _clip_task_to_week_business(
-    task: dict, week_start_day: float, week_end_day: float, anchor: date, work_weekends: bool
+    task: dict, week_start_day: float, week_end_day: float, anchor: date, is_working_day
 ):
     """PATCH 94 — variante de `_clip_task_to_week` pour le calendrier
     réaliste (mode macro avec "Jour 0") : découpe en plus chaque
     segment clippé à la semaine par jour ouvré (voir
-    `_split_business_segments`) quand `work_weekends` est désactivé,
-    pour qu'aucun bâtonnet ne traverse visuellement un samedi/dimanche."""
+    `_split_business_segments`), pour qu'aucun bâtonnet ne traverse
+    visuellement un jour non ouvré (weekend, ou exception ponctuelle
+    PATCH 95)."""
     segments = [(task["start"], task["end"], QColor(task["color"]))]
     if task["delta"] > 0:
         segments.append((task["end"], task["resolution"], _DELAY_COLOR))
@@ -702,7 +770,7 @@ def _clip_task_to_week_business(
         clipped_end = min(end, week_end_day)
         if clipped_end <= clipped_start:
             continue
-        for seg_start, seg_end in _split_business_segments(clipped_start, clipped_end, anchor, work_weekends):
+        for seg_start, seg_end in _split_business_segments(clipped_start, clipped_end, anchor, is_working_day):
             yield seg_start - week_start_day, seg_end - week_start_day, color
 
 
@@ -876,9 +944,13 @@ class DependencyGanttBlockWidget(QWidget):
         self._canvas.on_bar_clicked = self._on_bar_clicked
         self._canvas.on_bar_drag_moved = self._on_bar_drag_moved
         self._canvas.on_bar_drag_finished = self._on_bar_drag_finished
+        self._canvas.on_day_left_clicked = self._on_day_left_clicked
+        self._canvas.on_day_right_clicked = self._on_day_right_clicked
         self._canvas.set_format(self._block.chart_format)
         self._canvas.set_start_date(self._block.start_date)
         self._canvas.set_work_weekends(self._block.work_weekends)
+        self._canvas.set_day_overrides(self._block.day_overrides)
+        self._canvas.set_highlighted_days(self._block.highlighted_days)
         # PATCH 71 — zone de défilement STRICTEMENT horizontale : le
         # canvas garde toujours sa hauteur complète (jamais tronquée
         # verticalement), `widgetResizable=False` pour que sa largeur
@@ -1000,6 +1072,45 @@ class DependencyGanttBlockWidget(QWidget):
     def _on_work_weekends_toggled(self, checked: bool) -> None:
         self._block.work_weekends = checked
         self._canvas.set_work_weekends(checked)
+        self.refresh()
+
+    def _on_day_left_clicked(self, day: date) -> None:
+        """PATCH 95 — clic gauche sur une case-date : surlignage bleu,
+        purement visuel (sans effet sur le planning)."""
+        self._block.toggle_highlighted_day(day.isoformat())
+        self._canvas.set_highlighted_days(self._block.highlighted_days)
+
+    def _on_day_right_clicked(self, day: date, global_pos) -> None:
+        """PATCH 95 — clic droit sur une case-date : force le jour comme
+        ouvré/non ouvré (exception ponctuelle, voir
+        DependencyGanttBlock.day_overrides), ou réinitialise au
+        comportement par défaut."""
+        iso = day.isoformat()
+        menu, mark_working, mark_off, reset_action = self._build_day_context_menu(iso)
+        chosen = menu.exec(global_pos)
+        self._apply_day_context_menu_choice(iso, chosen, mark_working, mark_off, reset_action)
+
+    def _build_day_context_menu(self, iso: str):
+        """PATCH 95 — construction du menu contextuel séparée de son
+        affichage (menu.exec, modal et bloquant) pour rester testable
+        sans devoir simuler une interaction utilisateur réelle."""
+        current = self._block.day_overrides.get(iso)
+        menu = QMenu(self)
+        mark_working = menu.addAction(tr("dep_gantt.mark_working_day"))
+        mark_off = menu.addAction(tr("dep_gantt.mark_non_working_day"))
+        reset_action = menu.addAction(tr("dep_gantt.reset_day")) if current is not None else None
+        return menu, mark_working, mark_off, reset_action
+
+    def _apply_day_context_menu_choice(self, iso: str, chosen, mark_working, mark_off, reset_action) -> None:
+        if chosen is None:
+            return
+        if chosen is mark_working:
+            self._block.set_day_override(iso, True)
+        elif chosen is mark_off:
+            self._block.set_day_override(iso, False)
+        elif chosen is reset_action:
+            self._block.set_day_override(iso, None)
+        self._canvas.set_day_overrides(self._block.day_overrides)
         self.refresh()
 
     # -- Zoom (PATCH 71) --------------------------------------------------

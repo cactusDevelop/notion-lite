@@ -2,6 +2,20 @@
 
 ## Post-1.0
 
+- **95** — Gantt (dépendances), calendrier réaliste du mode macro :
+  clic gauche sur une case-date pour la surligner en bleu (purement
+  visuel, `DependencyGanttBlock.highlighted_days`/`toggle_highlighted_day`) ;
+  clic droit pour ouvrir un menu contextuel et forcer ponctuellement
+  cette date comme ouvrée ou non ouvrée (`day_overrides`/
+  `set_day_override`, avec option "Réinitialiser" si une exception est
+  déjà posée sur cette date), quel que soit "Travailler le weekend".
+  Cette exception l'emporte partout où le week-end était jusqu'ici
+  déterminé uniquement par le jour de semaine (`_is_working_day`,
+  utilisé par `_business_to_calendar_offset`, `_split_business_segments`
+  et le grisé des cases, PATCH 93/94) ; sans effet sur
+  `compute_schedule`. Sans "Jour 0" configuré (calendrier relatif),
+  les cases n'ont pas de date réelle : ni le surlignage ni les
+  exceptions ne sont proposés.
 - **94** — Gantt (dépendances), calendrier réaliste du mode macro
   (suite PATCH 93) : la barre ne se contentait que de "sauter" par ses
   bornes (début/fin recalculés pour tomber hors weekend), mais restait

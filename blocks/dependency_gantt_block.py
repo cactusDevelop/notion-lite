@@ -110,6 +110,8 @@ class DependencyGanttBlock(Block):
         start_date: str = "",
         work_weekends: bool = False,
         phase_column_id: Optional[str] = None,
+        day_overrides: dict[str, bool] | None = None,
+        highlighted_days: list[str] | None = None,
         id: str | None = None,
     ) -> None:
         super().__init__(
@@ -142,6 +144,18 @@ class DependencyGanttBlock(Block):
                 # verticaux étiquetés sur le graphique (voir compute_schedule
                 # et _DependencyGanttCanvas._update_phase_groups).
                 "phase_column_id": phase_column_id,
+                # PATCH 95 — exceptions ponctuelles au calendrier
+                # ouvré/weekend du mode macro (case cliquée en clic
+                # droit sur une date précise) : {"AAAA-MM-JJ": bool}
+                # (True = forcé ouvré, False = forcé non ouvré), qui
+                # l'emporte sur `work_weekends`/le jour de la semaine
+                # pour cette date-là uniquement. Sans effet sur
+                # compute_schedule (toujours en jours ouvrés continus).
+                "day_overrides": dict(day_overrides or {}),
+                # PATCH 95 — cases du calendrier surlignées en bleu
+                # (clic gauche sur une date, purement visuel, sans
+                # impact sur le planning) : liste de "AAAA-MM-JJ".
+                "highlighted_days": list(highlighted_days or []),
             },
             id=id or str(uuid.uuid4()),
         )
@@ -210,6 +224,31 @@ class DependencyGanttBlock(Block):
     @work_weekends.setter
     def work_weekends(self, value: bool) -> None:
         self.data["work_weekends"] = bool(value)
+
+    @property
+    def day_overrides(self) -> dict[str, bool]:
+        """PATCH 95 — voir le commentaire dans __init__."""
+        return self.data.setdefault("day_overrides", {})
+
+    def set_day_override(self, iso_date: str, value: bool | None) -> None:
+        """`value=None` réinitialise la date au comportement par défaut
+        (weekday + `work_weekends`)."""
+        if value is None:
+            self.day_overrides.pop(iso_date, None)
+        else:
+            self.day_overrides[iso_date] = bool(value)
+
+    @property
+    def highlighted_days(self) -> list[str]:
+        """PATCH 95 — voir le commentaire dans __init__."""
+        return self.data.setdefault("highlighted_days", [])
+
+    def toggle_highlighted_day(self, iso_date: str) -> None:
+        days = self.highlighted_days
+        if iso_date in days:
+            days.remove(iso_date)
+        else:
+            days.append(iso_date)
 
     def set_source(
         self,

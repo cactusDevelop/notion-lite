@@ -315,3 +315,32 @@ def test_available_delta_columns_are_number_columns():
     delta_col = table.add_column("Ecarts", col_type=COLUMN_TYPE_NUMBER)
     columns = available_delta_columns(table)
     assert {c["id"] for c in columns} == {duration_col["id"], delta_col["id"]}
+
+def test_day_overrides_default_empty_and_settable():
+    block = DependencyGanttBlock()
+    assert block.day_overrides == {}
+    block.set_day_override("2026-08-22", True)
+    assert block.day_overrides == {"2026-08-22": True}
+    block.set_day_override("2026-08-22", None)
+    assert block.day_overrides == {}
+
+
+def test_highlighted_days_default_empty_and_toggleable():
+    block = DependencyGanttBlock()
+    assert block.highlighted_days == []
+    block.toggle_highlighted_day("2026-08-17")
+    assert block.highlighted_days == ["2026-08-17"]
+    block.toggle_highlighted_day("2026-08-17")
+    assert block.highlighted_days == []
+
+
+def test_roundtrip_via_registry_preserves_day_overrides_and_highlighted_days():
+    doc, table, label_col, person_col, duration_col, risk_col, dep_col = _build_document()
+    gantt = DependencyGanttBlock(table_block_id=table.id)
+    gantt.set_day_override("2026-08-22", True)
+    gantt.toggle_highlighted_day("2026-08-17")
+
+    rebuilt = block_from_dict(gantt.to_dict())
+    assert isinstance(rebuilt, DependencyGanttBlock)
+    assert rebuilt.day_overrides == {"2026-08-22": True}
+    assert rebuilt.highlighted_days == ["2026-08-17"]
