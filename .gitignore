@@ -220,8 +220,3 @@ __marimo__/
 .idea/
 *.patch
 *.diff
-# Graphify — on ne garde que le rapport + le graphe machine-readable,
-# le reste (HTML interactif, cache) est régénérable localement.
-graphify-out/*
-!graphify-out/GRAPH_REPORT.md
-!graphify-out/graph.json
