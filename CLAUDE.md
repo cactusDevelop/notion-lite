@@ -48,6 +48,22 @@ introduit un nouveau piège, ou rend une section ci-dessous obsolète.
    l'utilisateur qui applique le patch de son côté) : ça donne une
    base propre et diffable pour le patch suivant dans la même session.
 
+## Graphify
+
+Si `graphify-out/GRAPH_REPORT.md` existe dans le repo, le lire en tout
+début de conversation à la place d'explorer les fichiers à la main
+(carte d'architecture générée côté utilisateur avec
+`graphify extract . --code-only`, en headless, sans Claude Code et sans
+clé API — ce projet n'a pas de backend LLM configuré pour Graphify,
+donc pas de `/graphify` ni de `graphify extract` complet avec docs/
+images). `graphify-out/graph.json` sert de source pour des requêtes
+plus précises si besoin (`graphify query`/`graphify path` côté
+utilisateur). Seuls `GRAPH_REPORT.md` et `graph.json` sont commités
+(voir `.gitignore`) ; regénérer avec `graphify extract . --code-only`
+après tout changement structurel notable. Si le rapport est absent ou
+visiblement périmé (mentionne des fichiers/blocs qui n'existent plus),
+l'ignorer et explorer normalement.
+
 ## Architecture — pointeurs rapides
 
 Ne pas dupliquer `README.md` (`## Architecture`, `## API interne`,
